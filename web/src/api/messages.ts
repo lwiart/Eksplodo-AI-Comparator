@@ -11,7 +11,7 @@ const MESSAGES: Record<string, string> = {
   user_not_active: "Ce compte n'est pas actif.",
   user_not_invited: "Ce compte n'est pas en attente d'activation : l'invitation ne peut pas être renvoyée.",
   user_not_activated: "Ce compte n'a pas encore été activé : renvoyez plutôt l'invitation.",
-  last_admin: 'Impossible : il doit rester au moins un administrateur actif.',
+  last_admin: "Impossible : c'est le dernier Admin actif, il doit en rester au moins un.",
   not_found: "Cet élément n'existe plus. Rechargez la page.",
   csrf: 'Votre session a expiré, rechargez la page.',
   internal: "Une erreur inattendue s'est produite. Réessayez dans quelques instants.",

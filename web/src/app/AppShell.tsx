@@ -3,11 +3,12 @@ import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import * as Switch from '@radix-ui/react-switch';
 import { useState, type ReactNode } from 'react';
 import { Link, NavLink, Outlet } from 'react-router-dom';
+import { useErrorSummary } from '../api/errors';
 import { messageForError } from '../api/messages';
 import { ROLE_LABELS, useAuth, type PublicUser } from '../auth/AuthProvider';
 import { applyAnimationsPreference, getAnimationsPreference, setAnimationsPreference } from './preferences';
 
-type NavItem = { to: string; label: string; icon: string; end?: boolean };
+type NavItem = { to: string; label: string; icon: string; end?: boolean; badge?: number };
 
 // Les entrées Séries, Modèles et À noter sont ajoutées par les plans 2 à 4.
 const EXPLORE: NavItem[] = [{ to: '/', label: 'Tableau de bord', icon: '◎', end: true }];
@@ -50,6 +51,14 @@ function NavSection({ title, items, onNavigate }: { title: string; items: NavIte
             {item.icon}
           </span>
           {item.label}
+          {item.badge ? (
+            <span
+              className="ml-auto rounded-full bg-bad/20 px-2 py-0.5 font-mono text-[11px] font-semibold text-bad"
+              aria-label={`${item.badge} erreurs graves non traitées`}
+            >
+              {item.badge}
+            </span>
+          ) : null}
         </NavLink>
       ))}
     </>
@@ -139,13 +148,21 @@ function AccountMenu({ user, onNavigate }: { user: PublicUser; onNavigate?: () =
   );
 }
 
+/** Entrées Admin, avec le nombre d'erreurs graves non traitées à côté du journal (rien s'il n'y en a pas). */
+function AdminSection({ onNavigate }: { onNavigate?: () => void }) {
+  const summary = useErrorSummary();
+  const unresolved = summary.data?.unresolvedGrave ?? 0;
+  const items = ADMIN.map((i) => (i.to === '/admin/erreurs' && unresolved > 0 ? { ...i, badge: unresolved } : i));
+  return <NavSection title="ADMIN" items={items} onNavigate={onNavigate} />;
+}
+
 function SidebarBody({ user, onNavigate }: { user: PublicUser; onNavigate?: () => void }) {
   return (
     <>
       <Brand />
       <nav aria-label="Navigation principale" className="flex-1 overflow-y-auto">
         <NavSection title="EXPLORER" items={EXPLORE} onNavigate={onNavigate} />
-        {user.role === 'admin' ? <NavSection title="ADMIN" items={ADMIN} onNavigate={onNavigate} /> : null}
+        {user.role === 'admin' ? <AdminSection onNavigate={onNavigate} /> : null}
       </nav>
       <AccountMenu user={user} onNavigate={onNavigate} />
     </>

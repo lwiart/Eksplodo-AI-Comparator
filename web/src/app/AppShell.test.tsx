@@ -1,25 +1,45 @@
-import { render, screen } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { afterEach, expect, test, vi } from 'vitest';
+import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { ApiError } from '../api/client';
 import { AuthContext, type PublicUser, type Role } from '../auth/AuthProvider';
 import { AppShell } from './AppShell';
 
+const apiFetch = vi.hoisted(() => vi.fn());
+vi.mock('../api/client', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../api/client')>()),
+  apiFetch,
+}));
+
+const summary = (unresolvedGrave: number) => ({
+  last24h: { total: 0, grave: 0 },
+  last7d: { total: 0, grave: 0 },
+  topOrigins: [],
+  unresolvedGrave,
+});
+
+beforeEach(() => {
+  apiFetch.mockReset();
+  apiFetch.mockResolvedValue(summary(0));
+});
 afterEach(() => localStorage.clear());
 
 function renderShell(role: Role, logout = vi.fn().mockResolvedValue(undefined)) {
   const user: PublicUser = { id: 'u1', email: 'laurent@example.test', name: 'Laurent', role };
   render(
-    <AuthContext.Provider value={{ user, loading: false, login: vi.fn(), logout, refresh: vi.fn() }}>
-      <MemoryRouter initialEntries={['/']}>
-        <Routes>
-          <Route element={<AppShell />}>
-            <Route index element={<p>Contenu</p>} />
-          </Route>
-        </Routes>
-      </MemoryRouter>
-    </AuthContext.Provider>,
+    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+      <AuthContext.Provider value={{ user, loading: false, login: vi.fn(), logout, refresh: vi.fn() }}>
+        <MemoryRouter initialEntries={['/']}>
+          <Routes>
+            <Route element={<AppShell />}>
+              <Route index element={<p>Contenu</p>} />
+            </Route>
+          </Routes>
+        </MemoryRouter>
+      </AuthContext.Provider>
+    </QueryClientProvider>,
   );
   return { logout };
 }
@@ -81,4 +101,23 @@ test('déconnexion en échec : message visible, pas de rejet non géré', async 
   await user.click(screen.getByRole('button', { name: /Laurent/ }));
   await user.click(screen.getByRole('menuitem', { name: 'Déconnexion' }));
   expect(await screen.findByRole('alert')).toHaveTextContent('Le serveur ne répond pas');
+});
+
+test('Admin : compteur des erreurs graves non traitées à côté du journal', async () => {
+  apiFetch.mockResolvedValue(summary(3));
+  renderShell('admin');
+  const link = await screen.findByRole('link', { name: /Journal des erreurs/ });
+  expect(await within(link).findByText('3')).toBeInTheDocument();
+  expect(apiFetch).toHaveBeenCalledWith('/api/admin/errors/summary');
+});
+
+test('Admin : aucun compteur quand il n’y a pas d’erreur grave non traitée', async () => {
+  renderShell('admin');
+  await vi.waitFor(() => expect(apiFetch).toHaveBeenCalled());
+  expect(screen.getByRole('link', { name: 'Journal des erreurs' })).toBeInTheDocument();
+});
+
+test('Utilisateur : aucun appel au résumé des erreurs', () => {
+  renderShell('user');
+  expect(apiFetch).not.toHaveBeenCalled();
 });

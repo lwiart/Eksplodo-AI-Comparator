@@ -5,7 +5,8 @@ import { AccountPage } from '../pages/AccountPage';
 import { DashboardPage } from '../pages/DashboardPage';
 import { InvitationPage } from '../pages/InvitationPage';
 import { LoginPage } from '../pages/LoginPage';
-import { PlaceholderPage } from '../pages/PlaceholderPage';
+import { ErrorLogPage } from '../pages/admin/ErrorLogPage';
+import { UsersPage } from '../pages/admin/UsersPage';
 import { ResetPasswordPage } from '../pages/ResetPasswordPage';
 import { AppShell } from './AppShell';
 
@@ -41,7 +42,6 @@ function PublicOnlyWhileLoading() {
   return loading ? <Splash /> : <Outlet />;
 }
 
-// Les pages d'administration provisoires sont remplacées par les vraies pages dans la Task 9.
 export function AppRoutes() {
   return (
     <Routes>
@@ -55,8 +55,8 @@ export function AppRoutes() {
           <Route index element={<DashboardPage />} />
           <Route path="/compte" element={<AccountPage />} />
           <Route element={<RequireRole roles={['admin']} />}>
-            <Route path="/admin/utilisateurs" element={<PlaceholderPage title="Utilisateurs" />} />
-            <Route path="/admin/erreurs" element={<PlaceholderPage title="Journal des erreurs" />} />
+            <Route path="/admin/utilisateurs" element={<UsersPage />} />
+            <Route path="/admin/erreurs" element={<ErrorLogPage />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
