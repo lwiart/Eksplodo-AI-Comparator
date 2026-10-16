@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Écrans de l'app</title>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800&family=Instrument+Sans:wght@400;500;600&family=Noto+Sans+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root{--bg0:#00131d;--bg1:#011f2e;--line:rgba(120,190,230,.14);--line2:rgba(120,190,230,.28);--txt:#d8ecf5;--mut:#7fa3b5;
+    --orange:#F0631F;--peach:#FFB48A;--blue:#3fa2e0;--blue2:#0C659D;--sky:#7cc4ef;--good:#4fd1a5;--bad:#ff7a7a}
+  *{box-sizing:border-box}html,body{margin:0}
+  body{font-family:"Instrument Sans",system-ui,sans-serif;color:var(--txt);background:radial-gradient(120% 80% at 70% -10%,#06405d 0%,var(--bg1) 45%,var(--bg0) 100%) fixed;min-height:100vh}
+  body::before{content:"";position:fixed;inset:0;pointer-events:none;background-image:radial-gradient(rgba(127,196,239,.10) 1px,transparent 1px);background-size:22px 22px}
+  .mono{font-family:"Noto Sans Mono",monospace}
+  /* switcher */
+  .switch{position:sticky;top:0;z-index:50;display:flex;gap:6px;flex-wrap:wrap;padding:10px 16px;background:rgba(0,19,29,.85);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+  .switch b{font:600 11px "Noto Sans Mono";color:var(--mut);align-self:center;margin-right:6px}
+  .switch button{font:600 12px "Instrument Sans";color:var(--mut);background:transparent;border:1px solid var(--line);border-radius:100px;padding:6px 12px;cursor:pointer}
+  .switch button.on{color:#fff;border-color:rgba(240,99,31,.6);background:rgba(240,99,31,.14)}
+  .screen{display:none}.screen.on{display:block}
+  /* app shell */
+  .app{display:grid;grid-template-columns:232px 1fr;min-height:calc(100vh - 50px)}
+  aside{border-right:1px solid var(--line);padding:20px 14px;background:rgba(0,19,29,.55);position:relative}
+  .logo{display:flex;align-items:center;gap:10px;font:600 17px "Noto Sans Mono";color:#fff;margin:0 6px 26px}
+  .logo img{height:34px;filter:drop-shadow(0 0 10px rgba(240,99,31,.55)) drop-shadow(0 0 2px rgba(255,180,138,.6))}
+  .logo small{display:block;font:500 10px "Noto Sans Mono";color:var(--mut);letter-spacing:.06em}
+  .nav-sec{font:600 10px "Noto Sans Mono";color:var(--mut);letter-spacing:.12em;margin:18px 8px 8px}
+  .nav a{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:10px;color:var(--txt);text-decoration:none;font-size:14px}
+  .nav a.on{background:linear-gradient(90deg,rgba(240,99,31,.18),rgba(240,99,31,.02));color:#fff;box-shadow:inset 2px 0 0 var(--orange)}
+  .nav .ic{width:18px;text-align:center;opacity:.85}
+  .badge{margin-left:auto;font:600 10px "Noto Sans Mono";background:var(--orange);color:#fff;border-radius:100px;padding:1px 7px}
+  main{padding:22px 28px 60px;min-width:0}
+  .crumbs{font:500 12px "Noto Sans Mono";color:var(--mut)}
+  h1{font:800 28px/1.1 Archivo;color:#fff;margin:6px 0 4px}
+  h1 em{font-style:normal;background:linear-gradient(90deg,var(--orange),var(--peach));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .sub{color:var(--mut);margin:0 0 18px;font-size:14px}
+  .card{background:linear-gradient(180deg,rgba(3,42,61,.75),rgba(1,31,46,.75));border:1px solid var(--line);border-radius:18px;padding:16px}
+  .card h3{font:700 14px Archivo;color:#fff;margin:0 0 10px;display:flex;align-items:center;gap:8px}
+  .card h3 small{font:500 11px "Noto Sans Mono";color:var(--mut);margin-left:auto}
+  .grid{display:grid;gap:16px}
+  .chip{font:600 11px "Noto Sans Mono";padding:4px 10px;border-radius:100px;border:1px solid var(--line2);background:rgba(3,42,61,.6);display:inline-block}
+  .chip.o{color:var(--peach);border-color:rgba(240,99,31,.5);background:rgba(240,99,31,.12)}
+  .chip.g{color:var(--good);border-color:rgba(79,209,165,.4);background:rgba(79,209,165,.1)}
+  .chip.r{color:var(--bad);border-color:rgba(255,122,122,.4);background:rgba(255,122,122,.08)}
+  .btn{font:600 13px "Instrument Sans";border-radius:100px;padding:9px 16px;border:1px solid var(--line2);background:rgba(3,42,61,.7);color:#fff;cursor:pointer}
+  .btn.pri{background:linear-gradient(90deg,var(--orange),#ff8a4c);border:0;box-shadow:0 8px 24px -8px rgba(240,99,31,.7)}
+  .kpi .v{font:800 30px Archivo;color:#fff}.kpi .l{font:500 11px "Noto Sans Mono";color:var(--mut);letter-spacing:.06em}
+  .kpi .d{font:600 11px "Noto Sans Mono";color:var(--good)}
+  .dot{width:10px;height:10px;border-radius:50%;display:inline-block;box-shadow:0 0 10px currentColor}
+  label.f{display:block;font:600 11px "Noto Sans Mono";color:var(--mut);letter-spacing:.06em;margin:12px 0 6px}
+  .in{width:100%;background:rgba(0,19,29,.6);border:1px solid var(--line2);border-radius:12px;color:#fff;padding:10px 12px;font:14px "Instrument Sans"}
+  textarea.in{min-height:90px;resize:vertical;line-height:1.5}
+  .seg{display:flex;gap:4px;background:rgba(0,19,29,.6);border:1px solid var(--line);border-radius:100px;padding:4px}
+  .seg span{flex:1;text-align:center;font:600 12px "Instrument Sans";padding:7px 10px;border-radius:100px;color:var(--mut);cursor:pointer}
+  .seg span.on{background:rgba(240,99,31,.18);color:#fff;box-shadow:inset 0 0 0 1px rgba(240,99,31,.5)}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th{font:600 10px "Noto Sans Mono";color:var(--mut);text-align:left;letter-spacing:.08em;padding:8px 10px;border-bottom:1px solid var(--line)}
+  td{padding:9px 10px;border-bottom:1px solid var(--line)}
+  .note{margin:22px 0 0;font:500 11px "Noto Sans Mono";color:var(--mut);text-align:center}
+  /* login */
+  .login{position:relative;min-height:calc(100vh - 50px);display:grid;place-items:center;overflow:hidden}
+  .login canvas{position:absolute;inset:0;width:100%!important;height:100%!important}
+  .lbox{position:relative;width:380px;background:rgba(1,31,46,.72);backdrop-filter:blur(14px);border:1px solid var(--line2);border-radius:22px;padding:28px}
+  /* stepper */
+  .steps{display:flex;gap:10px;margin-bottom:16px}
+  .step{flex:1;display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--line);border-radius:14px;font-size:13px;color:var(--mut)}
+  .step i{font:800 13px Archivo;font-style:normal;width:26px;height:26px;border-radius:50%;display:grid;place-items:center;border:1px solid var(--line2)}
+  .step.done{color:#fff}.step.done i{background:var(--good);color:#00131d;border:0}
+  .step.on{color:#fff;border-color:rgba(240,99,31,.6);background:rgba(240,99,31,.08)}.step.on i{background:var(--orange);border:0;color:#fff}
+  .mgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+  .mcard{border:1px solid var(--line);border-radius:14px;padding:12px;background:rgba(0,19,29,.45);cursor:pointer;position:relative}
+  .mcard.sel{border-color:rgba(240,99,31,.65);background:rgba(240,99,31,.08)}
+  .mcard.sel::after{content:"✓";position:absolute;top:10px;right:12px;color:var(--peach);font-weight:800}
+  .mcard.off{opacity:.45;cursor:not-allowed}
+  .mcard b{color:#fff;font:700 14px Archivo}.mcard small{display:block;color:var(--mut);font:500 11px "Noto Sans Mono";margin:2px 0 8px}
+  .caps{display:flex;gap:4px;flex-wrap:wrap}.caps span{font:600 9.5px "Noto Sans Mono";padding:2px 6px;border-radius:100px;border:1px solid var(--line2);color:var(--sky)}
+  /* live */
+  .live{position:relative;height:300px;padding:0;overflow:hidden}
+  .live canvas{position:absolute;inset:0;width:100%!important;height:100%!important}
+  .matrix{display:grid;gap:3px}
+  .cell{height:14px;border-radius:3px;background:rgba(255,255,255,.06)}
+  .feed div{display:flex;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line);font-size:12.5px}
+  .feed time{font:500 10.5px "Noto Sans Mono";color:var(--mut);width:52px}
+  /* blind */
+  .blind{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+  .bcard{border:1px solid var(--line);border-radius:16px;padding:14px;background:rgba(0,19,29,.45);font-size:13px;line-height:1.55}
+  .bcard .L{font:800 26px Archivo;color:#fff;width:42px;height:42px;border-radius:12px;display:grid;place-items:center;background:linear-gradient(135deg,var(--blue2),#06405d);margin-bottom:10px}
+  .scores{display:flex;gap:3px;margin-top:12px}
+  .scores span{flex:1;text-align:center;font:700 12px "Noto Sans Mono";padding:7px 0;border-radius:8px;border:1px solid var(--line);cursor:pointer;color:var(--mut)}
+  .scores span.on{background:var(--orange);color:#fff;border-color:var(--orange)}
+  /* share */
+  .share-top{display:flex;align-items:center;justify-content:space-between;padding:18px 32px;border-bottom:1px solid var(--line)}
+  .hero-share{position:relative;height:340px;overflow:hidden;border-bottom:1px solid var(--line)}
+  .hero-share canvas{position:absolute;inset:0;width:100%!important;height:100%!important}
+  .hero-share .t{position:absolute;left:32px;bottom:30px;max-width:620px}
+  @media (max-width:1100px){.mgrid,.blind{grid-template-columns:1fr}.app{grid-template-columns:1fr}aside{display:none}}
+</style>
+</head>
+<body>
+<div class="switch"><b>ÉCRANS ›</b>
+  <button data-s="login">Connexion</button>
+  <button data-s="dash" class="on">Tableau de bord</button>
+  <button data-s="launch">Lancer une série</button>
+  <button data-s="live">Suivi en direct</button>
+  <button data-s="test">Éditeur de test</button>
+  <button data-s="blind">Notation à l'aveugle</button>
+  <button data-s="model">Fiche modèle</button>
+  <button data-s="share">Partage public</button>
+</div>
+
+<!-- ============ CONNEXION ============ -->
+<section class="screen" id="login"><div class="login"><canvas id="cLogin"></canvas>
+  <div class="lbox">
+    <div class="logo" style="margin:0 0 20px"><img src="eksplodo-icon-white.png" alt=""><div>Eksplodo<small>COMPARATEUR IA</small></div></div>
+    <h1 style="font-size:24px">Bon retour <em>parmi nous</em></h1>
+    <p class="sub">Connecte-toi pour voir les derniers classements.</p>
+    <label class="f">E-MAIL</label><input class="in" value="laurent@eksplodo.fr">
+    <label class="f">MOT DE PASSE</label><input class="in" type="password" value="xxxxxxxxxxxx">
+    <button class="btn pri" style="width:100%;margin-top:18px;padding:12px">Se connecter</button>
+    <p class="mono" style="font-size:10.5px;color:var(--mut);text-align:center;margin:14px 0 0">ACCÈS SUR INVITATION UNIQUEMENT</p>
+  </div></div></section>
+
+<!-- shell template marker: les écrans suivants partagent la barre latérale -->
+<template id="aside"><aside>
+  <div class="logo"><img src="eksplodo-icon-white.png" alt=""><div>Eksplodo<small>COMPARATEUR IA</small></div></div>
+  <div class="nav">
+    <div class="nav-sec">EXPLORER</div>
+    <a href="#" data-k="dash"><span class="ic">◎</span>Tableau de bord</a>
+    <a href="#" data-k="runs"><span class="ic">▶</span>Séries</a>
+    <a href="#" data-k="model"><span class="ic">✦</span>Modèles</a>
+    <a href="#" data-k="blind"><span class="ic">✎</span>À noter<span class="badge">7</span></a>
+    <div class="nav-sec">ADMIN</div>
+    <a href="#"><span class="ic">⚡</span>Fournisseurs</a>
+    <a href="#" data-k="test"><span class="ic">☰</span>Tests & suites</a>
+    <a href="#"><span class="ic">👥</span>Utilisateurs</a>
+    <a href="#"><span class="ic">↗</span>Liens de partage</a>
+  </div></aside></template>
+
+<!-- ============ TABLEAU DE BORD ============ -->
+<section class="screen on" id="dash"><div class="app" data-nav="dash"><main>
+  <div class="crumbs">TABLEAU DE BORD</div>
+  <h1>Bonjour Laurent, <em>3 nouveaux modèles</em> à tester</h1>
+  <p class="sub">Depuis ta dernière série, OpenRouter propose 3 modèles qui ne sont pas encore dans ton catalogue.</p>
+  <div class="grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:16px">
+    <div class="card kpi"><div class="l">SÉRIES LANCÉES</div><div class="v">12</div><div class="d">+3 ce mois-ci</div></div>
+    <div class="card kpi"><div class="l">MODÈLES SUIVIS</div><div class="v">18</div><div class="d">7 fournisseurs</div></div>
+    <div class="card kpi"><div class="l">DÉPENSE API · OCTOBRE</div><div class="v">14,20 $</div><div class="d" style="color:var(--mut)">dont juge 2,10 $</div></div>
+    <div class="card kpi"><div class="l">RÉPONSES À NOTER</div><div class="v" style="color:var(--peach)">7</div><div class="d" style="color:var(--peach)">série #12</div></div>
+  </div>
+  <div class="grid" style="grid-template-columns:1.6fr 1fr;margin-bottom:16px">
+    <div class="card"><h3>Évolution de la qualité <small>suite « Polyvalence » · 6 dernières séries</small></h3><svg id="evo" viewBox="0 0 640 230" style="width:100%"></svg></div>
+    <div class="card"><h3>Nouveautés détectées <small>catalogue OpenRouter</small></h3>
+      <div class="feed">
+        <div><span class="dot" style="color:var(--peach);background:var(--peach)"></span><div style="flex:1"><b style="color:#fff">Kimi K3</b><br><span class="mono" style="font-size:11px;color:var(--mut)">Moonshot · 0,60 $ / 2,50 $ par M</span></div><button class="btn" style="padding:6px 12px">＋ Ajouter</button></div>
+        <div><span class="dot" style="color:var(--sky);background:var(--sky)"></span><div style="flex:1"><b style="color:#fff">Qwen 4 Max</b><br><span class="mono" style="font-size:11px;color:var(--mut)">Alibaba · 1,20 $ / 6,00 $ par M</span></div><button class="btn" style="padding:6px 12px">＋ Ajouter</button></div>
+        <div><span class="dot" style="color:var(--blue);background:var(--blue)"></span><div style="flex:1"><b style="color:#fff">Mistral Medium 4</b><br><span class="mono" style="font-size:11px;color:var(--mut)">Mistral · 0,40 $ / 2,00 $ par M</span></div><button class="btn" style="padding:6px 12px">＋ Ajouter</button></div>
+      </div></div>
+  </div>
+  <div class="card"><h3>Dernières séries</h3>
+    <table><thead><tr><th>SÉRIE</th><th>SUITE</th><th>MODÈLES</th><th>VAINQUEUR</th><th>COÛT</th><th>STATUT</th></tr></thead><tbody>
+      <tr><td style="color:#fff;font-weight:600">#12 · Rédaction & logique</td><td>Polyvalence</td><td>6</td><td><span class="dot" style="color:#7cc4ef;background:#7cc4ef"></span> Mistral Large</td><td class="mono">3,84 $</td><td><span class="chip g">TERMINÉE</span></td></tr>
+      <tr><td style="color:#fff;font-weight:600">#11 · Vision : factures</td><td>Vision documents</td><td>4</td><td><span class="dot" style="color:#fff;background:#fff"></span> Gemini Pro</td><td class="mono">1,12 $</td><td><span class="chip g">TERMINÉE</span></td></tr>
+      <tr><td style="color:#fff;font-weight:600">#10 · Réponses clients</td><td>Support</td><td>8</td><td><span class="dot" style="color:#F0631F;background:#F0631F"></span> Claude Opus</td><td class="mono">5,02 $</td><td><span class="chip o">À NOTER · 7</span></td></tr>
+    </tbody></table></div>
+  <p class="note">MAQUETTE · DONNÉES FICTIVES</p>
+</main></div></section>
+
+<!-- ============ LANCER UNE SÉRIE ============ -->
+<section class="screen" id="launch"><div class="app" data-nav="runs"><main>
+  <div class="crumbs">SÉRIES / NOUVELLE</div>
+  <h1>Lancer une <em>nouvelle série</em></h1><p class="sub">Choisis une suite, des modèles et le juge. Le coût maximal est estimé avant le lancement.</p>
+  <div class="steps"><div class="step done"><i>✓</i>Suite · Polyvalence</div><div class="step on"><i>2</i>Modèles</div><div class="step"><i>3</i>Paramètres</div><div class="step"><i>4</i>Récapitulatif</div></div>
+  <div class="grid" style="grid-template-columns:1fr 320px">
+    <div class="card"><h3>Modèles <small>6 sélectionnés · 2 tests demandent la vision</small></h3>
+      <div class="mgrid" id="mgrid"></div></div>
+    <div class="card" style="align-self:start">
+      <h3>Estimation</h3>
+      <div class="kpi"><div class="l">COÛT MAXIMAL ESTIMÉ</div><div class="v" style="color:var(--peach)">≤ 4,60 $</div><div class="d" style="color:var(--mut)">dont juge ≈ 0,70 $</div></div>
+      <table style="margin-top:12px"><tbody>
+        <tr><td>Tests</td><td class="mono" style="text-align:right">24</td></tr>
+        <tr><td>Modèles × répétitions</td><td class="mono" style="text-align:right">6 × 2</td></tr>
+        <tr><td>Appels prévus</td><td class="mono" style="text-align:right">288</td></tr>
+        <tr><td>Non supportés (vision)</td><td class="mono" style="text-align:right;color:var(--peach)">4</td></tr>
+        <tr><td>Durée estimée</td><td class="mono" style="text-align:right">≈ 9 min</td></tr>
+      </tbody></table>
+      <button class="btn pri" style="width:100%;margin-top:14px">Continuer →</button>
+    </div>
+  </div>
+  <p class="note">LES MODÈLES DONT LA CLÉ API EST ABSENTE SONT GRISÉS</p>
+</main></div></section>
+
+<!-- ============ SUIVI EN DIRECT ============ -->
+<section class="screen" id="live"><div class="app" data-nav="runs"><main>
+  <div class="crumbs">SÉRIES / #13 · EN COURS</div>
+  <h1>Série #13 : <em>en direct</em></h1><p class="sub">Les résultats arrivent au fil de l'eau. Tu peux fermer la page : la série continue sur le serveur.</p>
+  <div class="grid" style="grid-template-columns:1.5fr 1fr;margin-bottom:16px">
+    <div class="card live"><canvas id="cLive"></canvas>
+      <div style="position:absolute;left:16px;top:14px"><span class="chip o">● 187 / 288 · 65 %</span></div>
+      <div style="position:absolute;right:16px;top:14px;text-align:right"><div class="kpi"><div class="l">DÉPENSÉ</div><div class="v" style="font-size:22px">2,41 $</div></div></div>
+      <div style="position:absolute;left:16px;bottom:14px" class="mono"><span style="font-size:10px;color:var(--mut)">CHAQUE FLUX = UN APPEL EN COURS · ÉCLAIR ORANGE = RÉPONSE NOTÉE</span></div>
+    </div>
+    <div class="card"><h3>Fil d'activité</h3><div class="feed" id="feed"></div></div>
+  </div>
+  <div class="card"><h3>Progression par test et par modèle <small>■ notée · ■ en attente de notation · ■ erreur · □ à faire</small></h3>
+    <div style="display:grid;grid-template-columns:110px 1fr;gap:10px;align-items:center" id="mx"></div></div>
+  <div style="display:flex;gap:8px;margin-top:14px"><button class="btn">⏸ Mettre en pause</button><button class="btn">⟳ Relancer les erreurs</button></div>
+</main></div></section>
+
+<!-- ============ ÉDITEUR DE TEST ============ -->
+<section class="screen" id="test"><div class="app" data-nav="test"><main>
+  <div class="crumbs">TESTS / RÉDACTION / NOUVEAU</div>
+  <h1>Éditeur de <em>test</em></h1><p class="sub">Un test = un prompt, d'éventuelles pièces jointes et une méthode de notation.</p>
+  <div class="grid" style="grid-template-columns:1.25fr 1fr">
+    <div class="card">
+      <div class="grid" style="grid-template-columns:2fr 1fr">
+        <div><label class="f" style="margin-top:0">NOM</label><input class="in" value="Résumer un CCTP en 5 points"></div>
+        <div><label class="f" style="margin-top:0">CATÉGORIE</label><input class="in" value="Rédaction"></div>
+      </div>
+      <label class="f">PROMPT SYSTÈME (FACULTATIF)</label><textarea class="in" style="min-height:60px">Tu es un consultant spécialiste des marchés publics.</textarea>
+      <label class="f">PROMPT UTILISATEUR</label><textarea class="in">Résume le CCTP joint en exactement 5 points numérotés : objet, durée, public, livrables, critères d'évaluation. N'invente rien.</textarea>
+      <label class="f">PIÈCES JOINTES</label>
+      <div style="border:1.5px dashed var(--line2);border-radius:14px;padding:14px;display:flex;align-items:center;gap:12px">
+        <span class="chip">📄 DCE-02-CCTP.pdf · 412 Ko</span><span style="color:var(--mut);font-size:13px">Glisse une image ou un PDF ici (10 Mo max)</span></div>
+      <div class="grid" style="grid-template-columns:1fr 1fr 1fr;margin-top:4px">
+        <div><label class="f">TEMPÉRATURE</label><input class="in" value="0,2"></div>
+        <div><label class="f">MAX TOKENS</label><input class="in" value="800"></div>
+        <div><label class="f">TAGS</label><input class="in" value="marchés, pdf"></div>
+      </div>
+    </div>
+    <div class="card">
+      <h3>Notation</h3>
+      <div class="seg"><span class="on">IA-juge</span><span>Réponse attendue</span><span>Manuelle</span></div>
+      <label class="f">CRITÈRES POUR LE JUGE</label>
+      <textarea class="in" style="min-height:110px">- Exactement 5 points, dans l'ordre demandé (2 pts)
+- Informations exactes par rapport au CCTP, aucune invention (5 pts)
+- Concision : moins de 150 mots (1 pt)
+- Clarté et vocabulaire professionnel (2 pts)</textarea>
+      <label class="f">RÉPONSE DE RÉFÉRENCE (FACULTATIVE)</label><textarea class="in" style="min-height:60px" placeholder="Aide le juge à calibrer sa note…"></textarea>
+      <div style="display:flex;gap:8px;margin-top:16px"><button class="btn">⚡ Essai rapide sur un modèle</button><button class="btn pri" style="margin-left:auto">Enregistrer</button></div>
+    </div>
+  </div>
+</main></div></section>
+
+<!-- ============ NOTATION À L'AVEUGLE ============ -->
+<section class="screen" id="blind"><div class="app" data-nav="blind"><main>
+  <div class="crumbs">À NOTER / SÉRIE #10 · RÉPONSES CLIENTS</div>
+  <h1>Notation <em>à l'aveugle</em></h1><p class="sub">Les modèles sont masqués et l'ordre est tiré au hasard pour toi. Les noms apparaissent une fois tes notes enregistrées.</p>
+  <div class="card" style="margin-bottom:14px"><div style="display:flex;align-items:center;gap:12px"><span class="chip o">QUESTION 3 / 7</span>
+    <div style="flex:1;height:6px;border-radius:100px;background:rgba(255,255,255,.08)"><div style="width:38%;height:100%;border-radius:100px;background:linear-gradient(90deg,var(--orange),var(--peach))"></div></div></div>
+    <p style="margin:12px 0 0;color:#fff;font-size:15px"><b>Prompt :</b> « Un client mécontent écrit que sa formation a été annulée la veille. Rédige une réponse empathique qui propose deux solutions. »</p></div>
+  <div class="blind" id="bl"></div>
+  <div style="display:flex;gap:8px;margin-top:14px;justify-content:flex-end"><button class="btn">Passer</button><button class="btn pri">Enregistrer et révéler →</button></div>
+</main></div></section>
+
+<!-- ============ FICHE MODÈLE ============ -->
+<section class="screen" id="model"><div class="app" data-nav="model"><main>
+  <div class="crumbs">MODÈLES / MISTRAL LARGE</div>
+  <div style="display:flex;align-items:center;gap:14px;margin:6px 0 16px">
+    <span style="width:54px;height:54px;border-radius:16px;background:radial-gradient(circle at 30% 30%,#bfe5fb,#7cc4ef 45%,#0C659D);box-shadow:0 0 30px rgba(124,196,239,.5)"></span>
+    <div><h1 style="margin:0">Mistral Large</h1><div style="display:flex;gap:6px;margin-top:6px"><span class="chip">MISTRAL · API DIRECTE</span><span class="chip g">CLÉ OK · MISTRAL_API_KEY</span><span class="chip">VISION</span><span class="chip r">PDF ✗</span></div></div>
+    <div style="margin-left:auto;text-align:right" class="kpi"><div class="l">PRIX PAR MILLION DE TOKENS</div><div class="v" style="font-size:20px">2,00 $ <span style="color:var(--mut);font-size:13px">entrée</span> · 6,00 $ <span style="color:var(--mut);font-size:13px">sortie</span></div></div>
+  </div>
+  <div class="grid" style="grid-template-columns:1fr 1fr 1fr 1fr;margin-bottom:16px">
+    <div class="card kpi"><div class="l">QUALITÉ MOYENNE</div><div class="v">8,1</div><div class="d">+0,4 vs juillet</div></div>
+    <div class="card kpi"><div class="l">1ER TOKEN MÉDIAN</div><div class="v">0,4 s</div><div class="d">top 1 sur 18</div></div>
+    <div class="card kpi"><div class="l">DÉBIT MÉDIAN</div><div class="v">131 t/s</div><div class="d">top 2 sur 18</div></div>
+    <div class="card kpi"><div class="l">FIABILITÉ</div><div class="v">100 %</div><div class="d">412 appels</div></div>
+  </div>
+  <div class="grid" style="grid-template-columns:1fr 1.3fr">
+    <div class="card"><h3>Profil par catégorie <small>vs moyenne des modèles</small></h3><svg id="radar" viewBox="0 0 320 260" style="width:100%"></svg></div>
+    <div class="card"><h3>Historique dans les séries</h3>
+      <table><thead><tr><th>SÉRIE</th><th>RANG</th><th>QUALITÉ</th><th>SCORE GLOBAL</th></tr></thead><tbody>
+        <tr><td>#12 · Rédaction & logique</td><td style="color:var(--peach);font-weight:800">1 / 6</td><td class="mono">8,1</td><td class="mono">8,3</td></tr>
+        <tr><td>#10 · Réponses clients</td><td>3 / 8</td><td class="mono">8,4</td><td class="mono">7,9</td></tr>
+        <tr><td>#7 · Logique pure</td><td>4 / 7</td><td class="mono">7,2</td><td class="mono">7,1</td></tr>
+        <tr><td>#4 · Polyvalence (juillet)</td><td>2 / 5</td><td class="mono">7,7</td><td class="mono">7,8</td></tr>
+      </tbody></table></div>
+  </div>
+</main></div></section>
+
+<!-- ============ PARTAGE PUBLIC ============ -->
+<section class="screen" id="share">
+  <div class="share-top"><div class="logo" style="margin:0"><img src="eksplodo-icon-white.png" alt=""><div>Eksplodo<small>COMPARATEUR IA</small></div></div>
+    <a class="btn pri" href="#" style="text-decoration:none">Audit gratuit →</a></div>
+  <div class="hero-share"><canvas id="cShare"></canvas>
+    <div class="t"><span class="chip o">RÉSULTATS PARTAGÉS · OCTOBRE 2026</span>
+      <h1 style="font-size:40px;margin-top:12px">Quelle IA pour <em>rédiger vos réponses</em> aux appels d'offres ?</h1>
+      <p class="sub" style="font-size:15px">6 modèles testés sur 24 cas réels, notés par un juge IA et par nos consultants.</p></div></div>
+  <div style="max-width:1100px;margin:0 auto;padding:24px 32px 60px">
+    <div class="grid" style="grid-template-columns:repeat(3,1fr)">
+      <div class="card" style="border-color:rgba(240,99,31,.55);background:linear-gradient(180deg,rgba(240,99,31,.2),rgba(1,31,46,.75))"><div class="mono" style="color:var(--peach);font-size:11px">🥇 MEILLEUR COMPROMIS</div><h1 style="font-size:24px">Mistral Large</h1><p class="sub" style="margin:0">Rapide, précis et 3,6 fois moins cher que le plus performant.</p></div>
+      <div class="card"><div class="mono" style="color:var(--sky);font-size:11px">🎯 MEILLEURE QUALITÉ</div><h1 style="font-size:24px">Claude Opus</h1><p class="sub" style="margin:0">9,2/10 en qualité, le plus rigoureux sur les documents longs.</p></div>
+      <div class="card"><div class="mono" style="color:var(--sky);font-size:11px">💸 LE MOINS CHER</div><h1 style="font-size:24px">DeepSeek</h1><p class="sub" style="margin:0">0,09 $ pour toute la série, mais plus lent et moins fiable.</p></div>
+    </div>
+    <p class="note">PAGE PUBLIQUE EN LECTURE SEULE · SANS MENU, SANS COÛTS DÉTAILLÉS SI TU LE SOUHAITES · LIEN DÉSACTIVABLE</p>
+  </div>
+</section>
+
+<script>
+// barre latérale partagée
+document.querySelectorAll('.app').forEach(a=>{const t=document.getElementById('aside').content.cloneNode(true); a.prepend(t); const k=a.dataset.nav; a.querySelectorAll('.nav a').forEach(x=>{if(x.dataset.k===k)x.classList.add('on')});});
+// onglets
+const show=s=>{document.querySelectorAll('.screen').forEach(e=>e.classList.toggle('on',e.id===s));document.querySelectorAll('.switch button').forEach(b=>b.classList.toggle('on',b.dataset.s===s));window.dispatchEvent(new Event('resize'));window.scrollTo(0,0)};
+document.querySelectorAll('.switch button').forEach(b=>b.onclick=()=>show(b.dataset.s));
+const M=[['Claude Opus','#F0631F','Anthropic',['VISION','PDF'],1],['GPT','#3fa2e0','OpenAI',['VISION','PDF'],1],['Gemini Pro','#ffffff','Google',['VISION','PDF'],1],['Mistral Large','#7cc4ef','Mistral',['VISION'],1],['DeepSeek','#FFB48A','OpenRouter',['TEXTE'],1],['Qwen','#0C659D','OpenRouter',['VISION'],1],['Kimi K3','#b48cff','OpenRouter',['TEXTE'],0],['Llama','#9fd6f7','Groq',['TEXTE'],0],['Grok','#ff9fb0','xAI · clé absente',['VISION'],-1]];
+document.getElementById('mgrid').innerHTML=M.map(m=>`<div class="mcard ${m[4]===1?'sel':m[4]<0?'off':''}" onclick="if(!this.classList.contains('off'))this.classList.toggle('sel')"><span class="dot" style="color:${m[1]};background:${m[1]}"></span> <b>${m[0]}</b><small>${m[2]}</small><div class="caps">${m[3].map(c=>`<span>${c}</span>`).join('')}</div></div>`).join('');
+// évolution
+(()=>{const s=document.getElementById('evo'); const X=i=>50+i*110, Y=v=>200-(v-6.5)/(9.5-6.5)*175; const L=['#4','#6','#7','#9','#11','#12'];
+ const S=[['Claude Opus','#F0631F',[8.6,8.8,8.9,9.0,9.1,9.2]],['GPT','#3fa2e0',[8.1,8.3,8.2,8.6,8.6,8.7]],['Mistral Large','#7cc4ef',[7.7,7.6,7.9,7.9,8.0,8.1]],['DeepSeek','#FFB48A',[6.9,7.1,7.3,7.5,7.7,7.8]]];
+ let h=''; [7,8,9].forEach(v=>h+=`<line x1="50" x2="600" y1="${Y(v)}" y2="${Y(v)}" stroke="rgba(120,190,230,.1)"/><text x="40" y="${Y(v)+3}" fill="#7fa3b5" font-size="10" text-anchor="end" font-family="Noto Sans Mono">${v}</text>`);
+ L.forEach((l,i)=>h+=`<text x="${X(i)}" y="222" fill="#7fa3b5" font-size="10" text-anchor="middle" font-family="Noto Sans Mono">${l}</text>`);
+ S.forEach(([n,c,v])=>{h+=`<polyline fill="none" stroke="${c}" stroke-width="2.5" points="${v.map((y,i)=>X(i)+','+Y(y)).join(' ')}" style="filter:drop-shadow(0 0 4px ${c})"/>`; v.forEach((y,i)=>h+=`<circle cx="${X(i)}" cy="${Y(y)}" r="3.5" fill="${c}"/>`); h+=`<text x="${X(5)+8}" y="${Y(v[5])+4}" fill="${c}" font-size="11" font-family="Instrument Sans">${n}</text>`});
+ s.innerHTML=h;})();
+// matrice
+(()=>{const mx=document.getElementById('mx'); let h=''; M.slice(0,6).forEach((m,mi)=>{h+=`<div style="font-size:12px;color:#fff"><span class="dot" style="color:${m[1]};background:${m[1]};width:8px;height:8px"></span> ${m[0]}</div><div class="matrix" style="grid-template-columns:repeat(24,1fr)">`;
+  for(let i=0;i<24;i++){const k=(i*7+mi*5)%24, done=k<16+mi%3, err=(i===9&&mi===4); const bg=err?'rgba(255,122,122,.75)':done?(i%5===0?'rgba(127,196,239,.55)':m[1]):'rgba(255,255,255,.06)'; h+=`<div class="cell" style="background:${bg};opacity:${done&&!err&&i%5?'.85':'1'}"></div>`;} h+='</div>';}); mx.innerHTML=h;})();
+// fil d'activité
+(()=>{const f=document.getElementById('feed'); const E=[['14:32:08','Claude Opus','test 17 · noté 9,0','#F0631F'],['14:32:05','Qwen','test 18 · réponse en 3,1 s','#0C659D'],['14:32:01','DeepSeek','test 9 · timeout, nouvel essai 1/2','#ff7a7a'],['14:31:57','Mistral Large','test 19 · noté 8,5','#7cc4ef'],['14:31:52','GPT','test 18 · noté 8,0','#3fa2e0'],['14:31:49','Gemini Pro','test 16 · pièce jointe non supportée','#FFB48A']];
+ f.innerHTML=E.map(e=>`<div><time>${e[0]}</time><span class="dot" style="color:${e[3]};background:${e[3]};width:8px;height:8px"></span><b style="color:#fff">${e[1]}</b><span style="color:var(--mut)">${e[2]}</span></div>`).join('');})();
+// à l'aveugle
+(()=>{const T=[['A',"Bonjour Madame Martin, je comprends parfaitement votre déception et vous présente nos excuses…\n\nNous vous proposons : 1) une nouvelle session dès le 4 novembre, avec la même formatrice ; 2) un remboursement intégral sous 8 jours…"],['B',"Madame, nous accusons réception de votre message. L'annulation est due à un cas de force majeure. Vous pouvez vous réinscrire sur une autre date ou demander un avoir…"],['C',"Chère Madame Martin, quelle frustration d'apprendre l'annulation la veille, surtout après avoir organisé votre journée ! Voici deux solutions concrètes…"]];
+ document.getElementById('bl').innerHTML=T.map((t,ti)=>`<div class="bcard"><div class="L">${t[0]}</div>${t[1].replace(/\n/g,'<br>')}<div class="scores">${[...Array(11).keys()].map(n=>`<span class="${(ti===0&&n===8)||(ti===2&&n===9)?'on':''}" onclick="this.parentNode.querySelectorAll('span').forEach(x=>x.classList.remove('on'));this.classList.add('on')">${n}</span>`).join('')}</div>
+ <input class="in" style="margin-top:10px;font-size:12.5px;padding:8px 10px" placeholder="Commentaire (facultatif)"></div>`).join('');})();
+// radar
+(()=>{const s=document.getElementById('radar'); const C=['Rédaction','Logique','Vision','Code','Support','Synthèse'], me=[8.4,7.6,8.2,7.9,8.4,8.6], avg=[8.0,8.1,7.8,7.6,8.0,7.9]; const cx=160,cy=130,R=95;
+ const pt=(v,i)=>{const a=-Math.PI/2+i*2*Math.PI/C.length, r=R*(v-5)/5; return [cx+Math.cos(a)*r, cy+Math.sin(a)*r]};
+ let h=''; [6,7,8,9,10].forEach(v=>h+=`<polygon fill="none" stroke="rgba(120,190,230,.12)" points="${C.map((_,i)=>pt(v,i).join(',')).join(' ')}"/>`);
+ C.forEach((c,i)=>{const [x,y]=pt(10.9,i); h+=`<line x1="${cx}" y1="${cy}" x2="${pt(10,i)[0]}" y2="${pt(10,i)[1]}" stroke="rgba(120,190,230,.12)"/><text x="${x}" y="${y+4}" fill="#7fa3b5" font-size="10.5" text-anchor="middle" font-family="Instrument Sans">${c}</text>`});
+ h+=`<polygon fill="rgba(255,255,255,.06)" stroke="rgba(255,255,255,.4)" stroke-dasharray="4 3" points="${avg.map((v,i)=>pt(v,i).join(',')).join(' ')}"/>`;
+ h+=`<polygon fill="rgba(124,196,239,.25)" stroke="#7cc4ef" stroke-width="2" points="${me.map((v,i)=>pt(v,i).join(',')).join(' ')}" style="filter:drop-shadow(0 0 6px #7cc4ef)"/>`;
+ me.forEach((v,i)=>{const [x,y]=pt(v,i); h+=`<circle cx="${x}" cy="${y}" r="3.5" fill="#7cc4ef"/>`}); s.innerHTML=h;})();
+</script>
+
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js"}}</script>
+<script type="module">
+import * as THREE from 'three';
+function setup(id,fov,camPos){const canvas=document.getElementById(id); const r=new THREE.WebGLRenderer({canvas,antialias:true,alpha:true}); r.setPixelRatio(Math.min(devicePixelRatio,2));
+ const scene=new THREE.Scene(), cam=new THREE.PerspectiveCamera(fov,1,.1,100); cam.position.set(...camPos); cam.lookAt(0,0,0);
+ const fit=()=>{const p=canvas.parentElement; if(!p.clientWidth)return false; r.setSize(p.clientWidth,p.clientHeight,false); cam.aspect=p.clientWidth/p.clientHeight; cam.updateProjectionMatrix(); return true;};
+ return {canvas,r,scene,cam,fit};}
+function stars(scene,n=900){const g=new THREE.BufferGeometry(),p=new Float32Array(n*3); for(let i=0;i<n;i++)p.set([(Math.random()-.5)*50,(Math.random()-.5)*30,-8-Math.random()*14],i*3); g.setAttribute('position',new THREE.BufferAttribute(p,3)); scene.add(new THREE.Points(g,new THREE.PointsMaterial({color:0x5d97b8,size:.045})));}
+
+// Connexion & partage : la gerbe Eksplodo en version nuit
+function burst(id, offsetX){const S=setup(id,45,[0,0,10]); stars(S.scene); const grp=new THREE.Group(); grp.position.x=offsetX; S.scene.add(grp);
+ const N=140, rays=[]; for(let i=0;i<N;i++){const a=i/N*Math.PI*2, len=.8+Math.random()*1.8; const g=new THREE.BoxGeometry(len,.05,.05); g.translate(len/2,0,0);
+  const col=i%7===0?0xF0631F:(i%3===0?0x7cc4ef:0x0C659D); const m=new THREE.Mesh(g,new THREE.MeshBasicMaterial({color:col,transparent:true,opacity:i%7===0?1:.75})); m.rotation.z=a; m.userData={a,ph:Math.random()*6.28}; grp.add(m); rays.push(m);}
+ const core=new THREE.Mesh(new THREE.SphereGeometry(1.25,48,48),new THREE.MeshBasicMaterial({color:0x011f2e})); grp.add(core);
+ const ring=new THREE.Mesh(new THREE.TorusGeometry(1.3,.03,12,120),new THREE.MeshBasicMaterial({color:0xF0631F})); grp.add(ring);
+ const halo=new THREE.Mesh(new THREE.SphereGeometry(1.7,32,32),new THREE.MeshBasicMaterial({color:0xF0631F,transparent:true,opacity:.07})); grp.add(halo);
+ let t=0; (function loop(){ if(S.fit()){ t+=.016; rays.forEach(m=>{const k=1+.35*Math.sin(t*1.6+m.userData.ph); m.position.set(Math.cos(m.userData.a)*1.45,Math.sin(m.userData.a)*1.45,0); m.scale.x=k;}); grp.rotation.z+=.0018; grp.rotation.y=Math.sin(t*.3)*.25; halo.scale.setScalar(1+.06*Math.sin(t*2)); S.r.render(S.scene,S.cam);} requestAnimationFrame(loop);})();}
+burst('cLogin',-4.2); burst('cShare',4.5);
+
+// Suivi en direct : flux d'appels et éclairs de notation
+(()=>{const S=setup('cLive',50,[0,3.2,8.5]); stars(S.scene,700); S.scene.add(new THREE.AmbientLight(0x335566,1.4)); S.scene.add(new THREE.PointLight(0xffffff,50,40));
+ const cols=[0xF0631F,0x3fa2e0,0xffffff,0x7cc4ef,0xFFB48A,0x0C659D]; const hub=new THREE.Mesh(new THREE.IcosahedronGeometry(.5,2),new THREE.MeshBasicMaterial({color:0xFFB48A,wireframe:true})); S.scene.add(hub);
+ const nodes=cols.map((c,i)=>{const a=i/cols.length*Math.PI*2; const m=new THREE.Mesh(new THREE.SphereGeometry(.28,32,32),new THREE.MeshStandardMaterial({color:c,emissive:c,emissiveIntensity:.5})); m.position.set(Math.cos(a)*3.6,0,Math.sin(a)*2.2); S.scene.add(m);
+  const line=new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(),m.position.clone()]),new THREE.LineBasicMaterial({color:c,transparent:true,opacity:.18})); S.scene.add(line); return m;});
+ const F=360,g=new THREE.BufferGeometry(),fp=new Float32Array(F*3),meta=[]; for(let i=0;i<F;i++)meta.push({n:i%6,t:Math.random(),back:Math.random()<.5}); g.setAttribute('position',new THREE.BufferAttribute(fp,3));
+ S.scene.add(new THREE.Points(g,new THREE.PointsMaterial({color:0xbfe5fb,size:.05,transparent:true,opacity:.9})));
+ const flashes=nodes.map(n=>{const f=new THREE.Mesh(new THREE.SphereGeometry(.6,24,24),new THREE.MeshBasicMaterial({color:0xF0631F,transparent:true,opacity:0})); f.position.copy(n.position); S.scene.add(f); return f;});
+ let t=0; (function loop(){ if(S.fit()){ t+=.016; hub.rotation.y+=.012; hub.rotation.x+=.006; S.scene.rotation.y=Math.sin(t*.12)*.3;
+  for(let i=0;i<F;i++){const d=meta[i]; d.t+=.008; if(d.t>1){d.t=0;d.n=Math.floor(Math.random()*6); if(d.back && Math.random()<.04){flashes[d.n].material.opacity=.6;}} const P=nodes[d.n].position, k=d.back?1-d.t:d.t; fp[i*3]=P.x*k; fp[i*3+1]=Math.sin(k*Math.PI)*.6+Math.sin(i)*.05; fp[i*3+2]=P.z*k;}
+  g.attributes.position.needsUpdate=true; flashes.forEach(f=>{f.material.opacity*=.94; f.scale.setScalar(1+(.6-f.material.opacity));}); S.r.render(S.scene,S.cam);} requestAnimationFrame(loop);})();})();
+</script>
+</body>
+</html>

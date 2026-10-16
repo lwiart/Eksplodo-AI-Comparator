@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Résultats d'une série</title>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800&family=Instrument+Sans:wght@400;500;600&family=Noto+Sans+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg0:#00131d; --bg1:#011f2e; --bg2:#032a3d; --line:rgba(120,190,230,.14); --line2:rgba(120,190,230,.28);
+    --txt:#d8ecf5; --mut:#7fa3b5; --white:#fff;
+    --orange:#F0631F; --peach:#FFB48A; --blue:#3fa2e0; --blue2:#0C659D; --sky:#7cc4ef; --navy:#003C58;
+    --good:#4fd1a5;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{font-family:"Instrument Sans",system-ui,sans-serif;color:var(--txt);
+    background:radial-gradient(120% 80% at 70% -10%,#06405d 0%,var(--bg1) 45%,var(--bg0) 100%) fixed;}
+  body::before{content:"";position:fixed;inset:0;pointer-events:none;
+    background-image:radial-gradient(rgba(127,196,239,.10) 1px,transparent 1px);background-size:22px 22px}
+  .mono{font-family:"Noto Sans Mono",monospace}
+  .app{display:grid;grid-template-columns:232px 1fr;min-height:100vh;position:relative}
+  /* sidebar */
+  aside{border-right:1px solid var(--line);padding:20px 14px;background:rgba(0,19,29,.55);backdrop-filter:blur(8px);position:sticky;top:0;height:100vh}
+  .logo{display:flex;align-items:center;gap:10px;font:800 17px Archivo;color:#fff;margin:0 6px 26px}
+  .logo img{height:34px;width:auto;display:block;filter:drop-shadow(0 0 10px rgba(240,99,31,.55)) drop-shadow(0 0 2px rgba(255,180,138,.6))}
+  .logo div{font-family:"Noto Sans Mono",monospace;font-weight:600;letter-spacing:.01em}
+  .logo small{display:block;font:500 10px "Noto Sans Mono";color:var(--mut);letter-spacing:.06em}
+  .nav-sec{font:600 10px "Noto Sans Mono";color:var(--mut);letter-spacing:.12em;margin:18px 8px 8px}
+  .nav a{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:10px;color:var(--txt);text-decoration:none;font-size:14px}
+  .nav a:hover{background:rgba(63,162,224,.08)}
+  .nav a.on{background:linear-gradient(90deg,rgba(240,99,31,.18),rgba(240,99,31,.02));color:#fff;box-shadow:inset 2px 0 0 var(--orange)}
+  .nav .ic{width:18px;text-align:center;opacity:.85}
+  .badge{margin-left:auto;font:600 10px "Noto Sans Mono";background:var(--orange);color:#fff;border-radius:100px;padding:1px 7px}
+  .me{position:absolute;bottom:18px;left:14px;right:14px;display:flex;gap:10px;align-items:center;padding:10px;border:1px solid var(--line);border-radius:12px;font-size:13px}
+  .me b{display:block;color:#fff}.me span{color:var(--mut);font-size:11px}
+  .av{width:30px;height:30px;border-radius:50%;background:linear-gradient(135deg,var(--blue2),var(--orange))}
+  /* main */
+  main{padding:22px 28px 60px;min-width:0}
+  .crumbs{font:500 12px "Noto Sans Mono";color:var(--mut)}
+  .head{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin:6px 0 18px;flex-wrap:wrap}
+  h1{font:800 30px/1.1 Archivo;color:#fff;margin:0;letter-spacing:-.01em}
+  h1 em{font-style:normal;background:linear-gradient(90deg,var(--orange),var(--peach));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .meta{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+  .chip{font:600 11px "Noto Sans Mono";padding:4px 10px;border-radius:100px;border:1px solid var(--line2);color:var(--txt);background:rgba(3,42,61,.6)}
+  .chip.live{color:var(--peach);border-color:rgba(240,99,31,.5);background:rgba(240,99,31,.12)}
+  .btns{display:flex;gap:8px}
+  .btn{font:600 13px "Instrument Sans";border-radius:100px;padding:9px 16px;border:1px solid var(--line2);background:rgba(3,42,61,.7);color:#fff;cursor:pointer}
+  .btn.pri{background:linear-gradient(90deg,var(--orange),#ff8a4c);border:0;box-shadow:0 8px 24px -8px rgba(240,99,31,.7)}
+  .card{background:linear-gradient(180deg,rgba(3,42,61,.75),rgba(1,31,46,.75));border:1px solid var(--line);border-radius:18px;backdrop-filter:blur(6px)}
+  .card h3{font:700 14px Archivo;color:#fff;margin:0;display:flex;align-items:center;gap:8px}
+  .card h3 small{font:500 11px "Noto Sans Mono";color:var(--mut);margin-left:auto}
+  /* hero */
+  .hero{display:grid;grid-template-columns:1.35fr 1fr;gap:16px;margin-bottom:16px}
+  .stage{position:relative;height:360px;overflow:hidden;padding:0}
+  .stage canvas{position:absolute;inset:0;width:100%!important;height:100%!important}
+  .stage .lbl{position:absolute;left:16px;top:14px}
+  .legend{position:absolute;left:16px;bottom:14px;display:flex;flex-wrap:wrap;gap:6px;max-width:80%}
+  .legend span{font:500 11px "Noto Sans Mono";display:flex;align-items:center;gap:6px;padding:3px 8px;border-radius:100px;background:rgba(0,19,29,.6);border:1px solid var(--line)}
+  .legend i{width:8px;height:8px;border-radius:50%}
+  .hint{position:absolute;right:14px;bottom:14px;font:500 10px "Noto Sans Mono";color:var(--mut)}
+  /* podium */
+  .podium{padding:16px;display:flex;flex-direction:column;gap:12px}
+  .pod{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;align-items:end;flex:1}
+  .pstep{border-radius:14px;padding:12px 10px;text-align:center;border:1px solid var(--line);background:rgba(0,19,29,.45);position:relative}
+  .pstep .rk{font:800 28px Archivo;color:#fff;line-height:1}
+  .pstep .nm{font:700 13px Archivo;color:#fff;margin-top:6px}
+  .pstep .pv{font:500 11px "Noto Sans Mono";color:var(--mut)}
+  .pstep .sc{font:800 22px Archivo;margin-top:8px}
+  .p1{height:200px;background:linear-gradient(180deg,rgba(240,99,31,.32),rgba(240,99,31,.05));border-color:rgba(240,99,31,.55);box-shadow:0 0 40px -10px rgba(240,99,31,.6)}
+  .p1 .sc{color:var(--peach)} .p2{height:160px}.p3{height:130px}
+  .p2 .sc,.p3 .sc{color:var(--sky)}
+  .crown{position:absolute;top:-12px;left:50%;transform:translateX(-50%);font-size:18px}
+  /* weights */
+  .wgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+  .w label{display:flex;justify-content:space-between;font-size:12px;color:var(--mut)}
+  .w label b{color:#fff;font:600 12px "Noto Sans Mono"}
+  input[type=range]{width:100%;accent-color:var(--orange)}
+  /* grid */
+  .g2{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}
+  .pad{padding:16px}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th{font:600 10px "Noto Sans Mono";color:var(--mut);text-align:left;letter-spacing:.08em;padding:8px 10px;border-bottom:1px solid var(--line)}
+  td{padding:10px;border-bottom:1px solid var(--line)}
+  tr:hover td{background:rgba(63,162,224,.05)}
+  td.n{font-family:"Noto Sans Mono";text-align:right}
+  .mdl{display:flex;align-items:center;gap:8px;color:#fff;font-weight:600}
+  .mdl i{width:10px;height:10px;border-radius:50%;box-shadow:0 0 10px currentColor}
+  .mdl small{display:block;color:var(--mut);font:400 11px "Noto Sans Mono"}
+  .gbar{height:8px;border-radius:100px;background:rgba(255,255,255,.08);overflow:hidden;min-width:90px}
+  .gbar i{display:block;height:100%;border-radius:100px;background:linear-gradient(90deg,var(--orange),var(--peach));transition:width .4s}
+  .rkcell{font:800 16px Archivo;color:#fff;width:34px}
+  .st{font:600 10px "Noto Sans Mono";padding:2px 7px;border-radius:100px}
+  .ok{background:rgba(79,209,165,.15);color:var(--good)} .ko{background:rgba(240,99,31,.15);color:var(--peach)}
+  .tabs{display:flex;gap:6px;margin:4px 0 14px}
+  .tab{font:600 12px "Instrument Sans";padding:7px 13px;border-radius:100px;border:1px solid var(--line);color:var(--mut);cursor:pointer}
+  .tab.on{color:#fff;border-color:rgba(240,99,31,.6);background:rgba(240,99,31,.12)}
+  /* responses */
+  .resp{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+  .rcard{border:1px solid var(--line);border-radius:14px;padding:12px;background:rgba(0,19,29,.4);font-size:12.5px;line-height:1.5}
+  .rcard header{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+  .rcard header b{color:#fff;font:700 13px Archivo}
+  .rcard .q{margin-left:auto;font:800 15px Archivo;color:var(--peach)}
+  .rcard .k{display:flex;gap:10px;font:500 10.5px "Noto Sans Mono";color:var(--mut);margin-top:8px;border-top:1px solid var(--line);padding-top:8px}
+  .judge{margin-top:8px;font-size:11.5px;color:var(--mut);border-left:2px solid var(--orange);padding-left:8px}
+  .note{margin-top:22px;font:500 11px "Noto Sans Mono";color:var(--mut);text-align:center}
+  @media (max-width:1150px){.hero,.g2{grid-template-columns:1fr}.resp{grid-template-columns:1fr}.wgrid{grid-template-columns:1fr 1fr}}
+  @media (max-width:800px){.app{grid-template-columns:1fr}aside{display:none}}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside>
+    <div class="logo"><img src="eksplodo-icon-white.png" alt="Logo Eksplodo"><div>Eksplodo<small>COMPARATEUR IA</small></div></div>
+    <div class="nav">
+      <div class="nav-sec">EXPLORER</div>
+      <a href="#"><span class="ic">◎</span>Tableau de bord</a>
+      <a href="#" class="on"><span class="ic">▶</span>Séries</a>
+      <a href="#"><span class="ic">✦</span>Modèles</a>
+      <a href="#"><span class="ic">✎</span>À noter<span class="badge">7</span></a>
+      <div class="nav-sec">ADMIN</div>
+      <a href="#"><span class="ic">⚡</span>Fournisseurs</a>
+      <a href="#"><span class="ic">☰</span>Tests & suites</a>
+      <a href="#"><span class="ic">👥</span>Utilisateurs</a>
+      <a href="#"><span class="ic">↗</span>Liens de partage</a>
+    </div>
+    <div class="me"><div class="av"></div><div><b>Laurent</b><span>Admin</span></div></div>
+  </aside>
+
+  <main>
+    <div class="crumbs">SÉRIES / #12</div>
+    <div class="head">
+      <div>
+        <h1>Rédaction & logique : <em>octobre 2026</em></h1>
+        <div class="meta">
+          <span class="chip">SUITE · Polyvalence (24 tests)</span>
+          <span class="chip">6 MODÈLES × 2 RÉPÉTITIONS</span>
+          <span class="chip">JUGE · Claude Sonnet</span>
+          <span class="chip">COÛT TOTAL · 3,84 $</span>
+          <span class="chip live">● TERMINÉE · 288 / 288</span>
+        </div>
+      </div>
+      <div class="btns">
+        <button class="btn">＋ Ajouter un modèle</button>
+        <button class="btn">↗ Partager</button>
+        <button class="btn pri">Exporter le rapport</button>
+      </div>
+    </div>
+
+    <section class="hero">
+      <div class="card stage"><canvas id="galaxy"></canvas>
+        <div class="lbl"><h3>Constellation des modèles</h3></div>
+        <div class="legend" id="legend"></div>
+        <div class="hint">TAILLE = SCORE · ORBITE = VITESSE · SURVOLER POUR ZOOMER</div>
+      </div>
+      <div class="card podium">
+        <h3>Podium <small>score global pondéré</small></h3>
+        <div class="pod" id="pod"></div>
+        <div>
+          <h3 style="margin-bottom:8px">Pondération <small>recalcul instantané</small></h3>
+          <div class="wgrid">
+            <div class="w"><label>Qualité <b id="vq">50 %</b></label><input type="range" min="0" max="100" value="50" id="wq"></div>
+            <div class="w"><label>Vitesse <b id="vs">20 %</b></label><input type="range" min="0" max="100" value="20" id="ws"></div>
+            <div class="w"><label>Coût <b id="vc">20 %</b></label><input type="range" min="0" max="100" value="20" id="wc"></div>
+            <div class="w"><label>Fiabilité <b id="vf">10 %</b></label><input type="range" min="0" max="100" value="10" id="wf"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="g2">
+      <div class="card pad">
+        <h3>Qualité vs vitesse <small>en haut à droite = idéal</small></h3>
+        <svg id="scatter" viewBox="0 0 520 260" style="width:100%;height:auto;margin-top:8px"></svg>
+      </div>
+      <div class="card pad">
+        <h3>Par catégorie <small>note qualité moyenne / 10</small></h3>
+        <svg id="cats" viewBox="0 0 520 260" style="width:100%;height:auto;margin-top:8px"></svg>
+      </div>
+    </section>
+
+    <section class="card pad" style="margin-bottom:16px">
+      <h3>Classement détaillé <small>médianes sur 48 réponses par modèle</small></h3>
+      <table style="margin-top:8px">
+        <thead><tr><th>#</th><th>MODÈLE</th><th>SCORE GLOBAL</th><th style="text-align:right">QUALITÉ</th><th style="text-align:right">1ER TOKEN</th><th style="text-align:right">TOKENS/S</th><th style="text-align:right">COÛT</th><th style="text-align:right">FIABILITÉ</th></tr></thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </section>
+
+    <section class="card pad">
+      <h3>Réponses côte à côte <small>test 7 / 24 · « Résumer un CCTP en 5 points »</small></h3>
+      <div class="tabs" style="margin-top:10px">
+        <span class="tab on">Côte à côte</span><span class="tab">À l'aveugle</span><span class="tab">Écarts entre évaluateurs</span>
+      </div>
+      <div class="resp">
+        <div class="rcard"><header><span class="mdl"><i style="color:#F0631F;background:#F0631F"></i></span><b>Claude Opus</b><span class="q">9.5</span></header>
+          1. Objet : formation de 120 agents à l'IA générative…<br>2. Durée : 18 mois, reconductible une fois…<br>3. Livrables : supports, plateforme, évaluation à chaud et à froid…<br><span style="color:var(--mut)">…</span>
+          <div class="judge">Juge : complet, structuré, aucune invention. Respecte les 5 points.</div>
+          <div class="k"><span>1er token 0,9 s</span><span>74 tok/s</span><span>0,021 $</span></div></div>
+        <div class="rcard"><header><span class="mdl"><i style="color:#3fa2e0;background:#3fa2e0"></i></span><b>GPT</b><span class="q">8.8</span></header>
+          • Le marché porte sur la formation IA de 120 agents…<br>• Calendrier : 18 mois…<br>• Exigences : référent pédagogique dédié…<br><span style="color:var(--mut)">…</span>
+          <div class="judge">Juge : clair, mais omet le critère d'évaluation à froid.</div>
+          <div class="k"><span>1er token 0,6 s</span><span>96 tok/s</span><span>0,014 $</span></div></div>
+        <div class="rcard"><header><span class="mdl"><i style="color:#7cc4ef;background:#7cc4ef"></i></span><b>Mistral Large</b><span class="q">8.1</span></header>
+          1) Objet du marché : actions de formation…<br>2) Public : 120 agents de catégorie B et C…<br>3) Modalités : présentiel et distanciel…<br><span style="color:var(--mut)">…</span>
+          <div class="judge">Juge : bon résumé, une durée inexacte (12 mois au lieu de 18).</div>
+          <div class="k"><span>1er token 0,4 s</span><span>131 tok/s</span><span>0,006 $</span></div></div>
+      </div>
+    </section>
+    <p class="note">MAQUETTE · DONNÉES FICTIVES · les curseurs de pondération fonctionnent</p>
+  </main>
+</div>
+
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js"}}</script>
+<script type="module">
+import * as THREE from 'three';
+const M = [
+  {n:'Claude Opus', p:'Anthropic', c:'#F0631F', q:9.2, ttft:.9, tps:74, cost:1.12, rel:100, cats:[9.5,9.0,8.9]},
+  {n:'GPT', p:'OpenAI', c:'#3fa2e0', q:8.7, ttft:.6, tps:96, cost:.78, rel:100, cats:[8.6,9.2,8.4]},
+  {n:'Gemini Pro', p:'Google', c:'#ffffff', q:8.4, ttft:.7, tps:118, cost:.64, rel:98, cats:[8.2,8.5,8.6]},
+  {n:'Mistral Large', p:'Mistral', c:'#7cc4ef', q:8.1, ttft:.4, tps:131, cost:.31, rel:100, cats:[8.4,7.6,8.2]},
+  {n:'DeepSeek', p:'OpenRouter', c:'#FFB48A', q:7.8, ttft:1.4, tps:52, cost:.09, rel:94, cats:[7.5,8.4,7.4]},
+  {n:'Qwen', p:'OpenRouter', c:'#0C659D', q:7.4, ttft:.8, tps:105, cost:.12, rel:96, cats:[7.1,7.9,7.2]},
+];
+const fmt=(x,d=1)=>x.toLocaleString('fr-FR',{minimumFractionDigits:d,maximumFractionDigits:d});
+function scores(){
+  const w={q:+wq.value,s:+ws.value,c:+wc.value,f:+wf.value}; const tot=w.q+w.s+w.c+w.f||1;
+  ['q','s','c','f'].forEach(k=>document.getElementById('v'+k).textContent=Math.round(w[k]/tot*100)+' %');
+  // Échelle logarithmique de 2 à 10 : un écart ×2 pèse autant à 1 $ qu'à 0,10 $.
+  const logScore=(x,lo,hi,higherIsBetter)=>{ if(hi===lo) return 10; const k=Math.log(x/lo)/Math.log(hi/lo); return 2+8*(higherIsBetter?k:1-k); };
+  const T=M.map(m=>m.tps), C=M.map(m=>m.cost);
+  const [tLo,tHi,cLo,cHi]=[Math.min(...T),Math.max(...T),Math.min(...C),Math.max(...C)];
+  return M.map(m=>{const sq=m.q, ss=logScore(m.tps,tLo,tHi,true), sc=logScore(m.cost,cLo,cHi,false), sf=m.rel/10;
+    return {...m, g:(w.q*sq+w.s*ss+w.c*sc+w.f*sf)/tot};}).sort((a,b)=>b.g-a.g);
+}
+function render(){
+  const S=scores();
+  document.getElementById('tbody').innerHTML=S.map((m,i)=>`<tr><td class="rkcell">${i+1}</td>
+    <td><div class="mdl"><i style="color:${m.c};background:${m.c}"></i><div>${m.n}<small>${m.p}</small></div></div></td>
+    <td><div style="display:flex;align-items:center;gap:10px"><div class="gbar"><i style="width:${m.g*10}%"></i></div><b class="mono" style="color:#fff">${fmt(m.g)}</b></div></td>
+    <td class="n">${fmt(m.q)}</td><td class="n">${fmt(m.ttft)} s</td><td class="n">${m.tps}</td><td class="n">${fmt(m.cost,2)} $</td>
+    <td class="n"><span class="st ${m.rel===100?'ok':'ko'}">${m.rel} %</span></td></tr>`).join('');
+  const order=[1,0,2], cls=['p2','p1','p3'];
+  document.getElementById('pod').innerHTML=order.map((k,j)=>{const m=S[k];return `<div class="pstep ${cls[j]}">${k===0?'<span class="crown">✦</span>':''}
+    <div class="rk">${k+1}</div><div class="nm">${m.n}</div><div class="pv">${m.p}</div><div class="sc">${fmt(m.g)}</div></div>`}).join('');
+  window.__rank = S.map(m=>m.n);
+}
+[wq,ws,wc,wf].forEach(e=>e.addEventListener('input',render)); render();
+document.getElementById('legend').innerHTML=M.map(m=>`<span><i style="background:${m.c}"></i>${m.n}</span>`).join('');
+
+// scatter
+(()=>{const s=document.getElementById('scatter'); const X=t=>50+(t-40)/(140-40)*440, Y=q=>220-(q-7)/(9.6-7)*190;
+ let h=`<rect x="50" y="30" width="440" height="190" fill="none" stroke="rgba(120,190,230,.14)"/>
+ <rect x="${X(100)}" y="30" width="${490-X(100)}" height="${Y(8.5)-30}" fill="rgba(240,99,31,.07)"/>
+ <text x="${X(100)+6}" y="44" fill="#FFB48A" font-size="10" font-family="Noto Sans Mono">ZONE IDÉALE</text>`;
+ [40,60,80,100,120,140].forEach(t=>h+=`<text x="${X(t)}" y="238" fill="#7fa3b5" font-size="10" text-anchor="middle" font-family="Noto Sans Mono">${t}</text>`);
+ [7,8,9].forEach(q=>h+=`<line x1="50" x2="490" y1="${Y(q)}" y2="${Y(q)}" stroke="rgba(120,190,230,.08)"/><text x="40" y="${Y(q)+3}" fill="#7fa3b5" font-size="10" text-anchor="end" font-family="Noto Sans Mono">${q}</text>`);
+ h+=`<text x="270" y="256" fill="#7fa3b5" font-size="10" text-anchor="middle" font-family="Noto Sans Mono">TOKENS / SECONDE →</text>`;
+ M.forEach(m=>{const r=6+m.q*1.2; h+=`<circle cx="${X(m.tps)}" cy="${Y(m.q)}" r="${r+6}" fill="${m.c}" opacity=".15"/><circle cx="${X(m.tps)}" cy="${Y(m.q)}" r="${r/2}" fill="${m.c}"/>
+   <text x="${X(m.tps)+r/2+6}" y="${Y(m.q)+4}" fill="#d8ecf5" font-size="11" font-family="Instrument Sans">${m.n}</text>`});
+ s.innerHTML=h;})();
+// categories
+(()=>{const s=document.getElementById('cats'); const cats=['Rédaction','Logique','Vision']; const top=M.slice(0,4); let h='';
+ cats.forEach((c,ci)=>{const y0=20+ci*80; h+=`<text x="0" y="${y0+12}" fill="#fff" font-size="12" font-family="Archivo" font-weight="700">${c}</text>`;
+  top.forEach((m,mi)=>{const y=y0+20+mi*13, w=(m.cats[ci]-6)/(10-6)*380; h+=`<rect x="110" y="${y}" width="${w}" height="9" rx="4.5" fill="${m.c}" opacity="${mi===0?1:.75}"/>
+   <text x="${116+w}" y="${y+8}" fill="#7fa3b5" font-size="9.5" font-family="Noto Sans Mono">${m.cats[ci].toFixed(1)} ${m.n}</text>`});});
+ s.innerHTML=h;})();
+
+// galaxy
+(()=>{const canvas=document.getElementById('galaxy'); const r=new THREE.WebGLRenderer({canvas,antialias:true,alpha:true}); r.setPixelRatio(Math.min(devicePixelRatio,2));
+ const scene=new THREE.Scene(), cam=new THREE.PerspectiveCamera(48,1,.1,100); cam.position.set(0,2.6,9.5); cam.lookAt(0,0,0);
+ scene.add(new THREE.AmbientLight(0x335566,1.4)); const pl=new THREE.PointLight(0xffffff,60,40); scene.add(pl);
+ const hub=new THREE.Mesh(new THREE.IcosahedronGeometry(.42,3),new THREE.MeshBasicMaterial({color:0xFFB48A})); scene.add(hub);
+ const glow=new THREE.Mesh(new THREE.SphereGeometry(.75,32,32),new THREE.MeshBasicMaterial({color:0xF0631F,transparent:true,opacity:.2})); scene.add(glow);
+ const maxT=Math.max(...M.map(m=>m.tps));
+ const P=M.map((m,i)=>{const col=new THREE.Color(m.c); const size=.16+(m.q-7)*.17;
+  const mesh=new THREE.Mesh(new THREE.SphereGeometry(size,40,40),new THREE.MeshStandardMaterial({color:col,emissive:col,emissiveIntensity:.45,roughness:.35})); scene.add(mesh);
+  const halo=new THREE.Mesh(new THREE.SphereGeometry(size*1.9,24,24),new THREE.MeshBasicMaterial({color:col,transparent:true,opacity:.12})); scene.add(halo);
+  const R=1.5+i*.62; const orbit=new THREE.Mesh(new THREE.RingGeometry(R-.006,R+.006,160),new THREE.MeshBasicMaterial({color:0x3fa2e0,transparent:true,opacity:.16,side:THREE.DoubleSide})); orbit.rotation.x=Math.PI/2; scene.add(orbit);
+  return {mesh,halo,R,sp:.15+.55*m.tps/maxT,ph:i*1.1};});
+ const F=520, g=new THREE.BufferGeometry(), fp=new Float32Array(F*3), meta=[]; for(let i=0;i<F;i++)meta.push({p:i%P.length,t:Math.random()});
+ g.setAttribute('position',new THREE.BufferAttribute(fp,3)); scene.add(new THREE.Points(g,new THREE.PointsMaterial({color:0x9fd6f7,size:.03,transparent:true,opacity:.85})));
+ const sg=new THREE.BufferGeometry(), sp=new Float32Array(1200*3); for(let i=0;i<1200;i++)sp.set([(Math.random()-.5)*50,(Math.random()-.5)*30,-10-Math.random()*12],i*3);
+ sg.setAttribute('position',new THREE.BufferAttribute(sp,3)); scene.add(new THREE.Points(sg,new THREE.PointsMaterial({color:0x5d97b8,size:.045})));
+ let t=0, zoom=0, target=0; canvas.parentElement.addEventListener('mouseenter',()=>target=1); canvas.parentElement.addEventListener('mouseleave',()=>target=0);
+ (function loop(){const p=canvas.parentElement; r.setSize(p.clientWidth,p.clientHeight,false); cam.aspect=p.clientWidth/p.clientHeight; cam.updateProjectionMatrix();
+  t+=.016; zoom+=(target-zoom)*.04; cam.position.set(Math.sin(t*.08)*1.2, 2.6-zoom*1.2, 9.5-zoom*2.2); cam.lookAt(0,0,0);
+  hub.rotation.y+=.01; glow.scale.setScalar(1+.1*Math.sin(t*3));
+  P.forEach(o=>{const a=t*o.sp+o.ph; o.mesh.position.set(Math.cos(a)*o.R,Math.sin(a*2)*.08,Math.sin(a)*o.R); o.halo.position.copy(o.mesh.position); o.mesh.rotation.y+=.02;});
+  for(let i=0;i<F;i++){const d=meta[i]; d.t+=.005; if(d.t>1){d.t=0;d.p=Math.floor(Math.random()*P.length);} const q=P[d.p].mesh.position, k=d.t;
+   fp[i*3]=q.x*k+Math.sin(k*10+i)*.04; fp[i*3+1]=q.y*k+Math.sin(k*3.14)*.35; fp[i*3+2]=q.z*k;}
+  g.attributes.position.needsUpdate=true; r.render(scene,cam); requestAnimationFrame(loop);})();})();
+</script>
+</body>
+</html>

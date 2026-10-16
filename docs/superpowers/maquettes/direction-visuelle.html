@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Directions visuelles</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800&family=Instrument+Sans:wght@400;500;600&family=Noto+Sans+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --navy:#003C58; --blue:#0C659D; --blue2:#16609F; --orange:#F0631F; --rust:#BB450D;
+    --ink:#333; --muted:#4E6F7E; --mist:#F1F7F9; --mist2:#E3F1F7;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:"Instrument Sans",system-ui,sans-serif;color:var(--ink);background:#fff;
+    background-image:radial-gradient(#d5e3ea 1px,transparent 1px);background-size:22px 22px}
+  .wrap{max-width:1280px;margin:0 auto;padding:40px 24px 80px}
+  .eyebrow{display:inline-flex;gap:8px;align-items:center;font:600 12px "Noto Sans Mono",monospace;color:var(--muted);
+    background:#fff;border:1px solid var(--mist2);padding:6px 12px;border-radius:100px}
+  .eyebrow b{background:var(--blue);color:#fff;padding:2px 8px;border-radius:100px;font-weight:600}
+  h1{font:800 44px/1.05 Archivo,sans-serif;color:var(--navy);margin:18px 0 8px;letter-spacing:-.02em}
+  h1 em{font-style:normal;color:var(--rust)}
+  .lead{font-size:18px;color:var(--muted);max-width:760px;margin:0 0 32px}
+  .cards{display:grid;grid-template-columns:repeat(3,1fr);gap:22px}
+  @media (max-width:1100px){.cards{grid-template-columns:1fr}}
+  .card{background:#fff;border:2px solid var(--mist2);border-radius:22px;overflow:hidden;cursor:pointer;
+    transition:transform .25s, box-shadow .25s, border-color .25s;display:flex;flex-direction:column}
+  .card:hover{transform:translateY(-4px);box-shadow:0 18px 40px -18px rgba(0,60,88,.35)}
+  .card.selected{border-color:var(--orange);box-shadow:0 0 0 4px rgba(240,99,31,.18)}
+  .stage{position:relative;height:340px;overflow:hidden}
+  .stage canvas{position:absolute;inset:0;width:100%!important;height:100%!important}
+  .overlay{position:absolute;inset:0;padding:18px;display:flex;flex-direction:column;justify-content:space-between;pointer-events:none}
+  .body{padding:18px 20px 22px}
+  .letter{font:700 12px "Noto Sans Mono",monospace;color:var(--orange)}
+  .body h3{font:800 22px Archivo,sans-serif;color:var(--navy);margin:4px 0 6px}
+  .body p{margin:0 0 10px;color:var(--muted);font-size:14.5px;line-height:1.5}
+  .tags{display:flex;flex-wrap:wrap;gap:6px}
+  .tag{font:500 11px "Noto Sans Mono",monospace;padding:4px 9px;border-radius:100px;border:1px solid var(--mist2);color:var(--muted)}
+
+  /* mini UI snippets */
+  .mini-title{font:800 15px Archivo,sans-serif}
+  .mono{font-family:"Noto Sans Mono",monospace}
+  .rank{display:flex;flex-direction:column;gap:7px;font-size:12px}
+  .row{display:grid;grid-template-columns:18px 92px 1fr 34px;align-items:center;gap:8px}
+  .bar{height:8px;border-radius:100px;background:rgba(0,0,0,.08);overflow:hidden}
+  .bar i{display:block;height:100%;border-radius:100px}
+  .chip{display:inline-block;font:600 10px "Noto Sans Mono",monospace;padding:3px 8px;border-radius:100px}
+
+  /* A — Éclat (clair) */
+  .A .stage{background:linear-gradient(160deg,#fff 0%,var(--mist) 60%,var(--mist2) 100%)}
+  .A .panel{background:rgba(255,255,255,.88);backdrop-filter:blur(6px);border:1px solid var(--mist2);border-radius:14px;padding:12px 14px;width:250px;align-self:flex-end;box-shadow:0 10px 30px -15px rgba(0,60,88,.4)}
+  .A .mini-title{color:var(--navy)}
+  .A .row span{color:var(--navy)}
+
+  /* B — Nuit (sombre) */
+  .B .stage{background:radial-gradient(120% 90% at 30% 20%,#063a55 0%,#012233 55%,#00131d 100%)}
+  .B .panel{background:rgba(0,25,38,.6);backdrop-filter:blur(6px);border:1px solid rgba(120,190,230,.18);border-radius:14px;padding:12px 14px;width:250px;align-self:flex-end;color:#d8ecf5}
+  .B .mini-title{color:#fff}
+  .B .bar{background:rgba(255,255,255,.1)}
+
+  /* C — Hybride */
+  .C .stage{background:#fff}
+  .C .band{position:absolute;left:0;right:0;top:0;height:58%;background:linear-gradient(135deg,#003C58,#0C659D 70%,#16609F)}
+  .C .panel{background:#fff;border:1px solid var(--mist2);border-radius:14px;padding:10px 12px;width:240px;box-shadow:0 14px 30px -18px rgba(0,60,88,.45)}
+  .C .panel > div:last-child{flex-direction:column;align-items:flex-start}
+  .C .mini-title{color:var(--navy)}
+  .C .hero-t{color:#fff;font:800 20px Archivo,sans-serif;max-width:220px;line-height:1.1}
+  .C .hero-t em{font-style:normal;color:#FFB48A}
+  .foot{margin-top:28px;color:var(--muted);font-size:14px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <span class="eyebrow">Comparateur d'IA · Direction visuelle <b>ÉTAPE 1 / 4</b></span>
+  <h1>Quelle ambiance pour <em>ton comparateur</em> ?</h1>
+  <p class="lead">Trois directions qui reprennent l'identité d'eksplodo.fr : bleu marine <span class="mono">#003C58</span>, orange <span class="mono">#F0631F</span>, titres en Archivo, étiquettes en police mono, fond en grille de points, boutons arrondis. Les animations sont du vrai Three.js, en direct. Clique sur celle que tu préfères.</p>
+
+  <div class="cards">
+    <!-- A -->
+    <div class="card A" data-choice="eclat" onclick="toggleSelect(this)">
+      <div class="stage"><canvas id="cA"></canvas>
+        <div class="overlay">
+          <span class="chip" style="background:#fff;color:var(--navy);border:1px solid var(--mist2);align-self:flex-start">SÉRIE #12 · 8 MODÈLES</span>
+          <div class="panel">
+            <div class="mini-title">Classement global</div>
+            <div class="rank" style="margin-top:8px">
+              <div class="row"><b style="color:var(--orange)">1</b><span>Claude Opus</span><div class="bar"><i style="width:92%;background:var(--orange)"></i></div><span class="mono">9.2</span></div>
+              <div class="row"><b>2</b><span>GPT</span><div class="bar"><i style="width:87%;background:var(--blue)"></i></div><span class="mono">8.7</span></div>
+              <div class="row"><b>3</b><span>Mistral Large</span><div class="bar"><i style="width:81%;background:var(--blue)"></i></div><span class="mono">8.1</span></div>
+              <div class="row"><b>4</b><span>DeepSeek</span><div class="bar"><i style="width:78%;background:var(--navy)"></i></div><span class="mono">7.8</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="body">
+        <span class="letter">A</span>
+        <h3>« Éclat » : clair et fidèle au site</h3>
+        <p>Le même univers qu'eksplodo.fr : fond clair en grille de points, cartes blanches, accents orange. En 3D, une <b>gerbe de rayons</b> rappelle le cercle de ton visuel d'accueil ; elle « explose » au lancement d'une série et quand un vainqueur est révélé.</p>
+        <div class="tags"><span class="tag">fond clair</span><span class="tag">très lisible en démo</span><span class="tag">cohérent avec la marque</span></div>
+      </div>
+    </div>
+
+    <!-- B -->
+    <div class="card B" data-choice="nuit" onclick="toggleSelect(this)">
+      <div class="stage"><canvas id="cB"></canvas>
+        <div class="overlay">
+          <span class="chip" style="background:rgba(240,99,31,.15);color:#FFB48A;border:1px solid rgba(240,99,31,.4);align-self:flex-start">● EN COURS · 63 / 96</span>
+          <div class="panel">
+            <div class="mini-title">Vitesse (tokens/s)</div>
+            <div class="rank" style="margin-top:8px">
+              <div class="row"><b style="color:#FFB48A">1</b><span>Mistral Small</span><div class="bar"><i style="width:95%;background:linear-gradient(90deg,#F0631F,#FFB48A)"></i></div><span class="mono">212</span></div>
+              <div class="row"><b>2</b><span>Gemini Flash</span><div class="bar"><i style="width:84%;background:#3fa2e0"></i></div><span class="mono">188</span></div>
+              <div class="row"><b>3</b><span>Qwen</span><div class="bar"><i style="width:61%;background:#3fa2e0"></i></div><span class="mono">131</span></div>
+              <div class="row"><b>4</b><span>Claude Opus</span><div class="bar"><i style="width:42%;background:#1d6b9c"></i></div><span class="mono">74</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="body">
+        <span class="letter">B</span>
+        <h3>« Nuit » : immersif et spectaculaire</h3>
+        <p>Une interface sombre en bleu nuit, des lueurs bleues et orange, dans l'esprit « salle de contrôle ». En 3D, chaque modèle est un <b>astre</b> ; des particules circulent pendant les appels et l'astre grossit avec son score. Effet « waouh » garanti en démo.</p>
+        <div class="tags"><span class="tag">fond sombre</span><span class="tag">effet waouh</span><span class="tag">s'éloigne un peu du site</span></div>
+      </div>
+    </div>
+
+    <!-- C -->
+    <div class="card C" data-choice="hybride" onclick="toggleSelect(this)">
+      <div class="stage"><div class="band"></div><canvas id="cC"></canvas>
+        <div class="overlay">
+          <div class="hero-t">Le podium <em>de la semaine</em></div>
+          <div class="panel">
+            <div class="mini-title">Rédaction · Logique · Vision</div>
+            <div style="display:flex;gap:8px;margin-top:8px;font-size:11px">
+              <span class="chip" style="background:#FDEBDC;color:var(--rust)">Rédaction → Claude</span>
+              <span class="chip" style="background:var(--mist2);color:var(--navy)">Logique → GPT</span>
+              <span class="chip" style="background:var(--mist);color:var(--blue)">Vision → Gemini</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="body">
+        <span class="letter">C</span>
+        <h3>« Hybride » : bandeaux immersifs et pages claires</h3>
+        <p>Les pages de travail restent claires et lisibles, mais chaque page importante s'ouvre sur un <b>bandeau dégradé marine</b> avec une scène 3D : un <b>podium animé</b> où les modèles montent sur les marches. C'est le compromis entre la sobriété de la marque et le spectacle.</p>
+        <div class="tags"><span class="tag">clair + bandeaux sombres</span><span class="tag">podium 3D</span><span class="tag">bon compromis</span></div>
+      </div>
+    </div>
+  </div>
+
+  <p class="foot">Le mode sombre et le mode clair pourront de toute façon coexister. Il s'agit ici de choisir l'ambiance <b>par défaut</b> et le style des animations.</p>
+</div>
+
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js"}}</script>
+<script type="module">
+import * as THREE from 'three';
+
+function makeRenderer(canvas){
+  const r = new THREE.WebGLRenderer({canvas, antialias:true, alpha:true});
+  r.setPixelRatio(Math.min(devicePixelRatio,2));
+  const resize = () => { const p = canvas.parentElement; r.setSize(p.clientWidth, p.clientHeight, false); return [p.clientWidth,p.clientHeight]; };
+  return {r, resize};
+}
+
+/* ---------- A : gerbe de rayons (burst) ---------- */
+(() => {
+  const canvas = document.getElementById('cA'); const {r, resize} = makeRenderer(canvas);
+  const scene = new THREE.Scene(); const cam = new THREE.PerspectiveCamera(45,1,0.1,100); cam.position.set(0,0,9);
+  const group = new THREE.Group(); group.position.set(-1.6,0.3,0); scene.add(group);
+  const N = 90, rays = [];
+  for (let i=0;i<N;i++){
+    const a = (i/N)*Math.PI*2;
+    const len = 0.6 + Math.random()*1.1;
+    const geo = new THREE.BoxGeometry(len,0.07,0.07); geo.translate(len/2,0,0);
+    const col = i%9===0 ? 0xF0631F : (i%2 ? 0x0C659D : 0x16609F);
+    const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({color:col, transparent:true, opacity:.95}));
+    m.rotation.z = a; m.userData = {a, base:len, ph:Math.random()*6.28}; group.add(m); rays.push(m);
+  }
+  const core = new THREE.Mesh(new THREE.CircleGeometry(1.15,64), new THREE.MeshBasicMaterial({color:0xffffff}));
+  core.position.z = .1; group.add(core);
+  const ring = new THREE.Mesh(new THREE.RingGeometry(1.15,1.24,64), new THREE.MeshBasicMaterial({color:0xF0631F}));
+  ring.position.z=.11; group.add(ring);
+  // little "spark" particles
+  const sp = new THREE.BufferGeometry(); const S=160; const pos=new Float32Array(S*3); const vel=[];
+  for(let i=0;i<S;i++){pos.set([0,0,0],i*3); const a=Math.random()*6.28, s=.02+Math.random()*.05; vel.push([Math.cos(a)*s,Math.sin(a)*s,0,Math.random()*80]);}
+  sp.setAttribute('position', new THREE.BufferAttribute(pos,3));
+  const spark = new THREE.Points(sp, new THREE.PointsMaterial({color:0xF0631F,size:.07})); group.add(spark);
+  let t=0, burst=0;
+  canvas.parentElement.parentElement.addEventListener('mouseenter',()=>burst=1);
+  function loop(){
+    const [w,h]=resize(); cam.aspect=w/h; cam.updateProjectionMatrix(); t+=0.016; burst*=0.97;
+    rays.forEach(m=>{ const k = 1.35 + .25*Math.sin(t*2+m.userData.ph) + burst*1.2; m.position.set(Math.cos(m.userData.a)*1.3, Math.sin(m.userData.a)*1.3,0); m.scale.x = k; });
+    group.rotation.z += 0.0025;
+    const p = sp.attributes.position.array;
+    for(let i=0;i<S;i++){ const v=vel[i]; v[3]+=1; if(v[3]>90){p[i*3]=Math.cos(Math.atan2(v[1],v[0]))*1.3;p[i*3+1]=Math.sin(Math.atan2(v[1],v[0]))*1.3;v[3]=Math.random()*20;} p[i*3]+=v[0]*(1+burst*3); p[i*3+1]+=v[1]*(1+burst*3);}
+    sp.attributes.position.needsUpdate=true;
+    r.render(scene,cam); requestAnimationFrame(loop);
+  } loop();
+})();
+
+/* ---------- B : astres + flux de particules ---------- */
+(() => {
+  const canvas = document.getElementById('cB'); const {r, resize} = makeRenderer(canvas);
+  const scene = new THREE.Scene(); const cam = new THREE.PerspectiveCamera(50,1,0.1,100); cam.position.set(0,1.2,9);
+  scene.add(new THREE.AmbientLight(0x335566, 1.2));
+  const pl = new THREE.PointLight(0xffffff, 40, 30); pl.position.set(0,0,0); scene.add(pl);
+  const hub = new THREE.Mesh(new THREE.IcosahedronGeometry(.55,2), new THREE.MeshBasicMaterial({color:0xFFB48A}));
+  scene.add(hub);
+  const glow = new THREE.Mesh(new THREE.SphereGeometry(.9,32,32), new THREE.MeshBasicMaterial({color:0xF0631F, transparent:true, opacity:.18}));
+  scene.add(glow);
+  const planets=[]; const cols=[0xF0631F,0x3fa2e0,0x0C659D,0x7cc4ef,0x16609F,0xffffff];
+  for(let i=0;i<6;i++){
+    const rad = 1.0+ (5-i)*0.06 + Math.random()*.15;
+    const m = new THREE.Mesh(new THREE.SphereGeometry(.12+ (6-i)*0.035,32,32), new THREE.MeshStandardMaterial({color:cols[i], emissive:cols[i], emissiveIntensity:.35, roughness:.4}));
+    m.userData={r:1.6+i*.45, sp:.5/(1+i*.4), ph:Math.random()*6.28, tilt:(Math.random()-.5)*.5}; scene.add(m); planets.push(m);
+    const orbit = new THREE.Mesh(new THREE.RingGeometry(m.userData.r-.005,m.userData.r+.005,128), new THREE.MeshBasicMaterial({color:0x3fa2e0,transparent:true,opacity:.18,side:THREE.DoubleSide}));
+    orbit.rotation.x = Math.PI/2 + m.userData.tilt; scene.add(orbit); m.userData.orbit=orbit;
+  }
+  // flowing particles from hub to planets
+  const F=400, fg=new THREE.BufferGeometry(), fp=new Float32Array(F*3), meta=[];
+  for(let i=0;i<F;i++){ meta.push({p:Math.floor(Math.random()*6), t:Math.random()}); }
+  fg.setAttribute('position', new THREE.BufferAttribute(fp,3));
+  scene.add(new THREE.Points(fg, new THREE.PointsMaterial({color:0x9fd6f7,size:.035,transparent:true,opacity:.9})));
+  // stars
+  const sg=new THREE.BufferGeometry(), spos=new Float32Array(900*3); for(let i=0;i<900;i++){spos.set([(Math.random()-.5)*40,(Math.random()-.5)*24,-8-Math.random()*10],i*3);} sg.setAttribute('position',new THREE.BufferAttribute(spos,3));
+  scene.add(new THREE.Points(sg,new THREE.PointsMaterial({color:0x6aa9cc,size:.04})));
+  let t=0;
+  function loop(){
+    const [w,h]=resize(); cam.aspect=w/h; cam.updateProjectionMatrix(); t+=0.016;
+    hub.rotation.y+=.01; glow.scale.setScalar(1+.08*Math.sin(t*3));
+    planets.forEach(m=>{ const a=t*m.userData.sp+m.userData.ph; const R=m.userData.r; m.position.set(Math.cos(a)*R, Math.sin(a)*R*Math.sin(m.userData.tilt), Math.sin(a)*R*Math.cos(m.userData.tilt)); });
+    for(let i=0;i<F;i++){ const d=meta[i]; d.t+=.006+ (d.p%3)*.002; if(d.t>1){d.t=0;d.p=Math.floor(Math.random()*6);} const P=planets[d.p].position; const k=d.t; fp[i*3]=P.x*k+Math.sin(k*9+i)*.05; fp[i*3+1]=P.y*k+Math.cos(k*7+i)*.05; fp[i*3+2]=P.z*k; }
+    fg.attributes.position.needsUpdate=true;
+    scene.rotation.y = Math.sin(t*.15)*.25;
+    r.render(scene,cam); requestAnimationFrame(loop);
+  } loop();
+})();
+
+/* ---------- C : podium 3D ---------- */
+(() => {
+  const canvas = document.getElementById('cC'); const {r, resize} = makeRenderer(canvas);
+  const scene = new THREE.Scene(); const cam = new THREE.PerspectiveCamera(40,1,0.1,100); cam.position.set(2.6,1.5,4.6); cam.lookAt(0.5,-.5,0);
+  scene.add(new THREE.AmbientLight(0xffffff, 1.4));
+  const dl = new THREE.DirectionalLight(0xffffff, 2.2); dl.position.set(4,6,5); scene.add(dl);
+  const steps=[{x:1.6,h:1.5,c:0xF0631F},{x:.45,h:1.05,c:0xffffff},{x:2.75,h:.75,c:0xE3F1F7}];
+  const blocks=[], orbs=[];
+  steps.forEach((s,i)=>{
+    const b=new THREE.Mesh(new THREE.BoxGeometry(1.05,1,1.05), new THREE.MeshStandardMaterial({color:s.c, roughness:.5, metalness:.05}));
+    b.position.set(s.x,0,0); b.userData={h:s.h, d:i*0.25}; b.scale.y=.01; scene.add(b); blocks.push(b);
+    const o=new THREE.Mesh(new THREE.IcosahedronGeometry(.28,1), new THREE.MeshStandardMaterial({color:[0xFFB48A,0x0C659D,0x16609F][i], flatShading:true, roughness:.3}));
+    o.position.set(s.x,0,0); scene.add(o); orbs.push(o);
+  });
+  // confetti
+  const C=220, cg=new THREE.BufferGeometry(), cp=new Float32Array(C*3), cv=[];
+  for(let i=0;i<C;i++){ cp.set([1.6+(Math.random()-.5)*4, 4+Math.random()*4, (Math.random()-.5)*2],i*3); cv.push(.01+Math.random()*.02); }
+  cg.setAttribute('position',new THREE.BufferAttribute(cp,3));
+  scene.add(new THREE.Points(cg,new THREE.PointsMaterial({color:0xFFB48A,size:.06})));
+  let t=0;
+  canvas.parentElement.parentElement.addEventListener('mouseenter',()=>{t=0;});
+  function ease(x){return 1-Math.pow(1-Math.min(Math.max(x,0),1),3);}
+  function loop(){
+    const [w,h]=resize(); cam.aspect=w/h; cam.updateProjectionMatrix(); t+=0.016;
+    blocks.forEach((b,i)=>{ const k=ease((t-b.userData.d)/1.2); const H=b.userData.h*k; b.scale.y=Math.max(H,.01); b.position.y=H/2-1.2; orbs[i].position.y = H-1.2+.4+Math.sin(t*2+i)*.06; orbs[i].rotation.y+=.02; orbs[i].rotation.x+=.01; });
+    for(let i=0;i<C;i++){ cp[i*3+1]-=cv[i]; cp[i*3]+=Math.sin(t*2+i)*.003; if(cp[i*3+1]<-1.2){cp[i*3+1]=4+Math.random()*2;} }
+    cg.attributes.position.needsUpdate=true;
+    r.render(scene,cam); requestAnimationFrame(loop);
+  } loop();
+})();
+</script>
+</body>
+</html>
