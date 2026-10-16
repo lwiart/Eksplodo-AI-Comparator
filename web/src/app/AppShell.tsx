@@ -3,6 +3,7 @@ import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import * as Switch from '@radix-ui/react-switch';
 import { useState, type ReactNode } from 'react';
 import { Link, NavLink, Outlet } from 'react-router-dom';
+import { messageForError } from '../api/messages';
 import { ROLE_LABELS, useAuth, type PublicUser } from '../auth/AuthProvider';
 import { applyAnimationsPreference, getAnimationsPreference, setAnimationsPreference } from './preferences';
 
@@ -58,6 +59,17 @@ function NavSection({ title, items, onNavigate }: { title: string; items: NavIte
 function AccountMenu({ user, onNavigate }: { user: PublicUser; onNavigate?: () => void }) {
   const { logout } = useAuth();
   const [animations, setAnimations] = useState(getAnimationsPreference);
+  const [logoutError, setLogoutError] = useState<string | null>(null);
+
+  // La session serveur reste ouverte si la déconnexion échoue : on le signale au lieu d'ignorer l'échec.
+  async function handleLogout() {
+    setLogoutError(null);
+    try {
+      await logout();
+    } catch (err) {
+      setLogoutError(messageForError(err));
+    }
+  }
 
   function toggleAnimations(on: boolean) {
     setAnimations(on);
@@ -69,6 +81,12 @@ function AccountMenu({ user, onNavigate }: { user: PublicUser; onNavigate?: () =
     'flex cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-sm text-ink no-underline outline-none data-[highlighted]:bg-blue/15 data-[highlighted]:text-white';
 
   return (
+    <>
+    {logoutError ? (
+      <p role="alert" className="m-0 mb-2 rounded-lg border border-bad/40 bg-bad/10 px-3 py-2 text-xs text-bad">
+        {logoutError}
+      </p>
+    ) : null}
     <DropdownMenu.Root>
       <DropdownMenu.Trigger asChild>
         <button
@@ -111,12 +129,13 @@ function AccountMenu({ user, onNavigate }: { user: PublicUser; onNavigate?: () =
             </Switch.Root>
           </DropdownMenu.CheckboxItem>
           <DropdownMenu.Separator className="my-1 h-px bg-line" />
-          <DropdownMenu.Item className={item} onSelect={() => void logout()}>
+          <DropdownMenu.Item className={item} onSelect={() => void handleLogout()}>
             Déconnexion
           </DropdownMenu.Item>
         </DropdownMenu.Content>
       </DropdownMenu.Portal>
     </DropdownMenu.Root>
+    </>
   );
 }
 

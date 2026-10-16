@@ -1,6 +1,7 @@
 import { spawnSync } from 'node:child_process';
+import { readdirSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { resolve } from 'node:path';
+import { join, resolve } from 'node:path';
 import { beforeAll, expect, test } from 'vitest';
 
 const root = resolve(import.meta.dirname, '..', '..');
@@ -25,3 +26,11 @@ test('le point d’entrée se charge via require() sans ERR_REQUIRE_ASYNC_MODULE
   expect(res.stderr).toContain('Configuration invalide');
   expect(res.status).toBe(1);
 }, 30_000);
+
+// La CSP impose font-src 'self' : une police intégrée en data: serait bloquée en production.
+test('le build n’intègre aucune police en data: dans le CSS', () => {
+  const dir = join(root, 'dist/web/assets');
+  const css = readdirSync(dir).filter((f) => f.endsWith('.css'));
+  expect(css.length).toBeGreaterThan(0);
+  for (const f of css) expect(readFileSync(join(dir, f), 'utf8')).not.toContain('data:font');
+});

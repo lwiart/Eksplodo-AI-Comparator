@@ -104,7 +104,10 @@ describe('interface statique', () => {
     const res = await app.inject({ method: 'GET', url: '/connexion' });
     const csp = String(res.headers['content-security-policy']);
     expect(csp).toContain("default-src 'self'");
-    expect(csp).toContain("style-src 'self'");
+    expect(csp).toContain("style-src 'self' 'unsafe-inline'");
+    expect(csp).toContain("script-src 'self'");
+    expect(csp).not.toContain("script-src 'self' 'unsafe-inline'");
+    expect(csp).not.toMatch(/https?:\/\/(fonts\.|[^ ;]*googleapis)/);
     expect(csp).toContain("font-src 'self'");
     expect(csp).toContain("img-src 'self' data:");
     expect(res.headers['x-content-type-options']).toBe('nosniff');

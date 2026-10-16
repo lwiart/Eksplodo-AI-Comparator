@@ -1,0 +1,18 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "comparateur-api",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["tsx", "watch", "server/src/index.ts"],
+      "port": 3000,
+      "url": "http://localhost:3000"
+    },
+    {
+      "name": "comparateur-web",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["vite"],
+      "port": 5173
+    }
+  ]
+}

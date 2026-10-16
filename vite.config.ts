@@ -11,6 +11,8 @@ export default defineConfig({
   build: {
     outDir: fileURLToPath(new URL('./dist/web', import.meta.url)),
     emptyOutDir: true,
+    // Les polices ne sont jamais intégrées en data: (la CSP impose font-src 'self') ; le reste suit le défaut de Vite (4 Ko).
+    assetsInlineLimit: (file: string, content: Buffer) => (/\.woff2?$/.test(file) ? false : content.length < 4096),
   },
   server: {
     port: 5173,

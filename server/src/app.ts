@@ -77,7 +77,8 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     contentSecurityPolicy: {
       directives: {
         defaultSrc: ["'self'"],
-        styleSrc: ["'self'"],
+        // 'unsafe-inline' pour les styles seulement : le verrouillage du défilement de Radix injecte un <style>.
+        styleSrc: ["'self'", "'unsafe-inline'"],
         fontSrc: ["'self'"],
         imgSrc: ["'self'", 'data:', 'blob:'],
         // Hors production l'application tourne en HTTP local : pas de réécriture forcée en HTTPS.

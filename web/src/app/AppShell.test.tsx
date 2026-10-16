@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, expect, test, vi } from 'vitest';
+import { ApiError } from '../api/client';
 import { AuthContext, type PublicUser, type Role } from '../auth/AuthProvider';
 import { AppShell } from './AppShell';
 
@@ -71,4 +72,13 @@ test('sous 800 px, le menu s’ouvre dans un tiroir', async () => {
   expect(drawer).toBeInTheDocument();
   await user.click(screen.getByRole('button', { name: 'Fermer le menu' }));
   expect(screen.queryByRole('dialog')).toBeNull();
+});
+
+test('déconnexion en échec : message visible, pas de rejet non géré', async () => {
+  const logout = vi.fn().mockRejectedValue(new ApiError('network', 0, 'Serveur injoignable'));
+  renderShell('user', logout);
+  const user = userEvent.setup();
+  await user.click(screen.getByRole('button', { name: /Laurent/ }));
+  await user.click(screen.getByRole('menuitem', { name: 'Déconnexion' }));
+  expect(await screen.findByRole('alert')).toHaveTextContent('Le serveur ne répond pas');
 });
