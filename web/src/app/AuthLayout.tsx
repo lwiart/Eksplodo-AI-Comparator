@@ -1,12 +1,19 @@
 import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
+import { BurstFallback } from '../three/BurstFallback';
+import { burstScene } from '../three/burst-scene';
+import { ThreeStage } from '../three/ThreeStage';
 
-/** Mise en page des pages publiques (connexion, invitation, réinitialisation) : une carte centrée. */
+/**
+ * Mise en page des pages publiques (connexion, invitation, réinitialisation) : une carte translucide posée sur la
+ * gerbe Eksplodo. Grand écran : carte à gauche, gerbe à droite. Mobile : carte centrée devant la gerbe.
+ */
 export function AuthLayout({ title, intro, children }: { title: string; intro?: ReactNode; children?: ReactNode }) {
   return (
-    <main className="flex min-h-screen items-center justify-center px-4 py-10">
-      <div className="w-full max-w-[26rem]">
-        <Link to="/connexion" className="mb-7 flex items-center justify-center gap-2.5 text-white no-underline" aria-label="Eksplodo, connexion">
+    <main className="relative flex min-h-screen items-center justify-center overflow-hidden px-4 py-10 lg:justify-start lg:px-[8vw]">
+      <ThreeStage factory={burstScene} fallback={<BurstFallback className="h-full w-full lg:translate-x-[22%]" />} />
+      <div className="relative z-10 w-full max-w-[26rem]">
+        <Link to="/connexion" className="mb-7 flex items-center gap-2.5 text-white no-underline" aria-label="Eksplodo, connexion">
           <img src="/logo-icon-white.png" alt="" className="logo-glow block h-[42px] w-auto" />
           <span className="font-mono text-xl leading-tight font-semibold">
             Eksplodo

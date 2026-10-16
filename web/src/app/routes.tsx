@@ -1,8 +1,12 @@
 import { Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
 import { useAuth, type Role } from '../auth/AuthProvider';
 import { AccessDeniedPage } from '../pages/AccessDeniedPage';
+import { AccountPage } from '../pages/AccountPage';
 import { DashboardPage } from '../pages/DashboardPage';
+import { InvitationPage } from '../pages/InvitationPage';
+import { LoginPage } from '../pages/LoginPage';
 import { PlaceholderPage } from '../pages/PlaceholderPage';
+import { ResetPasswordPage } from '../pages/ResetPasswordPage';
 import { AppShell } from './AppShell';
 
 function Splash() {
@@ -37,19 +41,19 @@ function PublicOnlyWhileLoading() {
   return loading ? <Splash /> : <Outlet />;
 }
 
-// Les pages provisoires sont remplacées par les vraies pages dans les Tasks 8 et 9.
+// Les pages d'administration provisoires sont remplacées par les vraies pages dans la Task 9.
 export function AppRoutes() {
   return (
     <Routes>
       <Route element={<PublicOnlyWhileLoading />}>
-        <Route path="/connexion" element={<PlaceholderPage title="Connexion" publicPage />} />
-        <Route path="/invitation/:token" element={<PlaceholderPage title="Activer mon compte" publicPage />} />
-        <Route path="/reinitialiser/:token" element={<PlaceholderPage title="Nouveau mot de passe" publicPage />} />
+        <Route path="/connexion" element={<LoginPage />} />
+        <Route path="/invitation/:token" element={<InvitationPage />} />
+        <Route path="/reinitialiser/:token" element={<ResetPasswordPage />} />
       </Route>
       <Route element={<RequireAuth />}>
         <Route element={<AppShell />}>
           <Route index element={<DashboardPage />} />
-          <Route path="/compte" element={<PlaceholderPage title="Mon compte" />} />
+          <Route path="/compte" element={<AccountPage />} />
           <Route element={<RequireRole roles={['admin']} />}>
             <Route path="/admin/utilisateurs" element={<PlaceholderPage title="Utilisateurs" />} />
             <Route path="/admin/erreurs" element={<PlaceholderPage title="Journal des erreurs" />} />
