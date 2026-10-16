@@ -20,6 +20,7 @@ import { registerAuth } from './plugins/auth.js';
 import { registerCsrf } from './plugins/csrf.js';
 import { loggerOptions, type LogStream } from './plugins/logging.js';
 import { registerRateLimit } from './plugins/rate-limit.js';
+import { DEFAULT_WEB_ROOT, registerStatic } from './plugins/static.js';
 
 export type AppDeps = {
   config: AppConfig;
@@ -158,6 +159,10 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   registerUserRoutes(app, createUsersService(deps));
   registerTickRoutes(app, deps);
   registerErrorRoutes(app, deps);
+
+  // Interface compilée : après les routes d'API, pour que le repli SPA ne les masque pas.
+  const webRoot = deps.webRoot ?? (deps.config.nodeEnv === 'test' ? undefined : DEFAULT_WEB_ROOT);
+  if (webRoot !== undefined) await registerStatic(app, webRoot);
 
   return app;
 }

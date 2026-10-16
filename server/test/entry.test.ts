@@ -6,11 +6,11 @@ import { beforeAll, expect, test } from 'vitest';
 const root = resolve(import.meta.dirname, '..', '..');
 const entry = resolve(root, 'dist/server/index.js');
 
-// Compile le serveur seul : la compilation de l'interface (vite) arrive avec la Task 7.
+// Build complet (interface Vite + serveur), comme en production.
 beforeAll(() => {
-  const build = spawnSync('npx tsc -p tsconfig.server.json', { cwd: root, shell: true, encoding: 'utf8' });
+  const build = spawnSync('npm run build', { cwd: root, shell: true, encoding: 'utf8' });
   if (build.status !== 0) throw new Error(`build échoué : ${build.stdout}${build.stderr}`);
-}, 60_000);
+}, 180_000);
 
 // LiteSpeed (lsnode.js) charge le point d'entrée avec require() : aucun await de premier niveau toléré.
 test('le point d’entrée se charge via require() sans ERR_REQUIRE_ASYNC_MODULE', () => {

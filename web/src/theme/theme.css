@@ -1,0 +1,96 @@
+@import "tailwindcss";
+@import "@fontsource/archivo/700.css";
+@import "@fontsource/archivo/800.css";
+@import "@fontsource/instrument-sans/400.css";
+@import "@fontsource/instrument-sans/500.css";
+@import "@fontsource/instrument-sans/600.css";
+@import "@fontsource/noto-sans-mono/400.css";
+@import "@fontsource/noto-sans-mono/500.css";
+@import "@fontsource/noto-sans-mono/600.css";
+
+/* Thème « Nuit » (spec §11.1) */
+@theme {
+  --color-night-0: #00131D;
+  --color-night-1: #011F2E;
+  --color-night-2: #032A3D;
+  --color-night-glow: #06405D;
+  --color-ink: #D8ECF5;
+  --color-mute: #7FA3B5;
+  --color-orange: #F0631F;
+  --color-orange-soft: #FF8A4C;
+  --color-peach: #FFB48A;
+  --color-sky: #7CC4EF;
+  --color-blue: #3FA2E0;
+  --color-blue-deep: #0C659D;
+  --color-good: #4FD1A5;
+  --color-bad: #FF7A7A;
+  --color-line: rgba(120, 190, 230, 0.14);
+  --color-line-strong: rgba(120, 190, 230, 0.28);
+  --font-display: Archivo, system-ui, sans-serif;
+  --font-sans: "Instrument Sans", system-ui, sans-serif;
+  --font-mono: "Noto Sans Mono", ui-monospace, monospace;
+  --radius-card: 18px;
+}
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+}
+
+body {
+  font-family: var(--font-sans);
+  color: var(--color-ink);
+  background: radial-gradient(120% 80% at 70% -10%, #06405d 0%, var(--color-night-1) 45%, var(--color-night-0) 100%) fixed;
+}
+
+/* Grille de points */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background-image: radial-gradient(rgba(127, 196, 239, 0.1) 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+
+#root {
+  position: relative;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-sky);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Réglage « Animations » du compte : désactive aussi les animations de l'interface. */
+html[data-animations="off"] *,
+html[data-animations="off"] *::before,
+html[data-animations="off"] *::after {
+  animation-duration: 0.01ms !important;
+  transition-duration: 0.01ms !important;
+}
+
+.logo-glow {
+  filter: drop-shadow(0 0 10px rgba(240, 99, 31, 0.55)) drop-shadow(0 0 2px rgba(255, 180, 138, 0.6));
+}
+
+.card-surface {
+  background: linear-gradient(180deg, rgba(3, 42, 61, 0.75), rgba(1, 31, 46, 0.75));
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-card);
+  backdrop-filter: blur(6px);
+}
