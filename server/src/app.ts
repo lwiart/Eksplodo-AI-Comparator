@@ -1,15 +1,20 @@
 import helmet from '@fastify/helmet';
+import { sql } from 'drizzle-orm';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { ZodError } from 'zod';
 import type { AppConfig } from './config/config.js';
+import type { Db } from './db/client.js';
 import { AppError } from './errors.js';
 import type { Clock } from './lib/clock.js';
 import { loggerOptions, type LogStream } from './plugins/logging.js';
 
-// Étendu par les tâches suivantes : db, workerStatus (Task 2), mailer (Task 4), schedules (Task 6).
+// Étendu par les tâches suivantes : mailer (Task 4), schedules (Task 6).
 export type AppDeps = {
   config: AppConfig;
   clock: Clock;
+  db: Db;
+  /** État du worker de tâches, lu à chaque appel de `/health` (absent : `stopped`). */
+  workerStatus?: () => 'running' | 'stopped';
   /**
    * Dossier de l'interface compilée ; défaut : `dist/web` sous la racine de l'application.
    * En environnement de test, aucune interface n'est servie sans `webRoot` explicite.
@@ -19,7 +24,30 @@ export type AppDeps = {
   logStream?: LogStream;
 };
 
+const HEALTH_DB_TIMEOUT_MS = 2000;
 const TRUSTED_PROXY_HOPS = 1; // LiteSpeed chez Hostinger : exactement un relais de confiance
+
+/** Promesse bornée à HEALTH_DB_TIMEOUT_MS (rejet `timeout` au-delà). */
+async function withHealthTimeout<T>(p: Promise<T>): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error('timeout')), HEALTH_DB_TIMEOUT_MS);
+  });
+  try {
+    return await Promise.race([p, timeout]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function checkDb(db: Db): Promise<boolean> {
+  try {
+    await withHealthTimeout(db.execute(sql`SELECT 1`));
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   const app = Fastify({
@@ -63,6 +91,14 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     // Seul le nom de l'erreur est journalisé : le message peut contenir des données (le journal des erreurs arrive en Task 6).
     req.log.error({ err: { name: err instanceof Error ? err.name : 'UnknownError' } }, 'erreur inattendue');
     return reply.status(500).send({ error: { code: 'internal', message: 'Erreur interne du serveur' } });
+  });
+
+  // 503 seulement si la base est injoignable (le report de l'erreur `db_unreachable` est branché en Task 6).
+  app.get('/health', async (_req, reply) => {
+    if (!(await checkDb(deps.db))) {
+      return reply.status(503).send({ status: 'degraded', db: 'down' });
+    }
+    return { status: 'ok', db: 'ok', worker: deps.workerStatus?.() ?? 'stopped' };
   });
 
   return app;

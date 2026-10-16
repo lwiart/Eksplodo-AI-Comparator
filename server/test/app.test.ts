@@ -1,6 +1,7 @@
 import { expect, test } from 'vitest';
 import { buildApp } from '../src/app.js';
 import { loadConfig } from '../src/config/config.js';
+import { createDb } from '../src/db/client.js';
 import { NotFoundError } from '../src/errors.js';
 
 const config = loadConfig({
@@ -11,8 +12,11 @@ const config = loadConfig({
   CRON_SECRET: 'x'.repeat(32),
 });
 
+// Pool paresseux : aucune connexion tant qu'aucune requête n'atteint la base.
+const { db } = createDb(config.databaseUrl);
+
 async function newApp() {
-  return buildApp({ config, clock: () => new Date() });
+  return buildApp({ config, clock: () => new Date(), db });
 }
 
 test('AppError → format d’erreur unique', async () => {

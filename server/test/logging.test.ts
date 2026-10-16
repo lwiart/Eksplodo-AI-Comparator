@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { buildApp } from '../src/app.js';
 import { loadConfig } from '../src/config/config.js';
+import { createDb } from '../src/db/client.js';
 import { redactUrl } from '../src/plugins/logging.js';
 
 const config = loadConfig({
@@ -10,6 +11,9 @@ const config = loadConfig({
   DATA_DIR: '/tmp/aic',
   CRON_SECRET: 'x'.repeat(32),
 });
+
+// Pool paresseux : aucune connexion tant qu'aucune requête n'atteint la base.
+const { db } = createDb(config.databaseUrl);
 
 describe('journal des requêtes', () => {
   test('redactUrl masque les jetons de la chaîne de requête', () => {
@@ -24,6 +28,7 @@ describe('journal des requêtes', () => {
     const app = await buildApp({
       config,
       clock: () => new Date(),
+      db,
       logStream: { write: (line: string) => void lines.push(line) },
     });
     await app.inject({ method: 'GET', url: '/invitation?token=jeton-secret-abc' });
@@ -39,6 +44,7 @@ describe('journal des requêtes', () => {
     const app = await buildApp({
       config,
       clock: () => new Date(),
+      db,
       logStream: { write: (line: string) => void lines.push(line) },
     });
     app.get('/crash', async () => {
