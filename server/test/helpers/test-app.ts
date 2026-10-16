@@ -5,6 +5,7 @@ import type { AppConfig } from '../../src/config/config.js';
 import type { Db } from '../../src/db/client.js';
 import { hashPassword } from '../../src/lib/crypto.js';
 import type { Role } from '../../src/modules/auth/actor.js';
+import type { ScheduleEntry } from '../../src/modules/jobs/scheduler.js';
 import { createFakeMailer } from '../../src/modules/mail/mailer.js';
 import { createUsersRepo, type UserRow } from '../../src/modules/users/users.repo.js';
 import { createTestClock, type TestClock } from './test-clock.js';
@@ -36,12 +37,18 @@ export type TestApp = {
 };
 
 /** L'application renvoyée n'est pas encore `ready()` : un test peut y ajouter des routes avant le premier `inject`. */
-export async function buildTestApp(opts: { now?: Date } = {}): Promise<TestApp> {
+export async function buildTestApp(opts: { now?: Date; schedules?: ScheduleEntry[] } = {}): Promise<TestApp> {
   const testDb = await createTestDb();
   const clock = createTestClock(opts.now ?? new Date('2026-01-15T10:00:00.000Z'));
   const mailer = createFakeMailer();
   try {
-    const app = await buildApp({ config: testConfig(), clock: () => clock.now(), db: testDb.db, mailer });
+    const app = await buildApp({
+      config: testConfig(),
+      clock: () => clock.now(),
+      db: testDb.db,
+      mailer,
+      schedules: opts.schedules ?? [],
+    });
     return {
       app,
       db: testDb.db,
@@ -103,4 +110,12 @@ export async function loginAs(
   const session = cookiesOf(res).aic_session;
   if (!session) throw new Error('cookie aic_session absent');
   return { cookie: `aic_session=${session}; aic_csrf=${csrf}`, csrf };
+}
+
+/** En-têtes d'une requête anonyme munie d'un jeton CSRF valide (cookie + en-tête). */
+export async function csrfHeaders(app: FastifyInstance): Promise<{ cookie: string; 'x-csrf-token': string }> {
+  const init = await app.inject({ method: 'GET', url: '/api/auth/me' });
+  const csrf = cookiesOf(init).aic_csrf;
+  if (!csrf) throw new Error('cookie aic_csrf absent');
+  return { cookie: `aic_csrf=${csrf}`, 'x-csrf-token': csrf };
 }

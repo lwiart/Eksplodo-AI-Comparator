@@ -31,6 +31,7 @@ describe('journal des requêtes', () => {
       clock: () => new Date(),
       mailer: createFakeMailer(),
       db,
+      schedules: [],
       logStream: { write: (line: string) => void lines.push(line) },
     });
     await app.inject({ method: 'GET', url: '/invitation?token=jeton-secret-abc' });
@@ -48,6 +49,7 @@ describe('journal des requêtes', () => {
       clock: () => new Date(),
       mailer: createFakeMailer(),
       db,
+      schedules: [],
       logStream: { write: (line: string) => void lines.push(line) },
     });
     app.get('/crash', async () => {

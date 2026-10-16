@@ -22,7 +22,7 @@ afterAll(async () => {
 });
 
 test('GET /health : base joignable', async () => {
-  const app = await buildApp({ config, clock: () => new Date(), mailer: createFakeMailer(), db: testDb.db });
+  const app = await buildApp({ config, clock: () => new Date(), mailer: createFakeMailer(), db: testDb.db, schedules: [] });
   const res = await app.inject({ method: 'GET', url: '/health' });
   expect(res.statusCode).toBe(200);
   expect(res.json()).toEqual({ status: 'ok', db: 'ok', worker: 'stopped' });
@@ -30,7 +30,7 @@ test('GET /health : base joignable', async () => {
 });
 
 test('GET /health : état du worker transmis', async () => {
-  const app = await buildApp({ config, clock: () => new Date(), mailer: createFakeMailer(), db: testDb.db, workerStatus: () => 'running' });
+  const app = await buildApp({ config, clock: () => new Date(), mailer: createFakeMailer(), db: testDb.db, schedules: [], workerStatus: () => 'running' });
   const res = await app.inject({ method: 'GET', url: '/health' });
   expect(res.json()).toMatchObject({ worker: 'running' });
   await app.close();
@@ -38,7 +38,7 @@ test('GET /health : état du worker transmis', async () => {
 
 test('GET /health : base injoignable → 503', async () => {
   const dead = createDb('mysql://root:test@127.0.0.1:1/x'); // port fermé
-  const app = await buildApp({ config, clock: () => new Date(), mailer: createFakeMailer(), db: dead.db });
+  const app = await buildApp({ config, clock: () => new Date(), mailer: createFakeMailer(), db: dead.db, schedules: [] });
   const res = await app.inject({ method: 'GET', url: '/health' });
   expect(res.statusCode).toBe(503);
   expect(res.json()).toMatchObject({ status: 'degraded', db: 'down' });

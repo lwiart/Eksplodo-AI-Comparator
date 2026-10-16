@@ -85,7 +85,6 @@ export function resetEmail(p: { name: string; link: string }): MailBody {
 }
 
 const ORIGIN_LABELS: Record<string, string> = {
-  collect: 'Collecte',
   errors_purge: 'Purge du journal des erreurs',
   error_alert: "Alerte d'erreur par e-mail",
   error_digest: 'Récapitulatif des erreurs par e-mail',

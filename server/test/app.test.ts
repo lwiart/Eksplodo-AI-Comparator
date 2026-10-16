@@ -17,7 +17,7 @@ const config = loadConfig({
 const { db } = createDb(config.databaseUrl);
 
 async function newApp() {
-  return buildApp({ config, clock: () => new Date(), mailer: createFakeMailer(), db });
+  return buildApp({ config, clock: () => new Date(), mailer: createFakeMailer(), db, schedules: [] });
 }
 
 test('AppError → format d’erreur unique', async () => {

@@ -7,6 +7,11 @@ import type { AppConfig } from './config/config.js';
 import type { Db } from './db/client.js';
 import { AppError } from './errors.js';
 import type { Clock } from './lib/clock.js';
+import { describeError, loggableError } from './modules/errors/capture.js';
+import { registerErrorRoutes } from './modules/errors/errors.routes.js';
+import { deferError, flushPendingErrors, reportError, reportedReference } from './modules/errors/report.js';
+import type { ScheduleEntry } from './modules/jobs/scheduler.js';
+import { registerTickRoutes } from './modules/jobs/tick.routes.js';
 import type { Mailer } from './modules/mail/mailer.js';
 import { registerAuthRoutes } from './modules/auth/auth.routes.js';
 import { createUsersService } from './modules/users/users.service.js';
@@ -16,12 +21,13 @@ import { registerCsrf } from './plugins/csrf.js';
 import { loggerOptions, type LogStream } from './plugins/logging.js';
 import { registerRateLimit } from './plugins/rate-limit.js';
 
-// Étendu par les tâches suivantes : schedules (Task 6).
 export type AppDeps = {
   config: AppConfig;
   clock: Clock;
   db: Db;
   mailer: Mailer;
+  /** Planification des tâches récurrentes (`/internal/tick` et boucle interne) ; `[]` en test. */
+  schedules: ScheduleEntry[];
   /** État du worker de tâches, lu à chaque appel de `/health` (absent : `stopped`). */
   workerStatus?: () => 'running' | 'stopped';
   /**
@@ -102,21 +108,56 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     if (typeof status === 'number' && status >= 400 && status < 500) {
       return reply.status(status).send({ error: { code: 'bad_request', message: 'Requête invalide' } });
     }
-    // Seul le nom de l'erreur est journalisé : le message peut contenir des données (le journal des erreurs arrive en Task 6).
+    const known = reportedReference(err);
+    // Journal applicatif : nom seulement (le message peut contenir des données) ; le détail masqué va au journal des erreurs.
     req.log.error({ err: { name: err instanceof Error ? err.name : 'UnknownError' } }, 'erreur inattendue');
-    return reply.status(500).send({ error: { code: 'internal', message: 'Erreur interne du serveur' } });
+    if (known !== null) {
+      return reply.status(500).send({ error: { code: 'internal', message: 'Erreur interne du serveur', reference: known } });
+    }
+    const d = describeError(err);
+    // Motif de route, jamais l'URL réelle (elle peut contenir des identifiants ou un jeton).
+    const reference = await reportError(
+      deps.db,
+      {
+        source: 'request',
+        origin: `${req.method} ${req.routeOptions?.url ?? 'inconnue'}`,
+        code: 'internal',
+        httpStatus: 500,
+        message: `${d.name} : ${d.message}`,
+        stack: d.stack,
+        severity: 'grave',
+        userId: req.actor?.userId ?? null,
+      },
+      deps.clock(),
+    );
+    return reply.status(500).send({ error: { code: 'internal', message: 'Erreur interne du serveur', reference } });
   });
 
-  // 503 seulement si la base est injoignable (le report de l'erreur `db_unreachable` est branché en Task 6).
+  // 503 seulement si la base est injoignable ; l'événement `db_unreachable` est mis en attente en mémoire (la base
+  // ne répond pas) puis écrit dès qu'elle revient.
   app.get('/health', async (_req, reply) => {
     if (!(await checkDb(deps.db))) {
+      deferError(
+        {
+          source: 'request',
+          origin: 'GET /health',
+          code: 'db_unreachable',
+          httpStatus: 503,
+          message: 'Base de données injoignable',
+          severity: 'grave',
+        },
+        deps.clock(),
+      );
       return reply.status(503).send({ status: 'degraded', db: 'down' });
     }
+    await flushPendingErrors(deps.db); // la base répond : écrit l'événement de panne différé
     return { status: 'ok', db: 'ok', worker: deps.workerStatus?.() ?? 'stopped' };
   });
 
   registerAuthRoutes(app, deps);
   registerUserRoutes(app, createUsersService(deps));
+  registerTickRoutes(app, deps);
+  registerErrorRoutes(app, deps);
 
   return app;
 }
