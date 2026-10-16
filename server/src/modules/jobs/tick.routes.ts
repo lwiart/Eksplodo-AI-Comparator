@@ -7,7 +7,7 @@ import { flushPendingErrors } from '../errors/report.js';
 import { recoverStaleJobs } from './queue.js';
 import { scheduleDueJobs } from './scheduler.js';
 
-function secretMatches(provided: unknown, expected: string): boolean {
+export function secretMatches(provided: unknown, expected: string): boolean {
   if (typeof provided !== 'string') return false;
   const a = Buffer.from(provided);
   const b = Buffer.from(expected);

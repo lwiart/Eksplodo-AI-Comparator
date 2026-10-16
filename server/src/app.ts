@@ -5,6 +5,7 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import { ZodError } from 'zod';
 import type { AppConfig } from './config/config.js';
 import type { Db } from './db/client.js';
+import { registerDiagRoutes } from './diag.routes.js'; // TEMPORAIRE (diagnostic Hostinger)
 import { AppError } from './errors.js';
 import type { Clock } from './lib/clock.js';
 import { describeError, loggableError } from './modules/errors/capture.js';
@@ -160,6 +161,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   registerUserRoutes(app, createUsersService(deps));
   registerTickRoutes(app, deps);
   registerErrorRoutes(app, deps);
+  registerDiagRoutes(app, deps); // TEMPORAIRE : à retirer après la recette Hostinger
 
   // Interface compilée : après les routes d'API, pour que le repli SPA ne les masque pas.
   const webRoot = deps.webRoot ?? (deps.config.nodeEnv === 'test' ? undefined : DEFAULT_WEB_ROOT);
