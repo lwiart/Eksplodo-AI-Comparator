@@ -7,17 +7,19 @@ import type { AppConfig } from './config/config.js';
 import type { Db } from './db/client.js';
 import { AppError } from './errors.js';
 import type { Clock } from './lib/clock.js';
+import type { Mailer } from './modules/mail/mailer.js';
 import { registerAuthRoutes } from './modules/auth/auth.routes.js';
 import { registerAuth } from './plugins/auth.js';
 import { registerCsrf } from './plugins/csrf.js';
 import { loggerOptions, type LogStream } from './plugins/logging.js';
 import { registerRateLimit } from './plugins/rate-limit.js';
 
-// Étendu par les tâches suivantes : mailer (Task 4), schedules (Task 6).
+// Étendu par les tâches suivantes : schedules (Task 6).
 export type AppDeps = {
   config: AppConfig;
   clock: Clock;
   db: Db;
+  mailer: Mailer;
   /** État du worker de tâches, lu à chaque appel de `/health` (absent : `stopped`). */
   workerStatus?: () => 'running' | 'stopped';
   /**

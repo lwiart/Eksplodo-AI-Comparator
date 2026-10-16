@@ -2,6 +2,7 @@ import { existsSync } from 'node:fs';
 import { buildApp } from './app.js';
 import { configWarnings, loadConfig } from './config/config.js';
 import { createDb } from './db/client.js';
+import { createLogMailer, createSmtpMailer } from './modules/mail/mailer.js';
 import { systemClock } from './lib/clock.js';
 import { prepareDatabase } from './startup.js';
 
@@ -29,7 +30,17 @@ async function main(): Promise<void> {
   }
 
   // Le worker de tâches (Task 5) fournira l'état réel ; en attendant il est arrêté.
-  const app = await buildApp({ config, clock: systemClock, db, workerStatus: () => 'stopped' });
+  const production = config.nodeEnv === 'production';
+  const mailer = config.smtp
+    ? createSmtpMailer(config.smtp)
+    : createLogMailer(
+        {
+          info: (obj, msg) => console.info(msg, obj),
+          warn: (obj, msg) => console.warn(msg, obj),
+        },
+        production,
+      );
+  const app = await buildApp({ config, clock: systemClock, db, mailer, workerStatus: () => 'stopped' });
   await app.listen({ port: config.port, host: '0.0.0.0' });
 
   let shuttingDown = false;

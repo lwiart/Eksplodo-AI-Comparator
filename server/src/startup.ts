@@ -2,6 +2,7 @@ import type { AppConfig } from './config/config.js';
 import { poolOf, type Db } from './db/client.js';
 import { runMigrations } from './db/migrate.js';
 import type { Clock } from './lib/clock.js';
+import { ensureBootstrapAdmin } from './modules/auth/bootstrap.js';
 
 const DEFAULT_LOCK_TIMEOUT_SEC = 120;
 
@@ -46,7 +47,7 @@ export async function withStartupLock<T>(
   }
 }
 
-/** Migrations sérialisées entre processus (l'amorçage du premier administrateur s'y ajoute en Task 4). */
+/** Migrations puis amorçage du premier Admin, sérialisés entre processus par le même verrou. */
 export async function prepareDatabase(deps: {
   db: Db;
   config: AppConfig;
@@ -59,6 +60,12 @@ export async function prepareDatabase(deps: {
     'startup',
     async () => {
       await runMigrations(deps.db);
+      await ensureBootstrapAdmin({
+        db: deps.db,
+        config: deps.config,
+        clock: deps.clock,
+        ...(deps.logger ? { logger: deps.logger } : {}),
+      });
     },
     deps.lockTimeoutSec,
   );

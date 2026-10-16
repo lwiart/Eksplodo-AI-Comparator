@@ -5,6 +5,7 @@ import type { AppConfig } from '../../src/config/config.js';
 import type { Db } from '../../src/db/client.js';
 import { hashPassword } from '../../src/lib/crypto.js';
 import type { Role } from '../../src/modules/auth/actor.js';
+import { createFakeMailer } from '../../src/modules/mail/mailer.js';
 import { createUsersRepo, type UserRow } from '../../src/modules/users/users.repo.js';
 import { createTestClock, type TestClock } from './test-clock.js';
 import { createTestDb } from './test-db.js';
@@ -30,6 +31,7 @@ export type TestApp = {
   app: FastifyInstance;
   db: Db;
   clock: TestClock;
+  mailer: ReturnType<typeof createFakeMailer>;
   destroy(): Promise<void>;
 };
 
@@ -37,12 +39,14 @@ export type TestApp = {
 export async function buildTestApp(opts: { now?: Date } = {}): Promise<TestApp> {
   const testDb = await createTestDb();
   const clock = createTestClock(opts.now ?? new Date('2026-01-15T10:00:00.000Z'));
+  const mailer = createFakeMailer();
   try {
-    const app = await buildApp({ config: testConfig(), clock: () => clock.now(), db: testDb.db });
+    const app = await buildApp({ config: testConfig(), clock: () => clock.now(), db: testDb.db, mailer });
     return {
       app,
       db: testDb.db,
       clock,
+      mailer,
       async destroy() {
         try {
           await app.close();

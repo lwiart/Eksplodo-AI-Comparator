@@ -2,6 +2,7 @@ import { expect, test } from 'vitest';
 import { buildApp } from '../src/app.js';
 import { loadConfig } from '../src/config/config.js';
 import { createDb } from '../src/db/client.js';
+import { createFakeMailer } from '../src/modules/mail/mailer.js';
 import { NotFoundError } from '../src/errors.js';
 
 const config = loadConfig({
@@ -16,7 +17,7 @@ const config = loadConfig({
 const { db } = createDb(config.databaseUrl);
 
 async function newApp() {
-  return buildApp({ config, clock: () => new Date(), db });
+  return buildApp({ config, clock: () => new Date(), mailer: createFakeMailer(), db });
 }
 
 test('AppError → format d’erreur unique', async () => {

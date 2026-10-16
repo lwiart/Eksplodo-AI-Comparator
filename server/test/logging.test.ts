@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { buildApp } from '../src/app.js';
+import { createFakeMailer } from '../src/modules/mail/mailer.js';
 import { loadConfig } from '../src/config/config.js';
 import { createDb } from '../src/db/client.js';
 import { redactUrl } from '../src/plugins/logging.js';
@@ -28,6 +29,7 @@ describe('journal des requêtes', () => {
     const app = await buildApp({
       config,
       clock: () => new Date(),
+      mailer: createFakeMailer(),
       db,
       logStream: { write: (line: string) => void lines.push(line) },
     });
@@ -44,6 +46,7 @@ describe('journal des requêtes', () => {
     const app = await buildApp({
       config,
       clock: () => new Date(),
+      mailer: createFakeMailer(),
       db,
       logStream: { write: (line: string) => void lines.push(line) },
     });
