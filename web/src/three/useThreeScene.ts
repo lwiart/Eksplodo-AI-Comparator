@@ -1,6 +1,6 @@
 import { useEffect, useState, type RefObject } from 'react';
 import { getAnimationsPreference } from '../app/preferences';
-import { shouldAnimate } from './animation-policy';
+import { cappedPixelRatio, shouldAnimate } from './animation-policy';
 
 export type SceneFactory = (ctx: {
   THREE: typeof import('three');
@@ -8,6 +8,8 @@ export type SceneFactory = (ctx: {
   width: number;
   height: number;
   isMobile: boolean;
+  /** Déjà plafonné par le hook : la scène doit l'appliquer au moteur de rendu (setPixelRatio). */
+  pixelRatio: number;
 }) => { render(dtSeconds: number): void; resize(width: number, height: number): void; dispose(): void };
 
 export type SceneStatus = 'loading' | 'running' | 'paused' | 'fallback';
@@ -73,7 +75,7 @@ export function useThreeScene(factory: SceneFactory, canvasRef: RefObject<HTMLCa
         if (cancelled) return;
         const { width, height } = size();
         const isMobile = typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 767px)').matches;
-        scene = factory({ THREE, canvas, width, height, isMobile });
+        scene = factory({ THREE, canvas, width, height, isMobile, pixelRatio: cappedPixelRatio(window.devicePixelRatio) });
 
         const onVisibility = () => {
           state.pageVisible = document.visibilityState !== 'hidden';

@@ -6,9 +6,9 @@ const DEEP_BLUE = 0x0c659d;
 const CORE = 0x011f2e;
 
 /** Gerbe Eksplodo (thème « Nuit ») : rayons qui pulsent autour d'un cœur sombre cerclé d'orange, sur un ciel d'étoiles. */
-export const burstScene: SceneFactory = ({ THREE, canvas, width, height, isMobile }) => {
+export const burstScene: SceneFactory = ({ THREE, canvas, width, height, isMobile, pixelRatio }) => {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.setPixelRatio(pixelRatio);
   renderer.setSize(width, height, false);
 
   const scene = new THREE.Scene();

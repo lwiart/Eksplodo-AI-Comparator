@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { hasWebGL, shouldAnimate } from './animation-policy';
+import { cappedPixelRatio, hasWebGL, shouldAnimate } from './animation-policy';
 
 test.each([
   [{ reducedMotion: false, userPreference: true, pageVisible: true, inViewport: true }, true],
@@ -13,4 +13,14 @@ test.each([
 
 test('hasWebGL renvoie false sans WebGL (jsdom), sans lever d’erreur', () => {
   expect(hasWebGL()).toBe(false);
+});
+
+test.each([
+  [1, 1],
+  [2, 2],
+  [3, 2],
+  [0, 1],
+  [NaN, 1],
+])('cappedPixelRatio(%s) = %s', (input, expected) => {
+  expect(cappedPixelRatio(input)).toBe(expected);
 });

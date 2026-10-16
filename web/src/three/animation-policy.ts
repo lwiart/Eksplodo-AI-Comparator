@@ -20,3 +20,9 @@ export function hasWebGL(): boolean {
     return false;
   }
 }
+
+/** Rapport de pixels du rendu : plafonné à 2 (coût GPU), 1 si la valeur est absente ou invalide. */
+export function cappedPixelRatio(devicePixelRatio: number): number {
+  if (!Number.isFinite(devicePixelRatio) || devicePixelRatio <= 0) return 1;
+  return Math.min(devicePixelRatio, 2);
+}
