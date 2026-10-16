@@ -69,7 +69,8 @@ Deux usages :
 | Liens de partage | crée, édite les verdicts, révoque | — | — |
 
 - **Premier Admin** : au démarrage, si aucun Admin n'existe et que `BOOTSTRAP_ADMIN_EMAIL` et `BOOTSTRAP_ADMIN_PASSWORD` sont définis, le compte est créé (mot de passe haché). Ces deux variables sont à retirer ensuite. Aucun SMTP n'est nécessaire pour démarrer.
-- **Invitations** : l'Admin saisit un e-mail et un rôle ; un lien valable 72 h est envoyé par le SMTP Hostinger. Si l'envoi échoue ou que le SMTP n'est pas configuré, l'Admin **copie le lien** depuis la liste des invitations et le transmet lui-même.
+- **Invitations** : l'Admin saisit un e-mail et un rôle ; un lien valable 72 h est envoyé par le SMTP Hostinger. Le lien est **affiché une fois à l'Admin** à la création, avec un bouton « Copier », pour qu'il puisse le transmettre lui-même si l'envoi échoue ou que le SMTP n'est pas configuré. Seul le haché du jeton étant stocké, le lien ne peut pas être réaffiché ensuite : le bouton « Régénérer le lien » en émet un nouveau et invalide l'ancien.
+- **Mot de passe oublié** : pas de demande en libre-service. L'Admin génère un lien de réinitialisation (valable 24 h), envoyé par e-mail et affiché pour être copié, selon le même principe.
 - Plusieurs Admins sont possibles : le rôle est un champ du compte.
 
 ---
@@ -176,7 +177,7 @@ Chaque module expose une interface claire. Les adaptateurs de fournisseurs sont 
 
 ## 5. Modèle de données
 
-Toutes les tables utilisent des identifiants `CHAR(26)` (ULID) et des dates UTC.
+Toutes les tables utilisent des identifiants UUID v4 en `CHAR(36)` (comme l'app AO) et des dates UTC en `DATETIME(3)`.
 
 ### 5.1 Comptes (repris de l'app AO, simplifiés : pas d'organisations)
 
