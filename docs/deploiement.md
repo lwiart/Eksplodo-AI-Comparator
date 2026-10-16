@@ -18,7 +18,7 @@ Application Node.js hébergée chez Hostinger (compte `u355159080`), site **http
 | `APP_BASE_URL` | `https://ia.eksplodo.fr` |
 | `DATA_DIR` | `/home/u355159080/data/eksplodo-ia` |
 | `CRON_SECRET` | ≥ 32 caractères, utilisé par la tâche cron. Génération : `node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"` |
-| `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` / `SMTP_FROM` | Tous ou aucun. Boîte proposée : `ia@eksplodo.fr`, serveur `smtp.hostinger.com`, port `465`. Sans SMTP, les e-mails sont seulement journalisés. |
+| `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` / `SMTP_FROM` | Tous ou aucun. Boîte proposée : `ia@eksplodo.fr`, serveur `smtp.hostinger.com`, port `465`. Sans SMTP, les e-mails sont seulement journalisés, sans le lien ni le texte : l'Admin copie alors le lien d'invitation ou de réinitialisation depuis l'écran « Utilisateurs » (boîte de dialogue du lien affichée à la création, ou après « Régénérer le lien » / « Lien de réinitialisation »). |
 | `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DATABASE_URL` | Créées automatiquement par Hostinger avec la base. Ne pas modifier. |
 | `BOOTSTRAP_ADMIN_EMAIL` + `BOOTSTRAP_ADMIN_PASSWORD` | Les deux ou aucune. Uniquement pour créer le tout premier Admin : **à retirer des variables après la première connexion**. |
 
@@ -74,7 +74,7 @@ Réponse : `{ nodeVersion, uptimeSeconds, memory, mariadbVersion }`, après `wai
 ## Contraintes Hostinger à respecter dans le code
 
 - LiteSpeed charge le point d'entrée avec `require()` : **aucun `await` de premier niveau** dans le serveur (vérifié par `server/test/entry.test.ts`).
-- L'application peut écouter sur un socket Unix ; l'adresse IP du client vient de l'en-tête transmis par LiteSpeed (un seul proxy de confiance).
+- LiteSpeed remplace l'écoute TCP par un socket Unix qu'il gère : rien à configurer ; `PORT` reste numérique (défaut 3000) et sert en local. L'adresse IP du client vient de l'en-tête transmis par LiteSpeed (un seul proxy de confiance).
 - `.npmrc` contient `include=dev` : sans cela, `NODE_ENV=production` empêcherait l'installation de TypeScript et Vite au moment du build.
 - Plusieurs processus peuvent démarrer en même temps (un par nom d'hôte, y compris l'alias `*.hostingersite.com`) : migrations et amorçage sont protégés par un verrou nommé.
 
@@ -86,9 +86,9 @@ Réponse : `{ nodeVersion, uptimeSeconds, memory, mariadbVersion }`, après `wai
 - Avertissement « adresse IP du client inconnue » dans les journaux : LiteSpeed ne transmet plus l'IP, la limitation par IP est alors désactivée (le verrouillage par compte reste actif).
 - Les erreurs inattendues reçoivent une référence `E-XXXXX` visible par l'utilisateur ; elles sont consultables dans Admin → Journal des erreurs.
 
-### Premier Admin bloqué
+### Premier Admin
 
-Si l'e-mail d'invitation du premier Admin n'a pas pu être envoyé (SMTP absent ou en erreur), l'invitation est invalidée automatiquement : configurer SMTP puis redémarrer l'application, une nouvelle invitation est émise. Une invitation valide (72 h) n'est pas réémise à chaque redémarrage.
+Au démarrage, le premier Admin est créé directement avec le statut actif (sans e-mail ni invitation) à partir de `BOOTSTRAP_ADMIN_EMAIL` et `BOOTSTRAP_ADMIN_PASSWORD`, et seulement si aucun Admin n'existe encore (quel que soit son statut). Si l'adresse appartient déjà à un compte non Admin, rien n'est créé et les journaux d'exécution affichent l'avertissement « Premier Admin non créé : l'e-mail de BOOTSTRAP_ADMIN_EMAIL existe déjà (autre démarrage ou autre compte) ». Après la première connexion, retirer les deux variables dans hPanel.
 
 ### Migration interrompue
 
