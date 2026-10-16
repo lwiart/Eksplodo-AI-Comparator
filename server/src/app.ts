@@ -9,6 +9,8 @@ import { AppError } from './errors.js';
 import type { Clock } from './lib/clock.js';
 import type { Mailer } from './modules/mail/mailer.js';
 import { registerAuthRoutes } from './modules/auth/auth.routes.js';
+import { createUsersService } from './modules/users/users.service.js';
+import { registerUserRoutes } from './modules/users/users.routes.js';
 import { registerAuth } from './plugins/auth.js';
 import { registerCsrf } from './plugins/csrf.js';
 import { loggerOptions, type LogStream } from './plugins/logging.js';
@@ -114,6 +116,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   });
 
   registerAuthRoutes(app, deps);
+  registerUserRoutes(app, createUsersService(deps));
 
   return app;
 }
