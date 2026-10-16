@@ -1,7 +1,7 @@
-import { and, eq, or } from 'drizzle-orm';
+import { and, eq, isNull, or } from 'drizzle-orm';
 import type { AppConfig } from '../../config/config.js';
 import type { Db } from '../../db/client.js';
-import { users } from '../../db/schema/core.js';
+import { invitations, users } from '../../db/schema/core.js';
 import { ConflictError, NotFoundError } from '../../errors.js';
 import type { Clock } from '../../lib/clock.js';
 import { audit } from '../audit/audit.js';
@@ -195,6 +195,13 @@ export function createUsersService(deps: UsersServiceDeps) {
           if (patch.role !== undefined) set.role = patch.role;
           if (patch.status !== undefined) set.status = patch.status;
           if (Object.keys(set).length > 0) await tx.update(users).set(set).where(eq(users.id, id));
+          // Un compte désactivé ne doit pas retrouver d'anciens liens valides à sa réactivation.
+          if (patch.status === 'disabled') {
+            await tx
+              .update(invitations)
+              .set({ usedAt: clock() })
+              .where(and(eq(invitations.userId, id), isNull(invitations.usedAt)));
+          }
           const rows = await tx.select().from(users).where(eq(users.id, id)).limit(1);
           await audit(tx, {
             actorUserId: actor.userId,

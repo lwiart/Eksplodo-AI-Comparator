@@ -3,12 +3,14 @@ import type { FastifyRequest } from 'fastify';
 export type LogStream = { write(line: string): void };
 
 // Paramètre dont le nom contient « token » (token, resetToken…) : sa valeur est un jeton actif.
-// Et paramètre `q` : une recherche de documents peut citer des extraits de DCE.
-const TOKEN_PARAM = /([?&](?:[^=&#]*token[^=&#]*|q)=)[^&#]*/gi;
+const TOKEN_PARAM = /([?&](?:[^=&#]*token[^=&#]*)=)[^&#]*/gi;
+// Liens envoyés par e-mail : le jeton est le segment de chemin qui suit /invitation/ ou /reinitialiser/.
+const TOKEN_PATH = /(\/(?:invitation|reinitialiser)\/)[^/?#]+/gi;
 
-/** Remplace la valeur des paramètres de type jeton (et `q`) de la chaîne de requête par `[redacted]`. */
+/** Masque les jetons de l'URL : segment de chemin des liens d'invitation/réinitialisation (`[REDACTED]`) et paramètres de type jeton (`[redacted]`). */
 export function redactUrl(url: string): string {
-  return url.includes('?') ? url.replace(TOKEN_PARAM, '$1[redacted]') : url;
+  const path = url.replace(TOKEN_PATH, '$1[REDACTED]');
+  return path.includes('?') ? path.replace(TOKEN_PARAM, '$1[redacted]') : path;
 }
 
 /** Sérialiseur `req` des journaux Fastify : comme celui par défaut, mais sans jeton dans l'URL (liens d'invitation…). */

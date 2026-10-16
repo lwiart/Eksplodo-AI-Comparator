@@ -71,12 +71,8 @@ export function registerAuthRoutes(app: FastifyInstance, deps: { config: AppConf
 
     let ok = false;
     if (user) {
-      let lockedUntil = user.lockedUntil;
-      if (lockedUntil && lockedUntil.getTime() <= now.getTime()) {
-        // Verrou expiré : on repart de zéro.
-        await usersRepo.update(user.id, { failedLoginCount: 0, lockedUntil: null });
-        lockedUntil = null;
-      }
+      // Un verrou expiré ne bloque plus ; `recordFailedLogin` (ou la réussite) le remet à zéro atomiquement.
+      const lockedUntil = user.lockedUntil && user.lockedUntil.getTime() > now.getTime() ? user.lockedUntil : null;
       const blocked = user.status !== 'active' || lockedUntil !== null;
       // Le hachage est vérifié même pour un compte bloqué ou sans mot de passe (temps de réponse égalisé).
       const passwordOk = await verifyPassword(user.passwordHash ?? (await getDummyHash()), body.password);

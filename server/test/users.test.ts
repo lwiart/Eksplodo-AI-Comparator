@@ -155,6 +155,24 @@ describe('API Admin des utilisateurs', () => {
     expect((await me()).statusCode).toBe(401);
   });
 
+  test('désactiver invalide les liens ouverts : l’ancien lien reste refusé après réactivation', async () => {
+    const { app, db, post, patch } = await setup();
+    const user = await seedUser(db, { email: 'u@b.fr', role: 'user' });
+    const link = (await post(`/api/users/${user.id}/reset-link`)).json().link as string;
+    expect((await patch(`/api/users/${user.id}`, { status: 'disabled' })).statusCode).toBe(200);
+    expect((await patch(`/api/users/${user.id}`, { status: 'active' })).statusCode).toBe(200);
+    const init = await app.inject({ method: 'GET', url: '/api/auth/me' });
+    const csrf = init.cookies.find((c) => c.name === 'aic_csrf')!.value;
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/auth/password/reset',
+      headers: { cookie: `aic_csrf=${csrf}`, 'x-csrf-token': csrf },
+      payload: { token: tokenOf(link), password: 'un-mot-de-passe-long' },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(code(res)).toBe('invitation_invalid');
+  });
+
   test('réactivation : permise après activation, refusée pour un compte jamais activé', async () => {
     const { db, patch } = await setup();
     const used = await seedUser(db, { email: 'u@b.fr', role: 'user', status: 'disabled' });

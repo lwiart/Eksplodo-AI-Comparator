@@ -60,7 +60,9 @@ export function UsersPage() {
     onError: (err) => setActionError(messageForError(err)),
     onSettled: refresh,
   });
+  // gcTime 0 : le résultat (qui contient le lien à usage unique) ne reste pas dans le cache après `reset()`.
   const link = useMutation({
+    gcTime: 0,
     mutationFn: (v: { user: ManagedUser; kind: 'invite' | 'reset' }) =>
       v.kind === 'invite' ? regenerateInvite(v.user.id) : issueReset(v.user.id),
     onMutate: () => setActionError(null),
@@ -69,6 +71,12 @@ export function UsersPage() {
     onSettled: refresh,
   });
   const busy = patch.isPending || link.isPending;
+  const { reset: resetLink } = link;
+  // Le lien n'est montré qu'une fois : il ne survit pas à sa fenêtre (état local et résultat de la mutation).
+  const closeShown = () => {
+    setShown(null);
+    resetLink();
+  };
 
   return (
     <div className="mx-auto max-w-[1100px]">
@@ -172,7 +180,7 @@ export function UsersPage() {
       />
       <Dialog
         open={shown !== null}
-        onOpenChange={(open) => !open && setShown(null)}
+        onOpenChange={(open) => !open && closeShown()}
         title={shown?.kind === 'reset' ? 'Lien de réinitialisation' : "Lien d'invitation"}
         description={shown ? `Pour ${shown.name}.` : undefined}
       >
@@ -184,7 +192,7 @@ export function UsersPage() {
               {MAIL_TEXT[shown.issued.mail]} Valable jusqu&apos;au {dateFormat.format(new Date(shown.issued.expiresAt))}, à usage unique.
             </p>
             <div className="flex justify-end">
-              <Button variant="primary" onClick={() => setShown(null)}>
+              <Button variant="primary" onClick={closeShown}>
                 Fermer
               </Button>
             </div>
@@ -204,6 +212,9 @@ function InviteDialog({ open, onClose, onIssued }: { open: boolean; onClose(): v
 
   function close() {
     setError(null);
+    setName('');
+    setEmail('');
+    setRole('user');
     onClose();
   }
 

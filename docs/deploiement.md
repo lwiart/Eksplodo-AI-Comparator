@@ -14,7 +14,7 @@ Application Node.js hébergée chez Hostinger (compte `u355159080`), site **http
 | Variable | Valeur / rôle |
 |---|---|
 | `NODE_ENV` | `production` (obligatoire : cookies sécurisés, HSTS, journaux sans secrets) |
-| `PORT` | Facultative (3000 par défaut) ; Hostinger la fournit |
+| `PORT` | Facultative, numérique (3000 par défaut), utilisée en local ; LiteSpeed gère lui-même le socket sur Hostinger |
 | `APP_BASE_URL` | `https://ia.eksplodo.fr` |
 | `DATA_DIR` | `/home/u355159080/data/eksplodo-ia` |
 | `CRON_SECRET` | ≥ 32 caractères, utilisé par la tâche cron. Génération : `node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"` |
@@ -69,7 +69,16 @@ Route provisoire, protégée par l'en-tête `x-cron-secret`, utilisée pour les 
 curl -s -m 130 -H "x-cron-secret: <CRON_SECRET>" "https://ia.eksplodo.fr/internal/diag?waitSeconds=90"
 ```
 
-Réponse : `{ nodeVersion, uptimeSeconds, memory, mariadbVersion }`, après `waitSeconds` secondes (0 à 120). Elle sert à vérifier que LiteSpeed ne coupe pas les requêtes longues et à relever `memory.rss` au repos.
+Réponse : `{ nodeVersion, uptimeSeconds, memory, mariadbVersion, ip, xForwardedFor, xRealIp }`, après `waitSeconds` secondes (0 à 120). Elle sert à vérifier que LiteSpeed ne coupe pas les requêtes longues et à relever `memory.rss` au repos.
+
+Vérification de l'adresse IP du client : appeler la route une fois normalement, puis une fois avec des en-têtes falsifiés.
+
+```
+curl -s -H "x-cron-secret: <CRON_SECRET>" "https://ia.eksplodo.fr/internal/diag"
+curl -s -H "x-cron-secret: <CRON_SECRET>" -H "X-Forwarded-For: 1.2.3.4" -H "X-Real-IP: 5.6.7.8" "https://ia.eksplodo.fr/internal/diag"
+```
+
+Dans les deux cas, `ip` doit être la vraie adresse IP du client (jamais `1.2.3.4` ni `5.6.7.8`) ; sinon la limitation par IP peut être contournée.
 
 ## Contraintes Hostinger à respecter dans le code
 

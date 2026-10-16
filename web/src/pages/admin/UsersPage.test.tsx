@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { ApiError } from '../../api/client';
@@ -37,6 +37,7 @@ function renderPage() {
       <UsersPage />
     </QueryClientProvider>,
   );
+  return client;
 }
 
 const rowOf = (name: string) => within(screen.getByRole('row', { name: new RegExp(name) }));
@@ -66,6 +67,40 @@ test('fermer la fenêtre fait disparaître le lien', async () => {
   await screen.findByDisplayValue(/\/invitation\//);
   await user.click(screen.getByRole('button', { name: 'Fermer' }));
   expect(screen.queryByDisplayValue(/\/invitation\//)).toBeNull();
+});
+
+test('le lien ne survit pas à sa fenêtre : ni dans le DOM, ni en mémoire, et une nouvelle action n’affiche que le nouveau lien', async () => {
+  let n = 0;
+  apiFetch.mockImplementation((path: string, init?: { method?: string }) => {
+    if (path.endsWith('/invite-link')) return Promise.resolve({ ...LINK, link: `http://localhost:5173/invitation/jeton-${++n}` });
+    return Promise.resolve({ users: USERS });
+  });
+  const client = renderPage();
+  const user = userEvent.setup();
+  await screen.findByText('Bob Invité');
+  await user.click(rowOf('Bob Invité').getByRole('button', { name: /Régénérer le lien/ }));
+  expect(await screen.findByDisplayValue(/jeton-1/)).toBeInTheDocument();
+  await user.click(screen.getByRole('button', { name: 'Fermer' }));
+  expect(screen.queryByDisplayValue(/jeton-1/)).toBeNull();
+  await waitFor(() => {
+    const kept = client.getMutationCache().getAll().some((m) => JSON.stringify(m.state.data ?? null).includes('jeton-1'));
+    expect(kept).toBe(false);
+  });
+  await user.click(rowOf('Bob Invité').getByRole('button', { name: /Régénérer le lien/ }));
+  expect(await screen.findByDisplayValue(/jeton-2/)).toBeInTheDocument();
+  expect(screen.queryByDisplayValue(/jeton-1/)).toBeNull();
+});
+
+test('Annuler referme la fenêtre d’invitation et vide le formulaire', async () => {
+  renderPage();
+  const user = userEvent.setup();
+  await user.click(await screen.findByRole('button', { name: 'Inviter' }));
+  await user.type(screen.getByLabelText('Nom'), 'Dora');
+  await user.type(screen.getByLabelText('E-mail'), 'dora@example.test');
+  await user.click(screen.getByRole('button', { name: 'Annuler' }));
+  await user.click(screen.getByRole('button', { name: 'Inviter' }));
+  expect(screen.getByLabelText('Nom')).toHaveValue('');
+  expect(screen.getByLabelText('E-mail')).toHaveValue('');
 });
 
 test('e-mail déjà utilisé : message français dans la fenêtre', async () => {

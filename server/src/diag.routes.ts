@@ -21,6 +21,10 @@ export function registerDiagRoutes(app: FastifyInstance, deps: AppDeps): void {
       uptimeSeconds: Math.round(process.uptime()),
       memory: process.memoryUsage(),
       mariadbVersion: rows[0]?.v ?? 'inconnue',
+      // Pour vérifier le comportement des en-têtes de LiteSpeed sur Hostinger (spec §16).
+      ip: req.ip,
+      xForwardedFor: req.headers['x-forwarded-for'] ?? null,
+      xRealIp: req.headers['x-real-ip'] ?? null,
     };
   });
 }

@@ -386,4 +386,31 @@ describe('changement de mot de passe', () => {
     expect(me.statusCode).toBe(401);
     expect((await rawLogin(app, 'm@acme.fr', PW)).statusCode).toBe(401);
   }, 30_000);
+
+  test('verrou expiré : le changement de mot de passe re-verrouille après 5 nouveaux échecs', async () => {
+    const { app, clock } = await setup();
+    const s = await loginAs(app, 'm@acme.fr', PW);
+    // Les 5 échecs de connexion viennent d'une autre IP (limite de 10 tentatives / 15 min par IP).
+    const { cookie, csrf } = await csrfPair(app);
+    for (let i = 0; i < 5; i++) {
+      const r = await app.inject({
+        method: 'POST',
+        url: '/api/auth/login',
+        remoteAddress: '10.0.0.9',
+        headers: { cookie, 'x-csrf-token': csrf },
+        payload: { email: 'm@acme.fr', password: 'faux-mot-de-passe' },
+      });
+      expect(r.statusCode).toBe(401);
+    }
+    clock.advance(15 * 60_000 + 1);
+    for (let i = 0; i < 4; i++) {
+      const r = await change(app, s, { currentPassword: 'mauvais-mot-de-passe', newPassword: NEW_PW });
+      expect(r.statusCode).toBe(400);
+    }
+    const fifth = await change(app, s, { currentPassword: 'mauvais-mot-de-passe', newPassword: NEW_PW });
+    expect(fifth.statusCode).toBe(401);
+    const me = await app.inject({ method: 'GET', url: '/api/auth/me', headers: { cookie: s.cookie } });
+    expect(me.statusCode).toBe(401);
+    expect((await rawLogin(app, 'm@acme.fr', PW)).statusCode).toBe(401);
+  }, 30_000);
 });

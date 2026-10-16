@@ -44,6 +44,9 @@ test('GET /internal/diag : 200 avec les informations de diagnostic', async () =>
   expect(typeof body.memory.rss).toBe('number');
   expect(typeof body.mariadbVersion).toBe('string');
   expect(body.mariadbVersion.length).toBeGreaterThan(0);
+  expect(typeof body.ip).toBe('string');
+  expect(body).toHaveProperty('xForwardedFor', null);
+  expect(body).toHaveProperty('xRealIp', null);
   await app.close();
 });
 
