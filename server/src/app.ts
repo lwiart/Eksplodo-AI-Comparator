@@ -1,3 +1,4 @@
+import cookie from '@fastify/cookie';
 import helmet from '@fastify/helmet';
 import { sql } from 'drizzle-orm';
 import Fastify, { type FastifyInstance } from 'fastify';
@@ -6,7 +7,11 @@ import type { AppConfig } from './config/config.js';
 import type { Db } from './db/client.js';
 import { AppError } from './errors.js';
 import type { Clock } from './lib/clock.js';
+import { registerAuthRoutes } from './modules/auth/auth.routes.js';
+import { registerAuth } from './plugins/auth.js';
+import { registerCsrf } from './plugins/csrf.js';
 import { loggerOptions, type LogStream } from './plugins/logging.js';
+import { registerRateLimit } from './plugins/rate-limit.js';
 
 // Étendu par les tâches suivantes : mailer (Task 4), schedules (Task 6).
 export type AppDeps = {
@@ -71,6 +76,11 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     strictTransportSecurity: production ? { maxAge: 31_536_000, includeSubDomains: true } : false,
   });
 
+  await app.register(cookie);
+  await registerRateLimit(app);
+  registerCsrf(app, deps.config);
+  registerAuth(app, deps);
+
   app.setNotFoundHandler((_req, reply) => {
     reply.status(404).send({ error: { code: 'not_found', message: 'Ressource introuvable' } });
   });
@@ -100,6 +110,8 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     }
     return { status: 'ok', db: 'ok', worker: deps.workerStatus?.() ?? 'stopped' };
   });
+
+  registerAuthRoutes(app, deps);
 
   return app;
 }
