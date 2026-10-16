@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { and, asc, eq, sql } from 'drizzle-orm';
+import { and, asc, eq, gte, isNull, sql } from 'drizzle-orm';
 import type { Db } from '../../db/client.js';
 import { users } from '../../db/schema/core.js';
 import { NotFoundError } from '../../errors.js';
@@ -16,6 +16,9 @@ export type UserInsert = {
 export type UserPatch = Partial<
   Pick<UserRow, 'name' | 'role' | 'status' | 'passwordHash' | 'failedLoginCount' | 'lockedUntil' | 'lastLoginAt'>
 >;
+
+export const MAX_FAILED_LOGINS = 5;
+export const LOGIN_LOCK_MS = 15 * 60_000;
 
 export function createUsersRepo(db: Db) {
   async function findById(id: string): Promise<UserRow | null> {
@@ -52,6 +55,22 @@ export function createUsersRepo(db: Db) {
       const row = await findById(id);
       if (!row) throw new NotFoundError();
       return row;
+    },
+    /**
+     * Compte un échec d'authentification (incrément atomique, puis verrou conditionnel : des requêtes parallèles
+     * ne dépassent pas MAX_FAILED_LOGINS essais). Renvoie vrai si le compte est verrouillé après cet échec.
+     */
+    async recordFailedLogin(id: string, now: Date): Promise<boolean> {
+      await db
+        .update(users)
+        .set({ failedLoginCount: sql`${users.failedLoginCount} + 1` })
+        .where(eq(users.id, id));
+      await db
+        .update(users)
+        .set({ lockedUntil: new Date(now.getTime() + LOGIN_LOCK_MS) })
+        .where(and(eq(users.id, id), gte(users.failedLoginCount, MAX_FAILED_LOGINS), isNull(users.lockedUntil)));
+      const row = await findById(id);
+      return row?.lockedUntil != null && row.lockedUntil.getTime() > now.getTime();
     },
     async countActive(filter: { role: Role }): Promise<number> {
       const rows = await db

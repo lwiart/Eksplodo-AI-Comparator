@@ -1,9 +1,9 @@
-import { and, eq, gte, isNull, ne, sql } from 'drizzle-orm';
+import { and, eq, ne } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import type { AppConfig } from '../../config/config.js';
 import type { Db } from '../../db/client.js';
-import { sessions, users } from '../../db/schema/core.js';
+import { sessions } from '../../db/schema/core.js';
 import { AppError, UnauthorizedError, ValidationError } from '../../errors.js';
 import type { Clock } from '../../lib/clock.js';
 import { hashPassword, hashToken, verifyPassword } from '../../lib/crypto.js';
@@ -11,12 +11,10 @@ import { SESSION_COOKIE, sessionCookieOptions } from '../../plugins/auth.js';
 import { AUTH_RATE_LIMIT } from '../../plugins/rate-limit.js';
 import { createUsersRepo } from '../users/users.repo.js';
 import { normalizeEmail, type Role } from './actor.js';
-import { createSession, destroySession } from './sessions.js';
+import { createSession, destroySession, destroyUserSessions } from './sessions.js';
 
 export type PublicUser = { id: string; email: string; name: string; role: Role };
 
-const MAX_FAILURES = 5;
-const LOCK_MS = 15 * 60_000;
 const MIN_PASSWORD_LENGTH = 12;
 const MAX_PASSWORD_LENGTH = 1024;
 
@@ -70,15 +68,7 @@ export function registerAuthRoutes(app: FastifyInstance, deps: { config: AppConf
       const passwordOk = await verifyPassword(user.passwordHash ?? (await getDummyHash()), body.password);
       ok = !blocked && passwordOk && user.passwordHash !== null;
       if (!ok && !blocked) {
-        // Incrément atomique, puis verrou conditionnel : des requêtes parallèles ne dépassent pas 5 essais.
-        await db
-          .update(users)
-          .set({ failedLoginCount: sql`${users.failedLoginCount} + 1` })
-          .where(eq(users.id, user.id));
-        await db
-          .update(users)
-          .set({ lockedUntil: new Date(now.getTime() + LOCK_MS) })
-          .where(and(eq(users.id, user.id), gte(users.failedLoginCount, MAX_FAILURES), isNull(users.lockedUntil)));
+        await usersRepo.recordFailedLogin(user.id, now);
       }
     } else {
       await verifyPassword(await getDummyHash(), body.password);
@@ -108,12 +98,21 @@ export function registerAuthRoutes(app: FastifyInstance, deps: { config: AppConf
   });
 
   // Changement de mot de passe : l'ancien est exigé ; les autres sessions du compte sont fermées.
-  app.post('/api/auth/password', { preHandler: app.requireActor }, async (req, reply) => {
+  app.post('/api/auth/password', { ...AUTH_RATE_LIMIT, preHandler: app.requireActor }, async (req, reply) => {
     const body = passwordBody.parse(req.body);
+    const now = clock();
     const user = await usersRepo.findById(req.actor!.userId);
     if (!user) throw new UnauthorizedError();
+    if (user.lockedUntil && user.lockedUntil.getTime() > now.getTime()) throw new UnauthorizedError();
     const valid = user.passwordHash !== null && (await verifyPassword(user.passwordHash, body.currentPassword));
-    if (!valid) throw new ValidationError('invalid_password', 'Le mot de passe actuel est incorrect.');
+    if (!valid) {
+      // Même décompte que la connexion : un cookie volé ne permet pas de deviner le mot de passe sans limite.
+      if (await usersRepo.recordFailedLogin(user.id, now)) {
+        await destroyUserSessions(db, user.id);
+        throw new UnauthorizedError('Compte verrouillé temporairement.');
+      }
+      throw new ValidationError('invalid_password', 'Le mot de passe actuel est incorrect.');
+    }
     const passwordHash = await hashPassword(body.newPassword);
     await usersRepo.update(user.id, { passwordHash, failedLoginCount: 0, lockedUntil: null });
     const current = req.cookies[SESSION_COOKIE];

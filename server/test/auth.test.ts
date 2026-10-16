@@ -360,4 +360,30 @@ describe('changement de mot de passe', () => {
     const res = await change(app, { cookie, csrf }, { currentPassword: PW, newPassword: NEW_PW });
     expect(res.statusCode).toBe(401);
   });
+
+  test('la 11e tentative de changement depuis la même IP est limitée (429)', async () => {
+    const { app } = await setup();
+    const s = await loginAs(app, 'm@acme.fr', PW);
+    // Valeur de mot de passe invalide (trop court) : aucun hachage, le décompte par IP est seul en jeu.
+    for (let i = 0; i < 10; i++) {
+      expect((await change(app, s, { currentPassword: PW, newPassword: 'court' })).statusCode).toBe(400);
+    }
+    const res = await change(app, s, { currentPassword: PW, newPassword: 'court' });
+    expect(res.statusCode).toBe(429);
+    expect(res.json().error.code).toBe('rate_limited');
+  }, 30_000);
+
+  test('5 mauvais mots de passe actuels verrouillent le compte et ferment la session', async () => {
+    const { app } = await setup();
+    const s = await loginAs(app, 'm@acme.fr', PW);
+    for (let i = 0; i < 4; i++) {
+      const r = await change(app, s, { currentPassword: 'mauvais-mot-de-passe', newPassword: NEW_PW });
+      expect(r.statusCode).toBe(400);
+    }
+    const fifth = await change(app, s, { currentPassword: 'mauvais-mot-de-passe', newPassword: NEW_PW });
+    expect(fifth.statusCode).toBe(401);
+    const me = await app.inject({ method: 'GET', url: '/api/auth/me', headers: { cookie: s.cookie } });
+    expect(me.statusCode).toBe(401);
+    expect((await rawLogin(app, 'm@acme.fr', PW)).statusCode).toBe(401);
+  }, 30_000);
 });
