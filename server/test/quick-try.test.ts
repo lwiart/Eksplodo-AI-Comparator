@@ -259,7 +259,7 @@ test('essai rapide d’un test expected : note et justification dans l’issue',
     userPrompt: 'Dis quelque chose',
   });
   expect(body.status).toBe('done');
-  expect(body.outcome.score).toEqual({ method: 'expected', score: 0, rationale: '0 élément trouvé sur 1' });
+  expect(body.outcome.score).toEqual({ method: 'expected', score: 0, rationale: '0 élément trouvé sur 1 ; manquant : zzz-introuvable' });
   expect((await t.db.select().from(aiUsage)).map((u) => u.origin)).toEqual(['quick_try']);
 });
 

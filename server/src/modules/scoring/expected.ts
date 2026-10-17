@@ -14,12 +14,34 @@ export const REGEX_TIMEOUT_MS = 1000;
 
 export type ExpectedScore = { score: number; rationale: string };
 
-/** Espaces de début et de fin retirés, espaces multiples réduits ; casse et accents selon les options. */
+/**
+ * Marques d'emphase Markdown collées à un mot (`**5,0**`, `_mot_`) : `*` ou `_` entre une lettre ou un chiffre et autre
+ * chose. Ceux pris entre deux lettres ou chiffres restent (`snake_case`, `2*3`), comme une puce `* ` isolée.
+ */
+const EMPHASIS_OPEN = /(?<![\p{L}\p{N}])[*_]+(?=[\p{L}\p{N}])/gu;
+const EMPHASIS_CLOSE = /(?<=[\p{L}\p{N}])[*_]+(?![\p{L}\p{N}])/gu;
+
+/**
+ * Texte comparable, appliqué à la réponse et à l'attente (modes exact et contient, jamais regex) : apostrophes et guillemets
+ * typographiques unifiés, mise en forme Markdown retirée (emphase, accents graves), espaces réduits ; casse et accents selon
+ * les options.
+ */
 function normalize(text: string, ignoreCase: boolean, ignoreAccents: boolean): string {
-  let s = text.trim().replace(/\s+/g, ' ');
+  let s = text
+    .replace(/[’‘ʼ′]/g, "'")
+    .replace(/[«»“”]/g, '"')
+    .replace(/`+/g, '')
+    .replace(/\*\*|__/g, (m, offset: number, all: string) => (isWordChar(all[offset - 1]) && isWordChar(all[offset + 2]) ? m : ''))
+    .replace(EMPHASIS_OPEN, '')
+    .replace(EMPHASIS_CLOSE, '');
+  s = s.trim().replace(/\s+/g, ' ');
   if (ignoreAccents) s = s.normalize('NFD').replace(/\p{M}/gu, '');
   if (ignoreCase) s = s.toLowerCase();
   return s;
+}
+
+function isWordChar(c: string | undefined): boolean {
+  return c !== undefined && /[\p{L}\p{N}]/u.test(c);
 }
 
 function scoreRegex(pattern: string, flags: string, response: string): ExpectedScore {
@@ -55,13 +77,15 @@ export function scoreExpected(config: ExpectedConfig, response: string): Expecte
   }
   if (config.mode === 'contains') {
     const haystack = normalize(response, config.ignoreCase, false);
-    const found = config.items.filter((item) => haystack.includes(normalize(item, config.ignoreCase, false)));
+    const found: string[] = [];
+    const missing: string[] = [];
+    for (const item of config.items) (haystack.includes(normalize(item, config.ignoreCase, false)) ? found : missing).push(item);
     const score = Math.round((10 * found.length * 10) / config.items.length) / 10;
     const noun = found.length > 1 ? 'éléments trouvés' : 'élément trouvé';
-    return {
-      score,
-      rationale: `${found.length} ${noun} sur ${config.items.length}${found.length > 0 ? ` : ${found.join(', ')}` : ''}`,
-    };
+    // Éléments manquants listés aussi : c'est eux qui expliquent une note incomplète.
+    const foundPart = found.length > 0 ? ` : ${found.join(', ')}` : '';
+    const missingPart = missing.length > 0 ? ` ; ${missing.length > 1 ? 'manquants' : 'manquant'} : ${missing.join(', ')}` : '';
+    return { score, rationale: `${found.length} ${noun} sur ${config.items.length}${foundPart}${missingPart}` };
   }
   return scoreRegex(config.pattern, config.flags, response);
 }
