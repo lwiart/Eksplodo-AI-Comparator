@@ -16,6 +16,8 @@ import { registerTickRoutes } from './modules/jobs/tick.routes.js';
 import { registerCatalogRoutes } from './modules/catalog/catalog.routes.js';
 import { createCatalogService } from './modules/catalog/catalog.service.js';
 import { MAX_ATTACHMENT_BYTES } from './modules/tests/attachments.js';
+import { registerSuitesRoutes } from './modules/tests/suites.routes.js';
+import { createSuitesService } from './modules/tests/suites.service.js';
 import { registerTestsRoutes } from './modules/tests/tests.routes.js';
 import { createTestsService } from './modules/tests/tests.service.js';
 import type { Mailer } from './modules/mail/mailer.js';
@@ -178,6 +180,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   registerUserRoutes(app, createUsersService(deps));
   registerCatalogRoutes(app, catalog);
   registerTestsRoutes(app, createTestsService(deps), deps);
+  registerSuitesRoutes(app, createSuitesService(deps));
   registerTickRoutes(app, deps);
   registerErrorRoutes(app, deps);
 
