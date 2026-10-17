@@ -56,6 +56,9 @@ export function saveQuestionScores(runTestId: string, scores: ManualScoreInput[]
 export const attachmentUrl = (runTestId: string, index: number): string =>
   `/api/scoring/questions/${enc(runTestId)}/attachments/${index}`;
 
+/** Même fichier servi en `inline` : affichage dans la visionneuse. */
+export const attachmentViewUrl = (runTestId: string, index: number): string => `${attachmentUrl(runTestId, index)}?inline=1`;
+
 export async function getSpread(runId: string): Promise<SpreadItem[]> {
   return (await apiFetch<{ items: SpreadItem[] }>(`/api/scoring/runs/${enc(runId)}/spread`)).items;
 }

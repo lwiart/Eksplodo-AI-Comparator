@@ -59,7 +59,10 @@ beforeEach(() => {
 test('question : prompt, pièces jointes, réponses A, B sans nom de modèle ; note 0 à 10 et commentaire', async () => {
   renderPage();
   expect(await screen.findByText(/Rédige une réponse empathique/)).toBeInTheDocument();
-  expect(screen.getByAltText('courrier.png')).toHaveAttribute('src', '/api/scoring/questions/q1/attachments/0');
+  // Vignette affichée en inline ; le nom reste un lien de téléchargement.
+  const thumb = screen.getByRole('button', { name: 'Afficher courrier.png' });
+  expect(thumb.querySelector('img')).toHaveAttribute('src', '/api/scoring/questions/q1/attachments/0?inline=1');
+  expect(screen.getByRole('link', { name: 'courrier.png' })).toHaveAttribute('href', '/api/scoring/questions/q1/attachments/0');
   expect(screen.getByRole('article', { name: 'Réponse A' })).toHaveTextContent('Réponse un');
   expect(screen.getByRole('article', { name: 'Réponse B' })).toBeInTheDocument();
   const group = screen.getByRole('radiogroup', { name: 'Note de la réponse A' });
@@ -192,4 +195,16 @@ test('question pas encore prête (réponses en attente) : message en français',
   apiFetch.mockRejectedValue(new ApiError('question_not_ready', 409, 'x'));
   renderPage();
   expect(await screen.findByRole('alert')).toHaveTextContent('pas encore arrivées');
+});
+
+test('pièce jointe en grand : visionneuse avec le nom du fichier, aucun nom de modèle', async () => {
+  const user = userEvent.setup();
+  renderPage();
+  await user.click(await screen.findByRole('button', { name: 'Afficher courrier.png' }));
+  const dialog = screen.getByRole('dialog', { name: 'courrier.png' });
+  expect(within(dialog).getByRole('img', { name: 'courrier.png' })).toHaveAttribute('src', '/api/scoring/questions/q1/attachments/0?inline=1');
+  expect(within(dialog).getByRole('link', { name: 'Télécharger' })).toHaveAttribute('href', '/api/scoring/questions/q1/attachments/0');
+  expect(dialog.textContent).not.toMatch(/Claude|GPT|Mistral|modèle/i);
+  await user.keyboard('{Escape}');
+  expect(screen.queryByRole('dialog')).toBeNull();
 });

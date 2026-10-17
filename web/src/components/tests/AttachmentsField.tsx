@@ -1,8 +1,10 @@
 import { useRef, useState, type DragEvent } from 'react';
 import { messageForError, messageFor } from '../../api/messages';
-import { attachmentDownloadUrl, deleteAttachment, uploadAttachment, type PublicAttachment } from '../../api/tests';
+import { attachmentDownloadUrl, attachmentViewUrl, deleteAttachment, uploadAttachment, type PublicAttachment } from '../../api/tests';
 import { formatSize } from '../../lib/format';
+import { AttachmentThumb } from '../ui/AttachmentGallery';
 import { Button } from '../ui/Button';
+import { Lightbox, type LightboxItem } from '../ui/Lightbox';
 
 const MAX_BYTES = 10 * 1024 * 1024;
 const ACCEPT = 'image/png,image/jpeg,image/webp,application/pdf';
@@ -21,6 +23,7 @@ export function AttachmentsField({ testId, attachments, onAdded, onRemoved }: Pr
   const [uploads, setUploads] = useState<Upload[]>([]);
   const [dragging, setDragging] = useState(false);
   const [removeError, setRemoveError] = useState<string | null>(null);
+  const [viewing, setViewing] = useState<number | null>(null);
   const nextKey = useRef(0);
   const input = useRef<HTMLInputElement>(null);
 
@@ -64,6 +67,14 @@ export function AttachmentsField({ testId, attachments, onAdded, onRemoved }: Pr
     }
   }
 
+  const items: LightboxItem[] = attachments.map((a) => ({
+    name: a.originalName,
+    mime: a.mime,
+    pages: a.pages,
+    viewUrl: attachmentViewUrl(testId, a.id),
+    downloadUrl: attachmentDownloadUrl(testId, a.id),
+  }));
+
   return (
     <div className="flex flex-col gap-2.5">
       <span className="text-[13px] font-medium text-ink">Pièces jointes</span>
@@ -97,8 +108,9 @@ export function AttachmentsField({ testId, attachments, onAdded, onRemoved }: Pr
 
       {attachments.length > 0 ? (
         <ul className="m-0 flex list-none flex-col gap-1.5 p-0">
-          {attachments.map((a) => (
+          {attachments.map((a, i) => (
             <li key={a.id} className="flex items-center gap-2 rounded-xl border border-line bg-night-0/40 px-3 py-2 text-[13px]">
+              <AttachmentThumb item={items[i]!} size="sm" onOpen={() => setViewing(i)} />
               <a
                 href={attachmentDownloadUrl(testId, a.id)}
                 download={a.originalName}
@@ -117,6 +129,8 @@ export function AttachmentsField({ testId, attachments, onAdded, onRemoved }: Pr
           ))}
         </ul>
       ) : null}
+
+      <Lightbox items={items} index={viewing} onIndexChange={setViewing} />
 
       {uploads.map((u) =>
         u.error === null ? (

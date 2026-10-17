@@ -2,8 +2,9 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { messageForScoreError } from '../api/messages';
-import { TODO_KEY, attachmentUrl, getQuestion, questionKey, saveQuestionScores, type BlindQuestion } from '../api/scoring';
+import { TODO_KEY, attachmentUrl, attachmentViewUrl, getQuestion, questionKey, saveQuestionScores, type BlindQuestion } from '../api/scoring';
 import { Markdown } from '../components/results/Markdown';
+import { AttachmentGallery } from '../components/ui/AttachmentGallery';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { Chip } from '../components/ui/Chip';
@@ -128,24 +129,17 @@ function QuestionForm({
           <b>Prompt :</b> {question.userPrompt}
         </p>
         {question.attachments.length > 0 ? (
-          <ul className="mt-3 mb-0 flex list-none flex-wrap gap-3 p-0">
-            {question.attachments.map((att) => {
-              const url = attachmentUrl(question.runTestId, att.index);
-              return (
-                <li key={att.index} className="text-xs">
-                  {att.mime.startsWith('image/') ? (
-                    <a href={url} target="_blank" rel="noopener noreferrer">
-                      <img src={url} alt={att.originalName} className="max-h-32 rounded-lg border border-line" />
-                    </a>
-                  ) : (
-                    <a href={url} target="_blank" rel="noopener noreferrer" className="text-sky underline">
-                      {att.originalName}
-                    </a>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
+          <div className="mt-3">
+            {/* Pièces jointes du test : seul leur nom de fichier apparaît, jamais un nom de modèle. */}
+            <AttachmentGallery
+              items={question.attachments.map((att) => ({
+                name: att.originalName,
+                mime: att.mime,
+                viewUrl: attachmentViewUrl(question.runTestId, att.index),
+                downloadUrl: attachmentUrl(question.runTestId, att.index),
+              }))}
+            />
+          </div>
         ) : null}
       </Card>
 

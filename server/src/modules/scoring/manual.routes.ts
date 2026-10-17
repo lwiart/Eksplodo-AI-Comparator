@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { contentDisposition } from '../../lib/http.js';
+import { contentDisposition, wantsInline } from '../../lib/http.js';
 import type { ManualScoringService } from './manual.service.js';
 
 const questionParams = z.object({ runTestId: z.string().uuid() });
@@ -47,7 +47,7 @@ export function registerManualScoringRoutes(app: FastifyInstance, service: Manua
     return reply
       .header('content-type', file.mime)
       .header('content-length', file.content.length)
-      .header('content-disposition', contentDisposition(file.originalName))
+      .header('content-disposition', contentDisposition(file.originalName, wantsInline(req.query, file.mime)))
       .header('x-content-type-options', 'nosniff')
       .header('cache-control', 'private, no-store')
       .send(file.content);

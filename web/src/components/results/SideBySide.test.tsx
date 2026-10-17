@@ -39,7 +39,7 @@ const CATALOG = [
   { id: 'm4', displayName: 'Sans clé', providerName: 'Autre', color: '#FFFFFF', available: false },
 ];
 
-const TEST_INFO = { name: 'Résumer un CCTP', category: 'Rédaction', userPrompt: 'Résume.', scoringMethod: 'judge' };
+const TEST_INFO = { name: 'Résumer un CCTP', category: 'Rédaction', userPrompt: 'Résume.', scoringMethod: 'judge', attachments: [] };
 
 let answersBody: unknown;
 beforeEach(() => {
@@ -270,4 +270,26 @@ test('analyse de la note imposée', () => {
   expect(parseOverride('7,55')).toBeUndefined();
   expect(parseOverride('-1')).toBeUndefined();
   expect(parseOverride('')).toBeUndefined();
+});
+
+test('pièces jointes du test : vignettes au-dessus des réponses, visionneuse inline, téléchargement', async () => {
+  const user = userEvent.setup();
+  answersBody = {
+    test: {
+      ...TEST_INFO,
+      attachments: [
+        { index: 0, originalName: 'plan.png', mime: 'image/png', pages: null },
+        { index: 1, originalName: 'cctp.pdf', mime: 'application/pdf', pages: 3 },
+      ],
+    },
+    answers: [answer({})],
+  };
+  renderBlock(true);
+  const gallery = await screen.findByRole('list', { name: 'Pièces jointes du test' });
+  expect(within(gallery).getByRole('link', { name: 'cctp.pdf' })).toHaveAttribute('href', '/api/runs/r1/answers/rt1/attachments/1');
+  await user.click(within(gallery).getByRole('button', { name: 'Afficher cctp.pdf' }));
+  const dialog = screen.getByRole('dialog', { name: 'cctp.pdf' });
+  expect(dialog.querySelector('iframe')).toHaveAttribute('src', '/api/runs/r1/answers/rt1/attachments/1?inline=1');
+  await user.keyboard('{ArrowRight}');
+  expect(within(dialog).getByRole('img', { name: 'plan.png' })).toHaveAttribute('src', '/api/runs/r1/answers/rt1/attachments/0?inline=1');
 });

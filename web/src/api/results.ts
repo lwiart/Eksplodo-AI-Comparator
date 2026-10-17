@@ -56,7 +56,12 @@ export type Answer = {
 export type ScoringMethod = 'expected' | 'judge' | 'manual';
 
 /** `scoringMethod` : la relance du juge n'est proposée que sur un test noté par le juge. */
-export type Answers = { test: { name: string; category: string; userPrompt: string; scoringMethod: ScoringMethod }; answers: Answer[] };
+/** Pièce jointe de l'instantané du test, repérée par sa position. */
+export type AnswerAttachment = { index: number; originalName: string; mime: string; pages: number | null };
+export type Answers = {
+  test: { name: string; category: string; userPrompt: string; scoringMethod: ScoringMethod; attachments: AnswerAttachment[] };
+  answers: Answer[];
+};
 
 /** Corps de `POST /api/runs/:id/rescore` (miroir de `rescoreBody`). */
 export type RescoreBody = {
@@ -77,6 +82,11 @@ const enc = encodeURIComponent;
 
 export function getRanking(runId: string): Promise<Ranking> {
   return apiFetch<Ranking>(`/api/runs/${enc(runId)}/ranking`);
+}
+
+/** Pièce jointe d'un test de la série ; `inline` pour l'afficher dans la visionneuse. */
+export function answerAttachmentUrl(runId: string, runTestId: string, index: number, inline = false): string {
+  return `/api/runs/${enc(runId)}/answers/${enc(runTestId)}/attachments/${index}${inline ? '?inline=1' : ''}`;
 }
 
 export function getAnswers(runId: string, runTestId: string): Promise<Answers> {

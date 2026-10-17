@@ -197,6 +197,16 @@ test('question anonymisée : ni identifiant de résultat ni nom de modèle tant 
   expect(file.headers['x-content-type-options']).toBe('nosniff');
   expect(file.headers['cache-control']).toContain('no-store');
   expect((await s.get(`/api/scoring/questions/${s.rt}/attachments/1`, s.user)).statusCode).toBe(404);
+  // Variante inline (visionneuse) : même contenu et mêmes protections, aucun nom de modèle.
+  const inline = await s.get(`/api/scoring/questions/${s.rt}/attachments/0?inline=1`, s.user);
+  expect(inline.statusCode).toBe(200);
+  expect(inline.body).toBe('%PDF-1.4 contenu');
+  expect(inline.headers['content-disposition']).toMatch(/^inline; filename="_nonc_.pdf"/);
+  expect(inline.headers['x-content-type-options']).toBe('nosniff');
+  expect(inline.headers['cache-control']).toBe('private, no-store');
+  expect(JSON.stringify(inline.headers)).not.toContain('Faux');
+  expect((await s.get(`/api/scoring/questions/${s.expectedRt}/attachments/0?inline=1`, s.user)).statusCode).toBe(404);
+  expect((await s.app.inject({ method: 'GET', url: `/api/scoring/questions/${s.rt}/attachments/0?inline=1` })).statusCode).toBe(401);
 
   // Test non manuel ou inconnu : introuvable.
   expect((await s.get(`/api/scoring/questions/${s.expectedRt}`, s.user)).statusCode).toBe(404);

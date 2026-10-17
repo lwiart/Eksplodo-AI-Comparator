@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import { MODELS_KEY, listModels } from '../../api/catalog';
 import { messageForError } from '../../api/messages';
 import {
+  answerAttachmentUrl,
   answersKey,
   answersPrefix,
   getAnswers,
@@ -15,6 +16,7 @@ import {
   type ScoringMethod,
 } from '../../api/results';
 import { RUNS_KEY } from '../../api/runs';
+import { AttachmentGallery } from '../ui/AttachmentGallery';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
 import { Field } from '../ui/Field';
@@ -313,6 +315,20 @@ export function SideBySide({
               <p className="text-sm text-mute">Chargement des réponses…</p>
             ) : (
               <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                {answers.data.test.attachments.length > 0 ? (
+                  <div className="md:col-span-2 xl:col-span-3">
+                    <AttachmentGallery
+                      label="Pièces jointes du test"
+                      items={answers.data.test.attachments.map((att) => ({
+                        name: att.originalName,
+                        mime: att.mime,
+                        pages: att.pages,
+                        viewUrl: answerAttachmentUrl(runId, runTestId, att.index, true),
+                        downloadUrl: answerAttachmentUrl(runId, runTestId, att.index),
+                      }))}
+                    />
+                  </div>
+                ) : null}
                 {hiddenCount > 0 ? (
                   <div className="flex flex-col gap-3 rounded-2xl border border-line bg-night-0/40 p-3.5 md:col-span-2 xl:col-span-3">
                     <p className="m-0 text-sm text-mute">Notez cette question pour voir les réponses ({hiddenCount} masquée{hiddenCount > 1 ? 's' : ''}).</p>

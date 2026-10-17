@@ -142,7 +142,7 @@ beforeEach(() => {
     if (path === '/api/runs/r1/results') return Promise.resolve({ results: RESULTS });
     if (path.startsWith('/api/runs/r1/answers/'))
       return Promise.resolve({
-        test: { name: 'Résumer', category: 'Rédaction', userPrompt: 'Résume.', scoringMethod: 'judge' },
+        test: { name: 'Résumer', category: 'Rédaction', userPrompt: 'Résume.', scoringMethod: 'judge', attachments: [] },
         answers: [{ resultId: 'a1', modelName: 'Claude Opus', color: '#F0631F', repetition: 1, status: 'done', responseText: 'Texte', hiddenUntilScored: false, finalScore: 8, autoScore: 8, manualAvg: null, overrideScore: null, judgeRationale: null, ttftMs: 400, tokensPerS: 50, costUsd: 0.002, errorMessage: null }],
       });
     if (path === '/api/models') return Promise.resolve({ models: CATALOG });

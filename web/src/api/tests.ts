@@ -173,6 +173,11 @@ export function attachmentDownloadUrl(testId: string, id: string): string {
   return `/api/tests/${enc(testId)}/attachments/${enc(id)}/download`;
 }
 
+/** Même fichier servi en `inline` : affichage dans la visionneuse (image ou PDF). */
+export function attachmentViewUrl(testId: string, id: string): string {
+  return `${attachmentDownloadUrl(testId, id)}?inline=1`;
+}
+
 export async function startQuickTry(testId: string, modelId: string): Promise<string> {
   return (await apiFetch<{ jobId: string }>('/api/tests/try', { method: 'POST', body: { testId, modelId } })).jobId;
 }

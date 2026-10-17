@@ -1,6 +1,9 @@
 import { randomUUID } from 'node:crypto';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 import { and, asc, eq } from 'drizzle-orm';
-import { afterEach, expect, test } from 'vitest';
+import { afterAll, afterEach, expect, test } from 'vitest';
 import { manualScores, results, runTests } from '../src/db/schema/runs.js';
 import { buildTestApp, loginAs, seedModel, seedProvider, seedUser, type TestApp } from './helpers/test-app.js';
 
@@ -16,8 +19,8 @@ afterEach(async () => {
  * une répétition, juge déclaré. Tous les résultats sont terminés : A répond juste (10), B faux (0) avec une formule ;
  * notes manuelles de l'Admin : A 8, B 6. Le juge a coûté 0,5 $ sur le résultat de A (jamais imputé au modèle).
  */
-async function setup() {
-  const t = await buildTestApp({ fakeLlm: true });
+async function setup(opts: { dataDir?: string } = {}) {
+  const t = await buildTestApp({ fakeLlm: true, ...opts });
   created.push(t);
   const adminRow = await seedUser(t.db, { email: 'admin@acme.fr', role: 'admin', name: 'Alice Admin' });
   const userRow = await seedUser(t.db, { email: 'user@acme.fr', role: 'user', name: 'Ulysse Util' });
@@ -140,7 +143,7 @@ test('API ranking et answers ; Utilisateur : réponses manuelles masquées tant 
   // Réponses côte à côte d'un test à réponse attendue : visibles, avec notes et justification du juge.
   const expected = await get(`/api/runs/${runId}/answers/${rtExpected}`, user);
   expect(expected.statusCode).toBe(200);
-  expect(expected.json().test).toEqual({ name: 'Capitale', category: 'Culture', userPrompt: 'Capitale de la France ?', scoringMethod: 'expected' });
+  expect(expected.json().test).toEqual({ name: 'Capitale', category: 'Culture', userPrompt: 'Capitale de la France ?', scoringMethod: 'expected', attachments: [] });
   expect(expected.json().answers).toEqual([
     {
       resultId: ids.expA,
@@ -320,4 +323,65 @@ test('export CSV : en-têtes, une ligne par résultat, réponses masquées pour 
   const scored = (await get(`/api/runs/${runId}/export.csv`, user)).body;
   expect(scored).toContain(`${manual};Modèle A;1;réussi;6;;6;;100;800;50;10;40;;0,001;;;"Haïku de A\nsur deux lignes"\r\n`);
   expect(scored).toContain(`${manual};Modèle B;1;réussi;6,5;;6,5;;200;1500;100;10;45;;0,002;;;Haïku de B\r\n`);
+});
+
+const dirs: string[] = [];
+afterAll(async () => {
+  await Promise.all(dirs.map((d) => rm(d, { recursive: true, force: true })));
+});
+
+test('pièces jointes des réponses côte à côte : liste dans answers, fichier en attachment ou inline, mêmes droits', async () => {
+  const dataDir = await mkdtemp(path.join(os.tmpdir(), 'aic-results-'));
+  dirs.push(dataDir);
+  const { t, get, user, runId, rtManual, createOtherRun } = await setup({ dataDir });
+  await mkdir(path.join(dataDir, 'attachments', 'figee'), { recursive: true });
+  await writeFile(path.join(dataDir, 'attachments/figee/img'), Buffer.from('PNG-octets'));
+  await writeFile(path.join(dataDir, 'attachments/figee/doc'), Buffer.from('%PDF-1.4 contenu'));
+  const [rt] = await t.db.select().from(runTests).where(eq(runTests.id, rtManual));
+  const base = { size: 10, sha256: 'x' };
+  await t.db
+    .update(runTests)
+    .set({
+      snapshot: {
+        ...rt!.snapshot,
+        attachments: [
+          { ...base, id: randomUUID(), originalName: 'schéma.png', mime: 'image/png', pages: null, storagePath: 'attachments/figee/img' },
+          { ...base, id: randomUUID(), originalName: 'énoncé.pdf', mime: 'application/pdf', pages: 3, storagePath: 'attachments/figee/doc' },
+          { ...base, id: randomUUID(), originalName: 'perdu.png', mime: 'image/png', pages: null, storagePath: 'attachments/figee/absent' },
+        ],
+      },
+    })
+    .where(eq(runTests.id, rtManual));
+
+  // Liste : position, nom, type et pages ; ni identifiant ni chemin de stockage.
+  const answers = await get(`/api/runs/${runId}/answers/${rtManual}`, user);
+  expect(answers.json().test.attachments).toEqual([
+    { index: 0, originalName: 'schéma.png', mime: 'image/png', pages: null },
+    { index: 1, originalName: 'énoncé.pdf', mime: 'application/pdf', pages: 3 },
+    { index: 2, originalName: 'perdu.png', mime: 'image/png', pages: null },
+  ]);
+  expect(answers.body).not.toContain('figee');
+
+  const url = (i: number | string) => `/api/runs/${runId}/answers/${rtManual}/attachments/${i}`;
+  const file = await get(url(0), user);
+  expect(file.statusCode).toBe(200);
+  expect(file.body).toBe('PNG-octets');
+  expect(file.headers['content-type']).toBe('image/png');
+  expect(file.headers['content-disposition']).toMatch(/^attachment; filename="sch_ma.png"/);
+  expect(file.headers['x-content-type-options']).toBe('nosniff');
+  expect(file.headers['cache-control']).toBe('private, no-store');
+  const pdf = await get(`${url(1)}?inline=1`, user);
+  expect(pdf.statusCode).toBe(200);
+  expect(pdf.headers['content-type']).toBe('application/pdf');
+  expect(pdf.headers['content-disposition']).toMatch(/^inline; filename="_nonc_.pdf"/);
+  expect(pdf.headers['x-content-type-options']).toBe('nosniff');
+  expect(pdf.headers['cache-control']).toBe('private, no-store');
+
+  // Introuvable : position hors liste, fichier absent, test d'une autre série ; sans session : 401.
+  expect((await get(url(3), user)).statusCode).toBe(404);
+  expect((await get(url(2), user)).statusCode).toBe(404);
+  expect((await get(url('x'), user)).statusCode).toBe(400);
+  const { otherRunId } = await createOtherRun();
+  expect((await get(`/api/runs/${otherRunId}/answers/${rtManual}/attachments/0`, user)).statusCode).toBe(404);
+  expect((await get(url(0), null)).statusCode).toBe(401);
 });

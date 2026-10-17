@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { createReadStream } from 'node:fs';
 import { AppError } from '../../errors.js';
-import { contentDisposition } from '../../lib/http.js';
+import { contentDisposition, wantsInline } from '../../lib/http.js';
 import { addAttachment, findAttachment, removeAttachment, resolveAttachmentPath, type AttachmentsDeps } from './attachments.js';
 import type { QuickTryService } from './quick-try.js';
 import type { TestsService } from './tests.service.js';
@@ -119,7 +119,7 @@ export function registerTestsRoutes(
     return reply
       .header('content-type', row.mime)
       .header('content-length', row.size)
-      .header('content-disposition', contentDisposition(row.originalName))
+      .header('content-disposition', contentDisposition(row.originalName, wantsInline(req.query, row.mime)))
       .header('x-content-type-options', 'nosniff')
       .header('cache-control', 'private, no-store')
       .send(createReadStream(resolveAttachmentPath(attachments.config.dataDir, row.storagePath)));

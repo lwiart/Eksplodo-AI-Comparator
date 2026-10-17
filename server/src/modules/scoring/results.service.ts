@@ -3,6 +3,7 @@ import type { Db } from '../../db/client.js';
 import { models, providers } from '../../db/schema/catalog.js';
 import { results, runModels, runTests, runs } from '../../db/schema/runs.js';
 import { NotFoundError } from '../../errors.js';
+import { readAttachment } from '../tests/attachments.js';
 import type { Actor } from '../auth/actor.js';
 import type { ResultStatus } from '../runs/runs.repo.js';
 import { maskHiddenRow, resultRowOf, type ResultRow, type Weights } from '../runs/runs.service.js';
@@ -42,7 +43,12 @@ export type Answer = {
 };
 
 /** `scoringMethod` : le client ne propose la relance du juge que sur un test noté par le juge. */
-export type Answers = { test: { name: string; category: string; userPrompt: string; scoringMethod: ScoringMethod }; answers: Answer[] };
+/** Pièce jointe de l'instantané, repérée par sa position (ni identifiant ni chemin de stockage). */
+export type AnswerAttachment = { index: number; originalName: string; mime: string; pages: number | null };
+export type Answers = {
+  test: { name: string; category: string; userPrompt: string; scoringMethod: ScoringMethod; attachments: AnswerAttachment[] };
+  answers: Answer[];
+};
 
 const snapshotName = sql<string>`JSON_UNQUOTE(JSON_EXTRACT(${runTests.snapshot}, '$.name'))`;
 const snapshotCategory = sql<string>`JSON_UNQUOTE(JSON_EXTRACT(${runTests.snapshot}, '$.category'))`;
@@ -130,7 +136,7 @@ export function withoutHiddenScores<T extends { runTestId: string; manualAvg: nu
 
 const runNotFound = () => new NotFoundError('Série introuvable');
 
-export function createResultsService(deps: { db: Db }) {
+export function createResultsService(deps: { db: Db; config: { dataDir: string } }) {
   const { db } = deps;
 
   async function requireRun(runId: string) {
@@ -246,7 +252,13 @@ export function createResultsService(deps: { db: Db }) {
       ]);
       if (!rt) throw new NotFoundError('Test introuvable dans cette série');
       return {
-        test: { name: rt.snapshot.name, category: rt.snapshot.category, userPrompt: rt.snapshot.userPrompt, scoringMethod: rt.snapshot.scoringMethod },
+        test: {
+          name: rt.snapshot.name,
+          category: rt.snapshot.category,
+          userPrompt: rt.snapshot.userPrompt,
+          scoringMethod: rt.snapshot.scoringMethod,
+          attachments: (rt.snapshot.attachments ?? []).map((a, index) => ({ index, originalName: a.originalName, mime: a.mime, pages: a.pages ?? null })),
+        },
         answers: rows.map((r) => {
           const { row, scores } = visibleRow(r, hidden);
           return {
@@ -269,6 +281,22 @@ export function createResultsService(deps: { db: Db }) {
           };
         }),
       };
+    },
+
+    /** Pièce jointe n° `index` de l'instantané d'un test de la série (mêmes droits que `answers`). */
+    async attachment(runId: string, runTestId: string, index: number): Promise<{ originalName: string; mime: string; content: Buffer }> {
+      const [rt] = await db
+        .select({ snapshot: runTests.snapshot })
+        .from(runTests)
+        .where(and(eq(runTests.id, runTestId), eq(runTests.runId, runId)));
+      const a = rt?.snapshot.attachments?.[index];
+      if (!a) throw new NotFoundError('Pièce jointe introuvable');
+      try {
+        return { originalName: a.originalName, mime: a.mime, content: await readAttachment({ dataDir: deps.config.dataDir }, a) };
+      } catch (err) {
+        if ((err as { code?: unknown }).code === 'ENOENT') throw new NotFoundError('Pièce jointe introuvable');
+        throw err;
+      }
     },
 
     /** Export CSV : une ligne par résultat, mêmes règles de masquage que `GET /api/runs/:id/results`. */

@@ -147,6 +147,21 @@ test('téléchargement : en-têtes attachment et nosniff', async () => {
   expect(res.rawPayload).toEqual(PNG);
 });
 
+test('téléchargement ?inline=1 : inline pour affichage, mêmes protections ; autre valeur → attachment', async () => {
+  const t = await setup();
+  const att = (await t.upload(PNG, 'Café été.png')).json().attachment;
+  const res = await t.get(`/api/tests/${t.testId}/attachments/${att.id}/download?inline=1`);
+  expect(res.statusCode).toBe(200);
+  expect(res.headers['content-disposition']).toBe(`inline; filename="Caf_ _t_.png"; filename*=UTF-8''Caf%C3%A9%20%C3%A9t%C3%A9.png`);
+  expect(res.headers['x-content-type-options']).toBe('nosniff');
+  expect(res.headers['cache-control']).toBe('private, no-store');
+  expect(res.rawPayload).toEqual(PNG);
+  const other = await t.get(`/api/tests/${t.testId}/attachments/${att.id}/download?inline=true`);
+  expect(other.headers['content-disposition']).toMatch(/^attachment; /);
+  // Droits inchangés : l'Utilisateur reste refusé, même en inline.
+  expect((await t.get(`/api/tests/${t.testId}/attachments/${att.id}/download?inline=1`, t.user)).statusCode).toBe(403);
+});
+
 test('retrait sans instantané : ligne et fichier supprimés', async () => {
   const t = await setup();
   const att = (await t.upload(PNG, 'a.png')).json().attachment;
