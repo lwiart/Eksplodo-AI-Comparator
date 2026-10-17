@@ -2,37 +2,43 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Un catalogue opérationnel : trois adaptateurs de fournisseurs (compatible OpenAI, Anthropic, Google) et un faux fournisseur derrière une interface commune, un registre qui lit les clés dans `process.env` au moment de l'appel, les tables `providers` / `models` / `openrouter_catalog`, l'assistant d'ajout `/models`, l'import des prix et capacités OpenRouter, la détection quotidienne des nouveautés, la fiche modèle et la présence des clés dans `/health`.
+> **Révision du 2026-10-17 (changement de conception décidé par Laurent, après l'exécution des Tasks 1 à 6)** : les clés API des fournisseurs ne viennent plus des variables d'environnement. L'Admin ajoute les fournisseurs et saisit leur clé dans l'interface ; elle est stockée chiffrée (AES-256-GCM, clé maîtresse `APP_ENCRYPTION_KEY`). Les Tasks 1 à 6 (déjà livrées) n'en dépendent pas : leurs adaptateurs reçoivent la clé en clair dans `ProviderConfig.apiKey`. Les Tasks 7 à 14 ci-dessous remplacent les anciennes Tasks 7 à 13. La spec a été mise à jour dans le commit `docs: clés des fournisseurs saisies dans l'interface et chiffrées`.
 
-**Architecture:** Le module `server/src/modules/providers/` ne connaît ni la base ni HTTP entrant : il transforme une `GenerateRequest` en flux de `GenerateEvent` et lève des `ProviderError` normalisées. Le module `server/src/modules/catalog/` gère les tables, l'API et la tâche `catalog_refresh` ; il obtient un adaptateur par le registre. Aucun appel de génération n'est fait dans une requête HTTP (le moteur et l'essai rapide arrivent au plan 3 et passent par la file) ; seule la liste `/models` est interrogée en direct, bornée à 15 s.
+**Goal:** Un catalogue opérationnel : trois adaptateurs de fournisseurs (compatible OpenAI, Anthropic, Google) et un faux fournisseur derrière une interface commune, des clés API saisies dans l'interface et chiffrées en base, un registre qui les déchiffre au moment de l'appel, les tables `providers` / `models` / `openrouter_catalog`, « Tester la connexion », l'assistant d'ajout `/models`, l'import des prix et capacités OpenRouter, la détection quotidienne des nouveautés, la fiche modèle et le nombre de fournisseurs configurés dans `/health`.
 
-**Tech Stack:** celle du plan 1, plus `@anthropic-ai/sdk` (^0.135). `fetch` natif de Node 24 et lecteur SSE maison pour les API compatibles OpenAI et Gemini.
+**Architecture:** Le module `server/src/modules/providers/` ne connaît ni la base ni HTTP entrant : il transforme une `GenerateRequest` en flux de `GenerateEvent` et lève des `ProviderError` normalisées ; son registre reçoit une ligne de fournisseur et la clé maîtresse, et déchiffre la clé à chaque appel. Le module `server/src/modules/catalog/` gère les tables, l'API et la tâche `catalog_refresh`. Aucun appel de génération n'est fait dans une requête HTTP (le moteur et l'essai rapide arrivent au plan 3 et passent par la file) ; seuls `/models` et « Tester la connexion » sont appelés en direct, bornés à 15 s.
 
-**Spec:** `docs/superpowers/specs/2026-10-16-comparateur-ia-design.md` (§5.2, §6, §9.2 pour les nouveautés, §9.3, §10 « Catalogue », §12.1, §12.3, §13, §15 ligne 2, §16 lignes 3 à 5). Plan précédent : `docs/superpowers/plans/2026-10-16-plan-1-fondations.md` (conventions et Global Constraints, toujours valables).
+**Tech Stack:** celle du plan 1, plus `@anthropic-ai/sdk` (^0.135) et `node:crypto` (AES-256-GCM). `fetch` natif de Node 24 et lecteur SSE maison pour les API compatibles OpenAI et Gemini.
+
+**Spec:** `docs/superpowers/specs/2026-10-16-comparateur-ia-design.md` (§2, §5.2, §6, §9.2 pour les nouveautés, §9.3, §10 « Catalogue », §12.1, §12.2, §12.3, §13, §14, §15 ligne 2, §16 lignes 3 à 5). Plan précédent : `docs/superpowers/plans/2026-10-16-plan-1-fondations.md` (conventions et Global Constraints, toujours valables). Référence du chiffrement : `$AO/server/src/lib/crypto.ts` et `$AO/server/test/crypto.test.ts` (`$AO` = `C:\Users\laure\OneDrive\Bureau\Claude directory\Code-appels offre`, lecture seule).
 
 ## Global Constraints
 
-- Toutes les Global Constraints du plan 1 restent en vigueur (Node 24, TypeScript strict ESM, aucun `await` de premier niveau, format d'erreur `{ error: { code, message, reference? } }` en français, UUID `CHAR(36)`, dates `DATETIME(3)`, CSRF, thème « Nuit », skill `frontend-design` pour toute tâche d'interface, jamais `hosting_nodejs_replace-environment-variables`).
+- Toutes les Global Constraints du plan 1 restent en vigueur (Node 24, TypeScript strict ESM, aucun `await` de premier niveau, format d'erreur `{ error: { code, message, reference? } }` en français, UUID `CHAR(36)`, dates `DATETIME(3)`, CSRF, thème « Nuit », skill `frontend-design` pour toute tâche d'interface, jamais `hosting_nodejs_replace-environment-variables`), **sauf** la ligne « Pas d'`APP_ENCRYPTION_KEY` », remplacée ci-dessous.
 - Base de test : MariaDB 11.8 sur `127.0.0.1:3307` (`root` / `test`). Docker Desktop est indisponible sur le poste : si le port ne répond pas, lancer `"C:\Users\laure\OneDrive\Bureau\Claude directory\Code-appels offre\mariadb-11.8\bin\mariadbd.exe" --defaults-file="C:/Users/laure/AppData/Local/aic-mariadb/data/my.ini"` en tâche de fond.
-- **Clés API** : lues dans `process.env[provider.apiKeyEnv]` **au moment de l'appel**, jamais copiées en base, jamais renvoyées par l'API, jamais journalisées, jamais placées dans une URL (Google : en-tête `x-goog-api-key`, pas de paramètre `key=`). Une valeur vide ou faite d'espaces vaut « clé manquante ».
-- Types de fournisseur : `openai_compatible` | `anthropic` | `google`. Le faux fournisseur n'est pas un type : quand `AIC_FAKE_LLM=1` hors production, le registre le substitue à tous les adaptateurs et considère toutes les clés présentes.
-- Fournisseurs préconfigurés à la première installation : OpenAI (`openai_compatible`, `https://api.openai.com/v1`, `OPENAI_API_KEY`), Anthropic (`anthropic`, `https://api.anthropic.com`, `ANTHROPIC_API_KEY`), Google (`google`, `https://generativelanguage.googleapis.com/v1beta`, `GOOGLE_API_KEY`), Mistral (`openai_compatible`, `https://api.mistral.ai/v1`, `MISTRAL_API_KEY`), DeepSeek (`openai_compatible`, `https://api.deepseek.com/v1`, `DEEPSEEK_API_KEY`), OpenRouter (`openai_compatible`, `https://openrouter.ai/api/v1`, `OPENROUTER_API_KEY`) ; `max_concurrency` 2, `enabled` vrai.
+- **Clés API des fournisseurs** : saisies par l'Admin, stockées chiffrées en AES-256-GCM avec la clé maîtresse `APP_ENCRYPTION_KEY` (colonne `api_key_encrypted`, format `encryptSecret` de l'app AO) et ses 4 derniers caractères en clair (`api_key_last4`) pour l'affichage « …a4f2 ». Déchiffrées seulement au moment de l'appel ; jamais renvoyées par l'API (seul `last4`, et seulement à l'Admin), jamais journalisées, jamais écrites dans `audit_log`, jamais placées dans une URL (Google : en-tête `x-goog-api-key`). États d'une clé : `missing` (aucune), `stored` (déchiffrable), `unreadable` (déchiffrement impossible : `APP_ENCRYPTION_KEY` a changé).
+- `APP_ENCRYPTION_KEY` : **obligatoire**, 32 octets encodés en base64, validée au démarrage (message « APP_ENCRYPTION_KEY doit être une clé de 32 octets encodée en base64 »). C'est la seule nouvelle variable obligatoire.
+- Types de fournisseur : `openai_compatible` | `anthropic` | `google`. Le faux fournisseur n'est pas un type : quand `AIC_FAKE_LLM=1` hors production, le registre le substitue à tous les adaptateurs et considère tous les fournisseurs utilisables, avec ou sans clé.
+- Fournisseurs préconfigurés à la première installation, **sans clé** : OpenRouter (`openai_compatible`, `https://openrouter.ai/api/v1`), OpenAI (`openai_compatible`, `https://api.openai.com/v1`), Anthropic (`anthropic`, `https://api.anthropic.com`), Google (`google`, `https://generativelanguage.googleapis.com/v1beta`), Mistral (`openai_compatible`, `https://api.mistral.ai/v1`), DeepSeek (`openai_compatible`, `https://api.deepseek.com/v1`), Requesty (`openai_compatible`, `https://router.requesty.ai/v1`), Eden AI (`openai_compatible`, `https://api.edenai.run/v3`) ; `max_concurrency` 2, `enabled` vrai.
 - Prix connus préremplis par l'assistant (en $ par million de tokens, entrée / sortie, vérifiés le 2026-10-17) : `claude-opus-5-5` 4 / 20, `claude-sonnet-5-5` 2 / 10, `claude-haiku-5-5` 0,10 / 0,50.
 - Prix stockés en `DECIMAL(10,4)` ($ par million), exposés en nombres par l'API. Conversion OpenRouter : prix par token × 1 000 000, arrondi à 4 décimales ; prix négatif, absent ou non numérique → `null` (jamais « gratuit » par erreur).
 - Codes `ProviderError` : `auth_invalid`, `model_not_found`, `rate_limited`, `provider_unavailable`, `timeout`, `context_too_long`, `bad_request`, `invalid_response`. Nouvelle tentative possible pour `rate_limited`, `provider_unavailable`, `timeout` seulement.
-- Délais : interrogation `/models` 15 s (dans une requête HTTP, sous les 60 s du proxy Hostinger) ; téléchargement du catalogue OpenRouter 30 s ; les appels de génération reçoivent un `AbortSignal` (le délai de 120 s est posé par l'appelant, au plan 3).
+- Délais : `/models` et « Tester la connexion » 15 s (dans une requête HTTP, sous les 60 s du proxy Hostinger) ; téléchargement du catalogue OpenRouter 30 s ; les appels de génération reçoivent un `AbortSignal` (le délai de 120 s est posé par l'appelant, au plan 3).
 - Les adaptateurs ne font **aucune** nouvelle tentative réseau eux-mêmes (le SDK Anthropic est créé avec `maxRetries: 0`) : les tentatives appartiennent au moteur du plan 3. Seule exception : le renvoi sans `temperature` (Tasks 4 à 6).
 - `catalog_refresh` : tous les jours à `06:00` (Europe/Paris), source `https://openrouter.ai/api/v1/models`, publique, sans clé. Nouveautés = vues depuis moins de **30 jours**, hors première synchronisation, non écartées, absentes du catalogue local.
-- Nouvelles variables d'environnement : `AIC_FAKE_LLM` (`1` pour activer, ignorée en production avec un avertissement) et les clés des fournisseurs. Aucune n'est obligatoire.
+- `/health` : `{ status, db, worker, providers: { configured: number } }` (fournisseurs actifs et utilisables), aucune autre information sur les fournisseurs.
+- Variables d'environnement : `APP_ENCRYPTION_KEY` (obligatoire) et `AIC_FAKE_LLM` (`1` pour activer, ignorée en production avec un avertissement). Plus aucune variable de clé de fournisseur.
 - Les tests automatiques n'appellent jamais un fournisseur réel ni `openrouter.ai` : `fetch` est injecté et les flux viennent de `server/test/fixtures/`.
 
 ## Review Focus
 
 1. **Clé qui fuit par un message d'erreur** : un fournisseur (ou un proxy) renvoie un corps d'erreur qui recopie la clé ou l'en-tête `x-api-key` ; la clé n'apparaît ni dans la réponse de l'API, ni dans `error_events`, ni dans les journaux. → tests en Task 1 et Task 3.
-2. **Variable de clé détournée** : l'Admin nomme `DB_PASSWORD`, `CRON_SECRET`, `DATABASE_URL` ou `SMTP_PASS` comme variable de clé d'un fournisseur ; c'est refusé, sinon le secret partirait en en-tête `Authorization` vers l'URL du fournisseur. → tests en Task 9.
-3. **Flux découpé n'importe où** : un caractère UTF-8 coupé entre deux paquets, une ligne coupée, des fins de ligne `\r\n`, des commentaires `: OPENROUTER PROCESSING`, une ligne `data:` qui n'est pas du JSON ; le texte reconstitué est exact et le JSON invalide donne `invalid_response`, jamais un plantage. → tests en Task 2 et Task 4.
-4. **Catalogue OpenRouter partiel ou indisponible** : prix `"-1"` ou absents, modèle sans `architecture`, réponse 5xx ou délai dépassé ; aucun modèle n'apparaît « gratuit » à tort, et un échec de la première synchronisation ne la marque pas comme faite (la suivante reste silencieuse). → tests en Task 10.
-5. **Modèle qui refuse `temperature`** (Claude 5.x, modèles de raisonnement OpenAI) : 400 du fournisseur mentionnant `temperature` ; l'adaptateur renvoie la requête une fois sans ce paramètre et s'en souvient pour ce modèle. → tests en Task 4 et Task 5.
+2. **Clé qui réapparaît après sa saisie** : réponse de `POST` / `PATCH /api/providers`, `GET /api/providers` (Admin comme Utilisateur), `audit_log.details`, ligne brute de la table ; seule la forme chiffrée et `last4` (Admin) existent hors de la mémoire du processus. → tests en Task 9 et Task 10.
+3. **Clé maîtresse changée ou clé saisie vide** : `APP_ENCRYPTION_KEY` remplacée après l'enregistrement d'une clé → état `unreadable`, message « ressaisissez-la », aucun appel au fournisseur, aucune erreur 500 ; une clé vide, faite d'espaces ou contenant un retour à la ligne est refusée à la saisie. → tests en Task 8 et Task 10.
+4. **Flux découpé n'importe où** : un caractère UTF-8 coupé entre deux paquets, une ligne coupée, des fins de ligne `\r\n`, des commentaires `: OPENROUTER PROCESSING`, une ligne `data:` qui n'est pas du JSON ; le texte reconstitué est exact et le JSON invalide donne `invalid_response`, jamais un plantage. → tests en Task 2 et Task 4.
+5. **Catalogue OpenRouter partiel ou indisponible** : prix `"-1"` ou absents, modèle sans `architecture`, réponse 5xx, JSON sans tableau `data` ou délai dépassé ; aucun modèle n'apparaît « gratuit » à tort, et un échec de la première synchronisation ne la marque pas comme faite (la suivante reste silencieuse). → tests en Task 11.
+
+(Le renvoi sans `temperature`, ancien point 5, est couvert par les Tasks 4 à 6.)
 
 ---
 
@@ -42,6 +48,7 @@
 server/
   src/
     lib/sse.ts                               # lecteur SSE générique
+    lib/crypto.ts                            # + encryptSecret / decryptSecret (repris de l'app AO)
     db/schema/catalog.ts                     # providers, models, openrouter_catalog
     modules/providers/
       types.ts                               # ProviderAdapter, GenerateRequest, GenerateEvent, RemoteModel, ProviderConfig
@@ -49,7 +56,7 @@ server/
       temperature.ts                         # mémoire « ce modèle refuse temperature »
       openrouter.ts                          # isOpenRouter, parseOpenRouterModels
       openai-compatible.ts  anthropic.ts  google.ts  fake.ts
-      registry.ts                            # adaptateur + état de la clé, lus à l'appel
+      registry.ts                            # adaptateur + état de la clé, clé déchiffrée à l'appel ; sealApiKey
     modules/catalog/
       seed.ts                                # fournisseurs préconfigurés (première installation)
       known-prices.ts
@@ -60,7 +67,7 @@ server/
     openai/  anthropic/  google/  openrouter/   # flux SSE (.sse) et réponses /models (.json)
 web/src/
   api/catalog.ts
-  pages/admin/ProvidersPage.tsx  components/catalog/RemoteModelsDialog.tsx  components/catalog/ModelForm.tsx
+  pages/admin/ProvidersPage.tsx  components/catalog/{ProviderDialog,ApiKeyDialog,RemoteModelsDialog,ModelForm}.tsx
   pages/ModelsPage.tsx  pages/ModelPage.tsx  components/catalog/NewModelsCard.tsx
 ```
 
@@ -401,20 +408,54 @@ test('listModels : préfixe models/ retiré, pagination suivie, seuls les modèl
 
 ---
 
-### Task 7: Faux fournisseur et registre
+### Task 7: Chiffrement des clés et `APP_ENCRYPTION_KEY`
+
+**Files:**
+- Modify : `server/src/lib/crypto.ts` (ajout de `encryptSecret` / `decryptSecret`, repris de `$AO/server/src/lib/crypto.ts`), `server/src/config/config.ts`, `server/test/helpers/test-app.ts` (`testConfig`), `.env.example`
+- Test : `server/test/crypto.test.ts` (cas de chiffrement repris de `$AO/server/test/crypto.test.ts`), `server/test/config.test.ts`
+
+**Interfaces:**
+- Produces :
+  - `encryptSecret(plain: string, key: Buffer): string` (format `v1.<iv>.<tag>.<données>` en base64url, IV aléatoire de 12 octets, AES-256-GCM) et `decryptSecret(payload: string, key: Buffer): string` (lève si la clé, le format ou l'étiquette d'authentification sont invalides) — copie de `$AO`, constantes comprises.
+  - `AppConfig` étendu : `encryptionKey: Buffer` (32 octets).
+  - `testConfig()` : `encryptionKey` = 32 octets fixes (par exemple `Buffer.alloc(32, 7)`).
+
+- [ ] **Step 1: Écrire les tests qui échouent** — reprendre de `$AO/server/test/crypto.test.ts` les cas de chiffrement (aller-retour, deux chiffrements différents du même texte, mauvaise clé, données ou étiquette altérées, format malformé, clé de mauvaise longueur). Dans `config.test.ts`, **remplacer** le test « APP_ENCRYPTION_KEY n'est plus exigée » et ajouter `APP_ENCRYPTION_KEY: Buffer.alloc(32, 1).toString('base64')` à `base` :
+
+```ts
+test('APP_ENCRYPTION_KEY obligatoire', () => { const { APP_ENCRYPTION_KEY: _, ...env } = base; expect(() => loadConfig(env)).toThrow(/APP_ENCRYPTION_KEY/); });
+test('APP_ENCRYPTION_KEY de mauvaise longueur refusée', () => {
+  expect(() => loadConfig({ ...base, APP_ENCRYPTION_KEY: Buffer.alloc(16).toString('base64') })).toThrow(/32 octets/);
+});
+test('APP_ENCRYPTION_KEY décodée en 32 octets', () => { expect(loadConfig(base).encryptionKey).toHaveLength(32); });
+```
+
+- [ ] **Step 2: Vérifier l'échec** — Run: `npx vitest run --project server server/test/crypto.test.ts server/test/config.test.ts` — Expected: FAIL.
+
+- [ ] **Step 3: Implémenter** — copie des deux fonctions (et de leurs constantes) ; `config.ts` comme `$AO/server/src/config/config.ts` (`APP_ENCRYPTION_KEY` obligatoire, décodée en base64, 32 octets exactement, message de la Global Constraint). `.env.example` : `APP_ENCRYPTION_KEY=` avec la commande de génération en commentaire. Si un fichier `.env` local existe (non versionné), y ajouter une clé générée pour que `npm run dev` démarre.
+
+- [ ] **Step 4: Vérifier le succès** — Run: `npx vitest run --project server && npm run typecheck` — Expected: PASS (dont `entry.test.ts`, qui attend toujours « Configuration invalide » sans variables).
+
+- [ ] **Step 5: Commit** — `git commit -m "feat: chiffrement des clés des fournisseurs (APP_ENCRYPTION_KEY)"`
+
+---
+
+### Task 8: Faux fournisseur et registre
 
 **Files:**
 - Create : `server/src/modules/providers/fake.ts`, `server/src/modules/providers/registry.ts`
 - Test : `server/test/fake-provider.test.ts`, `server/test/registry.test.ts`
 
 **Interfaces:**
-- Consumes : tous les adaptateurs (Tasks 4 à 6), `ProviderError`.
+- Consumes : tous les adaptateurs (Tasks 4 à 6), `ProviderError`, `httpError` (Task 3), `encryptSecret` / `decryptSecret` (Task 7), `AppError`.
 - Produces :
   - `FAKE_MODELS: RemoteModel[]` — `fake-rapide` (premier token 300 ms, 120 tokens/s, 0,50 $ / 1,50 $), `fake-equilibre` (800 ms, 60 tokens/s, 2 $ / 8 $), `fake-lent` (2 000 ms, 25 tokens/s, 0,20 $ / 0,60 $), `fake-instable` (600 ms, 50 tokens/s, 1 $ / 3 $, 25 % d'erreurs 429 ou 500), `fake-vision` (500 ms, 80 tokens/s, 3 $ / 12 $, image et PDF). Seul `fake-vision` déclare `supportsVision` et `supportsPdf` vrais ; les autres faux.
-  - `createFakeAdapter(opts?: { sleep?: (ms: number, signal: AbortSignal) => Promise<void>; seed?: number }): ProviderAdapter` — déterministe pour (graine, modèle, prompt) ; jitter de ±20 % sur la latence et le débit ; texte français déterministe, borné à `maxTokens` (≈ 4 caractères par token) ; usage simulé (entrée = caractères du système et du prompt ÷ 4, plus 1 500 par image et 800 par PDF ; sortie = tokens générés) ; `costUsd` absent. Directives dans le prompt, prioritaires sur le hasard : `[[fake:429]]`, `[[fake:500]]` (lèvent la `ProviderError` correspondante avant tout texte), `[[fake:timeout]]` (n'émet rien jusqu'à l'annulation du signal), `[[fake:refusal]]`, `[[fake:length]]`, `[[fake:cut]]` (texte puis fin du flux sans `usage` ni `finish`), `[[fake:reasoning]]` (événements `reasoning` avant le texte). Modèle inconnu → `model_not_found`.
-  - `type KeyStatus = { apiKeyEnv: string | null; keyRequired: boolean; keyPresent: boolean; fake: boolean }`
-  - `type ProviderLike = { id: string; type: 'openai_compatible' | 'anthropic' | 'google'; baseUrl: string; apiKeyEnv: string | null }` (une ligne de la table `providers` de la Task 8 la satisfait)
-  - `createProviderRegistry(deps: { env?: NodeJS.ProcessEnv; fakeLlm: boolean; appBaseUrl: string; fetch?: typeof fetch; fakeSleep?: (ms: number, signal: AbortSignal) => Promise<void> })` → `{ keyStatus(p: Pick<ProviderLike, 'apiKeyEnv'>): KeyStatus; adapterFor(p: ProviderLike): ProviderAdapter }` ; `env` vaut `process.env` par défaut et est lu à chaque appel ; `adapterFor` lève `KeyMissingError` (`AppError` code `key_missing`, statut 409, message « Clé manquante : renseignez la variable <NOM> dans hPanel puis appliquez les modifications ») si la clé est requise et absente ; en mode faux, renvoie le faux adaptateur pour tout fournisseur.
+  - `createFakeAdapter(opts?: { sleep?: (ms: number, signal: AbortSignal) => Promise<void>; seed?: number }): ProviderAdapter` — déterministe pour (graine, modèle, prompt) ; jitter de ±20 % sur la latence et le débit ; texte français déterministe, borné à `maxTokens` (≈ 4 caractères par token) ; usage simulé (entrée = caractères du système et du prompt ÷ 4, plus 1 500 par image et 800 par PDF ; sortie = tokens générés) ; `costUsd` absent. Directives dans le prompt, prioritaires sur le hasard : `[[fake:429]]`, `[[fake:500]]` (lèvent la `ProviderError` correspondante, construite par `httpError`, avant tout texte), `[[fake:timeout]]` (n'émet rien et relance `signal.reason` à l'annulation), `[[fake:refusal]]`, `[[fake:length]]`, `[[fake:cut]]` (texte puis fin du flux sans `usage` ni `finish`), `[[fake:reasoning]]` (événements `reasoning` avant le texte). Modèle inconnu → `model_not_found`.
+  - `type ProviderLike = { id: string; name: string; type: 'openai_compatible' | 'anthropic' | 'google'; baseUrl: string; apiKeyEncrypted: string | null; apiKeyLast4: string | null }` (une ligne de la table `providers` de la Task 9 la satisfait)
+  - `type KeyState = 'missing' | 'stored' | 'unreadable'` ; `type KeyStatus = { state: KeyState; last4: string | null; usable: boolean; fake: boolean }` (`usable` = `state === 'stored'`, ou mode faux)
+  - `sealApiKey(plain: string, encryptionKey: Buffer): { apiKeyEncrypted: string; apiKeyLast4: string | null }` — `trim()`, refuse (`ValidationError` code `validation`, message « Clé API invalide : 8 à 500 caractères imprimables, sans espace ») tout ce qui ne correspond pas à `^[\x21-\x7E]{8,500}$` ; `apiKeyLast4` = 4 derniers caractères si la clé en compte au moins 12, sinon `null`.
+  - `KeyMissingError` (`AppError` code `key_missing`, statut 409, « Aucune clé enregistrée pour ce fournisseur : saisissez-la dans l'écran Fournisseurs ») et `KeyUnreadableError` (code `key_unreadable`, statut 409, « Clé illisible (APP_ENCRYPTION_KEY a changé) : ressaisissez-la dans l'écran Fournisseurs »).
+  - `createProviderRegistry(deps: { encryptionKey: Buffer; fakeLlm: boolean; appBaseUrl: string; fetch?: typeof fetch; fakeSleep?: (ms: number, signal: AbortSignal) => Promise<void> })` → `{ keyStatus(p: Pick<ProviderLike, 'apiKeyEncrypted' | 'apiKeyLast4'>): KeyStatus; adapterFor(p: ProviderLike): ProviderAdapter }` ; aucune clé ni adaptateur mis en cache : chaque `adapterFor` déchiffre et construit un `ProviderConfig` neuf ; en mode faux, le faux adaptateur pour tout fournisseur.
   - `type Registry = ReturnType<typeof createProviderRegistry>`
 
 - [ ] **Step 1: Écrire les tests qui échouent**
@@ -431,33 +472,40 @@ test('[[fake:timeout]] attend l’annulation', async () => { /* AbortSignal.time
 test('[[fake:cut]] : ni usage ni finish', async () => { /* … */ });
 test('listModels renvoie FAKE_MODELS', async () => { expect((await adapter.listModels(sig)).map((m) => m.id)).toContain('fake-vision'); });
 // server/test/registry.test.ts
-test('clé présente, absente, faite d’espaces', () => {
-  const r = createProviderRegistry({ env: { A_API_KEY: 'k-0123456789', B_API_KEY: '   ' }, fakeLlm: false, appBaseUrl: 'http://x' });
-  expect(r.keyStatus({ apiKeyEnv: 'A_API_KEY' }).keyPresent).toBe(true);
-  expect(r.keyStatus({ apiKeyEnv: 'B_API_KEY' }).keyPresent).toBe(false);
-  expect(r.keyStatus({ apiKeyEnv: 'C_API_KEY' }).keyPresent).toBe(false);
-  expect(r.keyStatus({ apiKeyEnv: null })).toMatchObject({ keyRequired: false, keyPresent: true });
+const key = Buffer.alloc(32, 7);
+test('sealApiKey : chiffre, garde les 4 derniers caractères, refuse les clés invalides', () => {
+  const s = sealApiKey('  sk-test-0123456789abcd  ', key);
+  expect(s.apiKeyEncrypted).not.toContain('0123456789'); expect(decryptSecret(s.apiKeyEncrypted, key)).toBe('sk-test-0123456789abcd');
+  expect(s.apiKeyLast4).toBe('abcd'); expect(sealApiKey('court-1234', key).apiKeyLast4).toBeNull();
+  for (const bad of ['', '   ', 'abc', 'sk-avec espace-123', 'sk-ligne\n-12345']) expect(() => sealApiKey(bad, key)).toThrow(/Clé API invalide/);
 });
-test('clé lue à l’appel : ajoutée après la création du registre, elle est prise en compte', () => { env.A_API_KEY = 'k-…'; expect(r.keyStatus(p).keyPresent).toBe(true); });
-test('clé absente → key_missing (409)', () => { expect(() => r.adapterFor(row)).toThrow(expect.objectContaining({ code: 'key_missing', status: 409 })); });
-test('type → adaptateur : openai_compatible, anthropic, google', async () => { /* vérifier par l’URL appelée via fetch injecté */ });
-test('mode faux : clés présentes, faux adaptateur pour tout fournisseur', async () => {
-  expect(rf.keyStatus({ apiKeyEnv: 'ABSENTE_API_KEY' })).toMatchObject({ keyPresent: true, fake: true });
+test('états de clé : missing, stored, unreadable', () => {
+  const r = createProviderRegistry({ encryptionKey: key, fakeLlm: false, appBaseUrl: 'http://x' });
+  expect(r.keyStatus({ apiKeyEncrypted: null, apiKeyLast4: null })).toEqual({ state: 'missing', last4: null, usable: false, fake: false });
+  expect(r.keyStatus(sealApiKey('sk-test-0123456789abcd', key))).toMatchObject({ state: 'stored', last4: 'abcd', usable: true });
+  expect(r.keyStatus(sealApiKey('sk-test-0123456789abcd', Buffer.alloc(32, 9)))).toMatchObject({ state: 'unreadable', usable: false });
+});
+test('adapterFor : key_missing et key_unreadable (409), sans appel réseau', () => { /* fetch injecté : aucun appel */ });
+test('type → adaptateur, clé déchiffrée transmise : openai_compatible (Bearer), anthropic (x-api-key), google (x-goog-api-key)', async () => {
+  // listModels via fetch injecté ; l'en-tête porte la clé en clair
+});
+test('mode faux : tout fournisseur utilisable, même sans clé', async () => {
+  expect(rf.keyStatus({ apiKeyEncrypted: null, apiKeyLast4: null })).toMatchObject({ usable: true, fake: true });
   expect((await rf.adapterFor(row).listModels(sig))[0]!.id).toMatch(/^fake-/);
 });
 ```
 
 - [ ] **Step 2: Vérifier l'échec** — Run: `npx vitest run --project server server/test/fake-provider.test.ts server/test/registry.test.ts` — Expected: FAIL.
 
-- [ ] **Step 3: Implémenter** — PRNG `mulberry32` amorcé par un hachage FNV-1a de `seed|model|prompt` ; `sleep` par défaut = `setTimeout` annulable par le signal. Le registre construit `ProviderConfig` à chaque `adapterFor` avec la clé `trim()`ée.
+- [ ] **Step 3: Implémenter** — PRNG `mulberry32` amorcé par un hachage FNV-1a de `seed|model|prompt` ; `sleep` par défaut = `setTimeout` annulable par le signal. `keyStatus` tente `decryptSecret` (une exception → `unreadable`).
 
 - [ ] **Step 4: Vérifier le succès** — même commande, puis `npm run typecheck` — Expected: PASS.
 
-- [ ] **Step 5: Commit** — `git add -A && git commit -m "feat: faux fournisseur et registre des clés"`
+- [ ] **Step 5: Commit** — `git commit -m "feat: faux fournisseur et registre des clés chiffrées"`
 
 ---
 
-### Task 8: Schéma du catalogue, migration et fournisseurs préconfigurés
+### Task 9: Schéma du catalogue, migration et fournisseurs préconfigurés
 
 **Files:**
 - Create : `server/src/db/schema/catalog.ts`, `server/drizzle/0001_*.sql` (généré), `server/src/modules/catalog/seed.ts`
@@ -466,30 +514,34 @@ test('mode faux : clés présentes, faux adaptateur pour tout fournisseur', asyn
 
 **Interfaces:**
 - Produces :
-  - `providers` : `id`, `name` (varchar 100, unique), `type` (enum `openai_compatible` | `anthropic` | `google`), `baseUrl` (varchar 500), `apiKeyEnv` (varchar 64, nullable), `maxConcurrency` (int, défaut 2), `enabled` (bool, défaut vrai), `createdAt`, `updatedAt`.
+  - `providers` : `id`, `name` (varchar 100, unique), `type` (enum `openai_compatible` | `anthropic` | `google`), `baseUrl` (varchar 500), `apiKeyEncrypted` (`TEXT`, nullable), `apiKeyLast4` (varchar 4, nullable), `maxConcurrency` (int, défaut 2), `enabled` (bool, défaut vrai), `createdAt`, `updatedAt`.
   - `models` : `id`, `providerId` (FK `providers.id`, `ON DELETE RESTRICT`), `apiModelId` (varchar 200), `displayName` (varchar 200), `color` (char 7), `inputPricePerM` et `outputPricePerM` (`DECIMAL(10,4)` non nuls, défaut 0), `priceSource` (enum `manual` | `openrouter`, défaut `manual`), `supportsVision`, `supportsPdf` (bool, défaut faux), `contextWindow` (int, nullable), `enabled` (bool, défaut vrai), `createdAt`, `updatedAt` ; unique (`providerId`, `apiModelId`).
   - `openrouterCatalog` (`openrouter_catalog`) : `id`, `openrouterId` (varchar 200, unique), `name` (varchar 300), `inputPricePerM`, `outputPricePerM` (`DECIMAL(10,4)`, nullables), `inputModalities` (JSON, tableau de chaînes), `contextWindow` (int, nullable), `initialSync` (bool : ajoutée par la première synchronisation, jamais présentée comme nouveauté), `firstSeenAt`, `lastSeenAt`, `dismissedAt` (nullable) ; index sur `firstSeenAt`.
   - Colonnes décimales lues et écrites en `number` (`decimal(..., { mode: 'number' })` de Drizzle).
-  - `PRESET_PROVIDERS` (les six des Global Constraints) ; `seedProviders(db: Db, now: Date): Promise<'seeded' | 'skipped'>` — insère les fournisseurs préconfigurés une seule fois dans la vie de la base (réglage `catalog.seeded_at` dans `settings`), sans écraser un fournisseur de même nom.
+  - `PRESET_PROVIDERS` (les huit des Global Constraints, sans clé) ; `seedProviders(db: Db, now: Date): Promise<'seeded' | 'skipped'>` — insère les fournisseurs préconfigurés une seule fois dans la vie de la base (réglage `catalog.seeded_at` dans `settings`), sans écraser un fournisseur de même nom.
 
 - [ ] **Step 1: Écrire les tests qui échouent**
 
 ```ts
 test('migration : tables providers, models, openrouter_catalog', async () => { /* SELECT sur chacune */ });
-test('premier démarrage : six fournisseurs préconfigurés, une seule fois', async () => {
-  expect(await seedProviders(db, now)).toBe('seeded'); expect(await count(providers)).toBe(6);
+test('premier démarrage : huit fournisseurs préconfigurés sans clé, une seule fois', async () => {
+  expect(await seedProviders(db, now)).toBe('seeded'); expect(await count(providers)).toBe(8);
+  expect((await db.select().from(providers)).every((p) => p.apiKeyEncrypted === null)).toBe(true);
   await db.delete(providers).where(eq(providers.name, 'DeepSeek'));
-  expect(await seedProviders(db, now)).toBe('skipped'); expect(await count(providers)).toBe(5);
+  expect(await seedProviders(db, now)).toBe('skipped'); expect(await count(providers)).toBe(7);
 });
-test('deux démarrages simultanés → six fournisseurs, pas douze', async () => {
-  await Promise.all([prepareDatabase(deps), prepareDatabase(deps)]); expect(await count(providers)).toBe(6);
+test('deux démarrages simultanés → huit fournisseurs, pas seize', async () => {
+  await Promise.all([prepareDatabase(deps), prepareDatabase(deps)]); expect(await count(providers)).toBe(8);
 });
 test('un modèle est unique par fournisseur ; prix lus en nombres', async () => {
   // insertion de { inputPricePerM: 0.1, outputPricePerM: 0.5 } → relu { inputPricePerM: 0.1, outputPricePerM: 0.5 } ; doublon → Duplicate
 });
-test('aucune colonne ne peut contenir une clé : pas de colonne api_key ni secret', async () => {
-  const [rows] = await poolOf(db).query("SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND COLUMN_NAME REGEXP 'api_key$|secret'");
-  expect(rows).toEqual([]); // api_key_env ne correspond pas au motif
+test('aucune colonne de clé en clair (api_key, api_key_env)', async () => {
+  const [rows] = await poolOf(db).query("SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND COLUMN_NAME IN ('api_key', 'api_key_env')");
+  expect(rows).toEqual([]);
+});
+test('ligne brute d’un fournisseur muni d’une clé : jamais la clé en clair', async () => {
+  // insertion avec sealApiKey('sk-test-0123456789abcd', key) puis SELECT * en SQL brut : JSON.stringify(rows) ne contient pas '0123456789abcd' hors des 4 derniers caractères
 });
 ```
 
@@ -501,90 +553,95 @@ test('aucune colonne ne peut contenir une clé : pas de colonne api_key ni secre
 
 - [ ] **Step 5: Vérifier le succès** — Run: `npx vitest run --project server && npm run typecheck` — Expected: PASS.
 
-- [ ] **Step 6: Commit** — `git add -A && git commit -m "feat: tables du catalogue, migration et fournisseurs préconfigurés"`
+- [ ] **Step 6: Commit** — `git commit -m "feat: tables du catalogue, migration et fournisseurs préconfigurés"`
 
 ---
 
-### Task 9: API des fournisseurs et des modèles, assistant `/models`, `/health`
+### Task 10: API des fournisseurs et des modèles, « Tester la connexion », assistant `/models`, `/health`
 
 **Files:**
 - Create : `server/src/modules/catalog/providers.repo.ts`, `models.repo.ts`, `catalog.service.ts`, `catalog.routes.ts`
-- Modify : `server/src/app.ts` (`AppDeps.registry`, enregistrement des routes, `/health`), `server/src/index.ts`, `server/test/helpers/test-app.ts` (`buildTestApp({ env?, fakeLlm?, fetch? })` avec `env` vide par défaut, jamais `process.env` ; `seedProvider(db, overrides)`, `seedModel(db, overrides)`)
+- Modify : `server/src/app.ts` (`AppDeps.registry`, enregistrement des routes, `/health`), `server/src/index.ts`, `server/test/helpers/test-app.ts` (`buildTestApp({ fakeLlm?, fetch? })` ; `seedProvider(db, overrides & { apiKey?: string })`, `seedModel(db, overrides)`)
 - Test : `server/test/catalog-api.test.ts`, `server/test/health.test.ts`
 
 **Interfaces:**
-- Consumes : `Registry`, `KeyStatus`, `ProviderError` (Task 7, Task 3), tables (Task 8), `KNOWN_PRICES` (Task 5), `audit` et `app.requireAdmin` (plan 1).
+- Consumes : `Registry`, `KeyStatus`, `sealApiKey`, `KeyMissingError`, `KeyUnreadableError` (Task 8), `ProviderError` (Task 3), tables et `seedProviders` (Task 9), `KNOWN_PRICES` (Task 5), `audit` et `app.requireAdmin` (plan 1).
 - Produces :
   - `AppDeps` étendu : `registry: Registry`.
-  - `type PublicProvider = { id; name; type; baseUrl; apiKeyEnv: string | null; maxConcurrency; enabled; keyRequired: boolean; keyPresent: boolean; fake: boolean; modelCount: number }`
-  - `type PublicModel = { id; providerId; providerName; providerType; apiModelId; displayName; color; inputPricePerM: number; outputPricePerM: number; priceSource; supportsVision; supportsPdf; contextWindow: number | null; enabled; keyPresent: boolean; available: boolean; createdAt: string }` (`available` = modèle et fournisseur actifs et clé présente : seul critère de sélection pour le plan 3).
+  - `type PublicProvider = { id; name; type; baseUrl; maxConcurrency; enabled; keyState: KeyState; keyLast4: string | null; usable: boolean; fake: boolean; modelCount: number }` (`keyLast4` toujours `null` pour un Utilisateur).
+  - `type PublicModel = { id; providerId; providerName; providerType; apiModelId; displayName; color; inputPricePerM: number; outputPricePerM: number; priceSource; supportsVision; supportsPdf; contextWindow: number | null; enabled; available: boolean; createdAt: string }` (`available` = modèle et fournisseur actifs et fournisseur `usable` : seul critère de sélection pour le plan 3).
   - `type RemoteModelView = RemoteModel & { alreadyAdded: boolean }`
-  - `createCatalogService(deps: { db; registry; clock })` → `listProviders()`, `createProvider(actor, input)`, `updateProvider(actor, id, patch)`, `remoteModels(id): Promise<RemoteModelView[]>`, `listModels(actor)`, `getModel(id): Promise<PublicModel & { provider: PublicProvider }>`, `createModel(actor, input)`, `updateModel(actor, id, patch)`, `keyPresence(): Promise<{ name: string; keyPresent: boolean }[]>`
-  - Routes : `GET /api/providers` (connecté) ; **A** `POST /api/providers`, `PATCH /api/providers/:id`, `GET /api/providers/:id/remote-models` ; `GET /api/models` (connecté ; un Utilisateur ne voit que les modèles `enabled`) ; `GET /api/models/:id` (connecté ; 404 pour un Utilisateur si désactivé) ; **A** `POST /api/models`, `PATCH /api/models/:id`.
-  - Validation Zod : fournisseur `name` 1 à 100 ; `baseUrl` URL `https:`, ou `http:` seulement vers `localhost` / `127.0.0.1` (Ollama) ; `apiKeyEnv` `null` ou `^[A-Z][A-Z0-9_]{0,55}_API_KEY$` et hors liste interdite (`DATABASE_URL`, `DB_PASSWORD`, `CRON_SECRET`, `SMTP_PASS`, `BOOTSTRAP_ADMIN_PASSWORD`, tout nom commençant par `DB_` ou `SMTP_`) ; `maxConcurrency` 1 à 10. Modèle : `apiModelId` 1 à 200, `displayName` 1 à 200, `color` `^#[0-9A-Fa-f]{6}$` (défaut : couleur de la palette choisie par hachage de `apiModelId`), prix 0 à 100 000 avec 4 décimales au plus, `contextWindow` entier positif ou `null`.
-  - Codes d'erreur : `provider_name_taken` (409), `model_exists` (409), `key_missing` (409), `provider_error` (502, champ supplémentaire `providerCode`, message = celui de la `ProviderError`).
-  - `/health` : `{ status, db, worker, providers: { name: string; keyPresent: boolean }[] }` (fournisseurs actifs, triés par nom, booléens seulement).
-  - Audit : `provider_created`, `provider_updated`, `model_created`, `model_updated`.
+  - `type ConnectionTest = { ok: true; modelCount: number; latencyMs: number } | { ok: false; code: string; message: string }`
+  - `createCatalogService(deps: { db; registry; clock; config: Pick<AppConfig, 'encryptionKey'> })` → `listProviders(actor)`, `createProvider(actor, input)`, `updateProvider(actor, id, patch)`, `testConnection(id): Promise<ConnectionTest>`, `remoteModels(id): Promise<RemoteModelView[]>`, `listModels(actor)`, `getModel(actor, id): Promise<PublicModel & { provider: PublicProvider }>`, `createModel(actor, input)`, `updateModel(actor, id, patch)`, `configuredCount(): Promise<number>`
+  - Routes : `GET /api/providers` (connecté) ; **A** `POST /api/providers`, `PATCH /api/providers/:id`, `POST /api/providers/:id/test`, `GET /api/providers/:id/remote-models` ; `GET /api/models` (connecté ; un Utilisateur ne voit que les modèles `enabled`) ; `GET /api/models/:id` (connecté ; 404 pour un Utilisateur si désactivé) ; **A** `POST /api/models`, `PATCH /api/models/:id`.
+  - Validation Zod : fournisseur `name` 1 à 100 ; `type` ; `baseUrl` URL `https:`, ou `http:` seulement vers `localhost` / `127.0.0.1` ; `maxConcurrency` 1 à 10 ; `apiKey` facultatif à la création, en écriture seule (passé à `sealApiKey`) ; au `PATCH`, `apiKey: string` remplace la clé et `apiKey: null` la supprime. Modèle : `apiModelId` 1 à 200, `displayName` 1 à 200, `color` `^#[0-9A-Fa-f]{6}$` (défaut : couleur de la palette choisie par hachage de `apiModelId`), prix 0 à 100 000 avec 4 décimales au plus, `contextWindow` entier positif ou `null`.
+  - `testConnection` : `registry.adapterFor(p).listModels(AbortSignal.timeout(15_000))` ; succès → `{ ok: true, modelCount, latencyMs }` ; `ProviderError`, `KeyMissingError` ou `KeyUnreadableError` → `{ ok: false, code, message }` (réponse 200 : c'est un résultat de test, pas une erreur de l'API).
+  - Codes d'erreur des autres routes : `provider_name_taken` (409), `model_exists` (409), `key_missing` (409), `key_unreadable` (409), `provider_error` (502, champ supplémentaire `providerCode`, message = celui de la `ProviderError`).
+  - `/health` : `{ status, db, worker, providers: { configured: number } }`.
+  - Audit : `provider_created`, `provider_updated` (détails : noms des champs modifiés et `keyChanged: 'replaced' | 'removed' | null`, jamais la valeur), `model_created`, `model_updated`.
 
 - [ ] **Step 1: Écrire les tests qui échouent**
 
 ```ts
-test('GET /api/providers : état des clés, jamais leur valeur', async () => {
-  // buildTestApp({ env: { OPENAI_API_KEY: 'sk-test-0123456789abcdef' } }) puis seedProviders
-  const res = await get('/api/providers', userSession);
-  expect(res.json().providers.find((p) => p.name === 'OpenAI')).toMatchObject({ apiKeyEnv: 'OPENAI_API_KEY', keyPresent: true });
-  expect(res.json().providers.find((p) => p.name === 'Mistral').keyPresent).toBe(false);
-  expect(res.body).not.toContain('sk-test-0123456789abcdef');
+test('POST /api/providers avec clé : chiffrée, jamais renvoyée, last4 pour l’Admin seulement', async () => {
+  const res = await post('/api/providers', { name: 'Requesty bis', type: 'openai_compatible', baseUrl: 'https://router.requesty.ai/v1', apiKey: 'rq-test-0123456789wxyz' }, admin);
+  expect(res.statusCode).toBe(201); expect(res.json().provider).toMatchObject({ keyState: 'stored', keyLast4: 'wxyz', usable: true });
+  expect(res.body).not.toContain('0123456789');
+  expect((await get('/api/providers', user)).json().providers.find((p) => p.name === 'Requesty bis')).toMatchObject({ keyState: 'stored', keyLast4: null });
+  expect(JSON.stringify(await auditRows(db))).not.toContain('0123456789');
 });
-test.each(['DB_PASSWORD', 'CRON_SECRET', 'DATABASE_URL', 'SMTP_PASS', 'BOOTSTRAP_ADMIN_PASSWORD', 'DB_API_KEY', 'mistral_api_key', 'MISTRAL'])('apiKeyEnv %s refusé', async (name) => {
-  expect((await post('/api/providers', { name: 'X', type: 'openai_compatible', baseUrl: 'https://x.test/v1', apiKeyEnv: name }, admin)).json().error.code).toBe('validation');
+test('PATCH : remplacer puis supprimer la clé', async () => { /* apiKey nouvelle → last4 change ; apiKey null → keyState missing */ });
+test('clé invalide (vide, espaces, retour à la ligne) → 400 validation', async () => { /* … */ });
+test('clé chiffrée avec une autre APP_ENCRYPTION_KEY → keyState unreadable ; test et remote-models le disent sans appel réseau', async () => {
+  // seedProvider avec une clé chiffrée par Buffer.alloc(32, 9)
+  expect((await post(`/api/providers/${id}/test`, {}, admin)).json()).toMatchObject({ ok: false, code: 'key_unreadable' });
+  expect((await get(`/api/providers/${id}/remote-models`, admin)).json().error.code).toBe('key_unreadable'); expect(fetchMock.calls).toHaveLength(0);
 });
 test('baseUrl http:// refusée sauf localhost', async () => { /* http://evil.test → 400 ; http://localhost:11434/v1 → 201 */ });
+test('Tester la connexion : succès, puis 401 du fournisseur → ok false auth_invalid, sans la clé', async () => {
+  expect(ok.json()).toMatchObject({ ok: true, modelCount: 2 });
+  expect(ko.json()).toMatchObject({ ok: false, code: 'auth_invalid', message: 'Clé invalide ou sans droit sur ce modèle' }); expect(ko.body).not.toContain(key);
+});
 test('remote-models : liste du fournisseur, modèles déjà ajoutés marqués', async () => {
-  // fetch injecté : GET https://api.mistral.ai/v1/models → fixture ; un modèle déjà en base
   expect(res.json().models).toEqual(expect.arrayContaining([expect.objectContaining({ id: 'mistral-large', alreadyAdded: true })]));
 });
-test('remote-models sans clé → 409 key_missing', async () => { /* … */ });
-test('remote-models : 401 du fournisseur → 502 provider_error / auth_invalid, sans la clé', async () => {
-  expect(res.statusCode).toBe(502); expect(res.json().error).toMatchObject({ code: 'provider_error', providerCode: 'auth_invalid' });
-  expect(res.body).not.toContain(key);
-});
-test('remote-models : fournisseur muet → réponse en moins de 16 s, code timeout', async () => { /* fetch qui ne répond jamais ; horloge réelle, vi.useFakeTimers interdit ici */ }, 20_000);
+test('remote-models sans clé → 409 key_missing ; 401 du fournisseur → 502 provider_error / auth_invalid', async () => { /* … */ });
+test('remote-models : fournisseur muet → réponse en moins de 16 s, code timeout', async () => { /* fetch qui ne répond jamais ; horloge réelle */ }, 20_000);
 test('créer un modèle, doublon → 409 model_exists', async () => { /* … */ });
 test('prix : 4 décimales au plus, négatif refusé', async () => { /* 0.12345 → validation ; -1 → validation */ });
-test('available : faux si clé absente, fournisseur ou modèle désactivé', async () => { /* … */ });
-test('Utilisateur : 403 sur POST/PATCH providers et models et remote-models ; modèles désactivés invisibles', async () => { /* … */ });
-test('chaque modification est auditée', async () => { /* … */ });
+test('available : faux si clé absente ou illisible, fournisseur ou modèle désactivé', async () => { /* … */ });
+test('Utilisateur : 403 sur POST/PATCH providers et models, test et remote-models ; modèles désactivés invisibles', async () => { /* … */ });
+test('chaque modification est auditée, sans valeur de clé', async () => { /* … */ });
 // server/test/health.test.ts (remplace le test d’égalité existant)
-test('GET /health : présence des clés par fournisseur actif', async () => {
-  expect(res.json()).toEqual({ status: 'ok', db: 'ok', worker: 'stopped', providers: expect.arrayContaining([{ name: 'OpenAI', keyPresent: true }, { name: 'Mistral', keyPresent: false }]) });
-  expect(res.body).not.toContain('sk-test');
+test('GET /health : nombre de fournisseurs configurés seulement', async () => {
+  // huit préconfigurés sans clé + un avec clé
+  expect(res.json()).toEqual({ status: 'ok', db: 'ok', worker: 'stopped', providers: { configured: 1 } });
 });
 ```
 
 - [ ] **Step 2: Vérifier l'échec** — Run: `npx vitest run --project server server/test/catalog-api.test.ts server/test/health.test.ts` — Expected: FAIL.
 
-- [ ] **Step 3: Implémenter** — `remoteModels` appelle `registry.adapterFor(p).listModels(AbortSignal.timeout(15_000))`, convertit une `ProviderError` en `AppError('provider_error', 502, message, { providerCode })`, complète les prix par `KNOWN_PRICES` quand ils sont `null`, trie par id. `index.ts` : `createProviderRegistry({ fakeLlm: config.fakeLlm, appBaseUrl: config.appBaseUrl })` (avec `process.env`). En mode faux, un journal d'information au démarrage : « Faux fournisseur actif (AIC_FAKE_LLM=1) : aucun appel réel ».
+- [ ] **Step 3: Implémenter** — `remoteModels` convertit une `ProviderError` en `AppError('provider_error', 502, message, { providerCode })`, complète les prix par `KNOWN_PRICES` quand ils sont `null`, trie par id. `index.ts` : `createProviderRegistry({ encryptionKey: config.encryptionKey, fakeLlm: config.fakeLlm, appBaseUrl: config.appBaseUrl })` ; en mode faux, un journal d'information au démarrage : « Faux fournisseur actif (AIC_FAKE_LLM=1) : aucun appel réel ».
 
 - [ ] **Step 4: Vérifier le succès** — Run: `npx vitest run --project server && npm run typecheck` — Expected: PASS.
 
-- [ ] **Step 5: Commit** — `git add -A && git commit -m "feat: API des fournisseurs et des modèles, assistant /models et clés dans /health"`
+- [ ] **Step 5: Commit** — `git commit -m "feat: API des fournisseurs (clés chiffrées, test de connexion), des modèles et /health"`
 
 ---
 
-### Task 10: Synchronisation du catalogue OpenRouter et nouveautés
+### Task 11: Synchronisation du catalogue OpenRouter et nouveautés
 
 **Files:**
 - Create : `server/src/modules/catalog/openrouter-sync.ts`
 - Modify : `server/src/modules/jobs/handlers.ts` (`catalog_refresh`), `server/src/modules/jobs/schedules.ts` (`catalog-refresh` à `06:00`), `server/src/modules/catalog/catalog.service.ts`, `catalog.routes.ts`, `server/test/helpers/test-app.ts`
-- Create (fixtures) : `server/test/fixtures/openrouter/models-day2.json`
+- Create (fixtures) : `server/test/fixtures/openrouter/models-day2.json` (le contenu de `models.json` plus un modèle `newlab/model-x`)
 - Test : `server/test/openrouter-sync.test.ts`, `server/test/scheduler.test.ts` (ajout)
 
 **Interfaces:**
-- Consumes : `parseOpenRouterModels`, `isOpenRouter` (Task 4), tables (Task 8), service et routes (Task 9), `JobHandler` (plan 1).
+- Consumes : `parseOpenRouterModels`, `isOpenRouter` (Task 4), tables (Task 9), service et routes (Task 10), `JobHandler` (plan 1).
 - Produces :
   - `OPENROUTER_MODELS_URL = 'https://openrouter.ai/api/v1/models'`
-  - `refreshOpenRouterCatalog(deps: { db: Db; fetch?: typeof fetch; now: Date; signal?: AbortSignal }): Promise<{ added: number; updated: number; initial: boolean; localPricesUpdated: number }>` — délai de 30 s ; réponse non 2xx ou JSON illisible → lève une erreur (la file réessaie) sans rien écrire ; première synchronisation (table vide) → toutes les lignes `initialSync = true` ; ensuite les inconnues sont ajoutées `initialSync = false`, `firstSeenAt = now` ; les connues voient `name`, prix, modalités, `contextWindow` et `lastSeenAt` mis à jour ; les modèles locaux des fournisseurs OpenRouter (`isOpenRouter(baseUrl)`) dont `priceSource = 'openrouter'` reçoivent les nouveaux prix non nuls.
+  - `refreshOpenRouterCatalog(deps: { db: Db; fetch?: typeof fetch; now: Date; signal?: AbortSignal }): Promise<{ added: number; updated: number; initial: boolean; localPricesUpdated: number }>` — délai de 30 s ; réponse non 2xx, JSON illisible ou **JSON sans tableau `data`** → lève une erreur (la file réessaie) sans rien écrire ; première synchronisation (table vide) → toutes les lignes `initialSync = true` ; ensuite les inconnues sont ajoutées `initialSync = false`, `firstSeenAt = now` ; les connues voient `name`, prix, modalités, `contextWindow` et `lastSeenAt` mis à jour ; les modèles locaux des fournisseurs OpenRouter (`isOpenRouter(baseUrl)`) dont `priceSource = 'openrouter'` reçoivent les nouveaux prix non nuls.
   - `createCatalogRefreshHandler(deps: { fetch?: typeof fetch }): JobHandler`
   - `JobHandlersDeps` étendu : `fetch?: typeof fetch`.
   - Service : `newModels(): Promise<NewModel[]>`, `dismissNew(actor, id): Promise<void>` avec `type NewModel = { id; openrouterId; name; inputPricePerM: number | null; outputPricePerM: number | null; supportsVision: boolean; supportsPdf: boolean; contextWindow: number | null; firstSeenAt: string }`.
@@ -602,9 +659,9 @@ test('le lendemain, seuls les modèles apparus sont des nouveautés', async () =
   expect((await svc.newModels()).map((m) => m.openrouterId)).toEqual(['newlab/model-x']);
 });
 test('nouveauté de plus de 30 jours, écartée, ou déjà dans le catalogue local : absente', async () => { /* … */ });
-test('échec de la première synchronisation (500) : rien écrit, la suivante reste silencieuse', async () => {
-  await expect(refresh(day1, status500)).rejects.toThrow(); expect(await count(openrouterCatalog)).toBe(0);
-  expect((await refresh(day2, 'openrouter/models.json')).initial).toBe(true);
+test('échec de la première synchronisation (500, ou JSON sans data) : rien écrit, la suivante reste silencieuse', async () => {
+  await expect(refresh(day1, status500)).rejects.toThrow(); await expect(refresh(day1, jsonWithoutData)).rejects.toThrow();
+  expect(await count(openrouterCatalog)).toBe(0); expect((await refresh(day2, 'openrouter/models.json')).initial).toBe(true);
 });
 test('prix "-1" stocké null, jamais 0', async () => { expect(row('openrouter/auto').inputPricePerM).toBeNull(); });
 test('prix du catalogue local mis à jour pour priceSource openrouter seulement', async () => { /* manuel inchangé */ });
@@ -620,53 +677,60 @@ test('la tâche catalog_refresh est planifiée à 06:00 heure de Paris', async (
 
 - [ ] **Step 4: Vérifier le succès** — Run: `npx vitest run --project server && npm run typecheck` — Expected: PASS.
 
-- [ ] **Step 5: Commit** — `git add -A && git commit -m "feat: synchronisation quotidienne du catalogue OpenRouter et nouveautés"`
+- [ ] **Step 5: Commit** — `git commit -m "feat: synchronisation quotidienne du catalogue OpenRouter et nouveautés"`
 
 ---
 
-### Task 11: Interface Admin des fournisseurs et assistant d'ajout
+### Task 12: Interface Admin des fournisseurs, saisie des clés et assistant d'ajout
 
 Utiliser le skill **`frontend-design`** (cartes, tableaux, pastilles et boutons de `maquettes/resultats-nuit.html` ; logos des fournisseurs de `web/src/three/providers.ts` quand le nom correspond).
 
 **Files:**
-- Create : `web/src/api/catalog.ts`, `web/src/pages/admin/ProvidersPage.tsx`, `web/src/components/catalog/RemoteModelsDialog.tsx`, `web/src/components/catalog/ModelForm.tsx`
-- Modify : `web/src/app/routes.tsx` (`/admin/fournisseurs`), `web/src/app/AppShell.tsx` (ADMIN : « Fournisseurs »), `web/src/api/messages.ts` (`key_missing`, `provider_error`, `provider_name_taken`, `model_exists`)
-- Test : `web/src/pages/admin/ProvidersPage.test.tsx`, `web/src/components/catalog/RemoteModelsDialog.test.tsx`
+- Create : `web/src/api/catalog.ts`, `web/src/pages/admin/ProvidersPage.tsx`, `web/src/components/catalog/ProviderDialog.tsx`, `web/src/components/catalog/ApiKeyDialog.tsx`, `web/src/components/catalog/RemoteModelsDialog.tsx`, `web/src/components/catalog/ModelForm.tsx`
+- Modify : `web/src/app/routes.tsx` (`/admin/fournisseurs`), `web/src/app/AppShell.tsx` (ADMIN : « Fournisseurs »), `web/src/api/messages.ts` (`key_missing`, `key_unreadable`, `provider_error`, `provider_name_taken`, `model_exists`)
+- Test : `web/src/pages/admin/ProvidersPage.test.tsx`, `web/src/components/catalog/RemoteModelsDialog.test.tsx`, `web/src/components/catalog/ApiKeyDialog.test.tsx`
 
 **Interfaces:**
-- Consumes : routes de la Task 9 et types `PublicProvider`, `PublicModel`, `RemoteModelView`.
-- Produces (`web/src/api/catalog.ts`) : types miroirs ; `listProviders()`, `createProvider(body)`, `updateProvider(id, patch)`, `listRemoteModels(id)`, `listModels()`, `getModel(id)`, `createModel(body)`, `updateModel(id, patch)`, `listNewModels()`, `dismissNewModel(id)` ; clés TanStack `PROVIDERS_KEY`, `MODELS_KEY`, `NEW_MODELS_KEY`.
-- Produces (composants) : `<RemoteModelsDialog providerId open onOpenChange initialSearch? />` — liste filtrable (recherche texte), cases à cocher, pour chaque modèle coché un formulaire `ModelForm` compact (nom affiché, couleur, prix entrée/sortie, vision, PDF, contexte), modèles déjà ajoutés grisés « déjà ajouté » ; « Ajouter N modèles » crée les modèles un par un et affiche les échecs ligne par ligne. `<ModelForm value onChange />` réutilisé par la fiche (Task 12).
+- Consumes : routes de la Task 10 et types `PublicProvider`, `PublicModel`, `RemoteModelView`, `ConnectionTest`.
+- Produces (`web/src/api/catalog.ts`) : types miroirs ; `listProviders()`, `createProvider(body)`, `updateProvider(id, patch)`, `testProvider(id)`, `listRemoteModels(id)`, `listModels()`, `getModel(id)`, `createModel(body)`, `updateModel(id, patch)`, `listNewModels()`, `dismissNewModel(id)` ; clés TanStack `PROVIDERS_KEY`, `MODELS_KEY`, `NEW_MODELS_KEY`.
+- Produces (composants) :
+  - `<ApiKeyDialog providerId open onOpenChange />` — champ mot de passe (masqué, bouton « Afficher »), « Enregistrer » envoie `PATCH { apiKey }`, la valeur saisie est effacée du composant dès la réponse ; lien « Supprimer la clé » (`apiKey: null`, confirmation).
+  - `<ProviderDialog provider? open onOpenChange />` — création ou modification : nom, type, URL de base, concurrence, actif ; à la création, champ clé facultatif.
+  - `<RemoteModelsDialog providerId open onOpenChange initialSearch? />` — liste filtrable (recherche texte), cases à cocher, pour chaque modèle coché un formulaire `ModelForm` compact (nom affiché, couleur, prix entrée/sortie, vision, PDF, contexte), modèles déjà ajoutés grisés « déjà ajouté » ; « Ajouter N modèles » crée les modèles un par un et affiche les échecs ligne par ligne ; si `/models` échoue, message du fournisseur et bouton « Ajouter un modèle à la main » (formulaire vide avec l'identifiant API).
+  - `<ModelForm value onChange />` réutilisé par la fiche (Task 13).
 
 - [ ] **Step 1: Écrire les tests qui échouent**
 
 ```tsx
-test('pastilles « Clé présente » / « Clé manquante » avec le nom de la variable', async () => {
-  expect(await screen.findByText('OPENAI_API_KEY')).toBeInTheDocument();
-  expect(screen.getAllByText('Clé manquante').length).toBeGreaterThan(0);
+test('pastilles « Clé enregistrée …wxyz », « Clé manquante », « Clé illisible »', async () => {
+  expect(await screen.findByText('…wxyz')).toBeInTheDocument(); expect(screen.getAllByText('Clé manquante').length).toBeGreaterThan(0);
+  expect(screen.getByText('Clé illisible')).toBeInTheDocument();
 });
 test('mode faux : pastille « Faux fournisseur »', async () => { /* … */ });
-test('clé manquante : bouton « Interroger /models » désactivé, consigne hPanel affichée', async () => { /* … */ });
+test('sans clé utilisable : « Interroger /models » et « Tester la connexion » désactivés, bouton « Saisir la clé »', async () => { /* … */ });
+test('Tester la connexion : « Connexion réussie · 42 modèles » ou le message d’erreur', async () => { /* ok true puis ok false auth_invalid */ });
+test('ApiKeyDialog : PATCH { apiKey }, champ vidé après enregistrement, la clé n’est jamais réaffichée', async () => {
+  expect(patchMock).toHaveBeenCalledWith(id, { apiKey: 'rq-test-0123456789wxyz' }); expect(screen.queryByDisplayValue(/rq-test/)).toBeNull();
+});
 test('assistant : filtre, prix OpenRouter préremplis, modèle déjà ajouté grisé', async () => {
   await user.type(screen.getByRole('searchbox'), 'sonnet');
   expect(screen.getByDisplayValue('2')).toBeInTheDocument(); expect(screen.getByText('déjà ajouté')).toBeInTheDocument();
 });
 test('assistant : « Ajouter 2 modèles » envoie deux POST et signale l’échec du second', async () => { /* 201 puis 409 model_exists */ });
-test('erreur provider_error affichée avec le message du fournisseur', async () => { expect(await screen.findByRole('alert')).toHaveTextContent(/Clé invalide/); });
-test('formulaire fournisseur : variable de clé invalide refusée avant envoi', async () => { /* « DB_PASSWORD » → message « doit se terminer par _API_KEY » */ });
+test('assistant : /models en échec → message du fournisseur et « Ajouter un modèle à la main »', async () => { /* provider_error */ });
 ```
 
 - [ ] **Step 2: Vérifier l'échec** — Run: `npx vitest run --project web web/src/pages/admin/ProvidersPage.test.tsx web/src/components/catalog` — Expected: FAIL.
 
-- [ ] **Step 3: Implémenter** — `ProvidersPage` : une carte par fournisseur (logo, nom, type, URL, variable de clé en Noto Sans Mono, pastille d'état, nombre de modèles, concurrence, interrupteur actif), boutons « Interroger /models » et « Modifier » ; bouton « Ajouter un fournisseur » (fenêtre : nom, type, URL, variable, concurrence). Encadré d'aide : « Les clés se saisissent dans hPanel → Variables d'environnement, puis “Appliquer les modifications”. Elles ne sont jamais enregistrées par l'application. »
+- [ ] **Step 3: Implémenter** — `ProvidersPage` : une carte par fournisseur (logo, nom, type, URL, pastille d'état de la clé, nombre de modèles, concurrence, interrupteur actif), boutons « Tester la connexion », « Interroger /models », « Remplacer la clé » (ou « Saisir la clé »), « Modifier » ; bouton « Ajouter un fournisseur ». Encadré d'aide : « Les clés sont chiffrées dans la base avec la clé maîtresse du serveur ; seuls leurs 4 derniers caractères sont affichés. »
 
 - [ ] **Step 4: Vérifier le succès** — Run: `npx vitest run --project web && npm run typecheck` — Expected: PASS.
 
-- [ ] **Step 5: Commit** — `git add -A && git commit -m "feat: écran des fournisseurs et assistant d'ajout de modèles"`
+- [ ] **Step 5: Commit** — `git commit -m "feat: écran des fournisseurs, saisie des clés et assistant d'ajout de modèles"`
 
 ---
 
-### Task 12: Liste des modèles, fiche modèle et nouveautés du tableau de bord
+### Task 13: Liste des modèles, fiche modèle et nouveautés du tableau de bord
 
 Utiliser le skill **`frontend-design`** (onglet « Fiche modèle » de `maquettes/ecrans-nuit.html`, « Tableau de bord » pour la carte des nouveautés).
 
@@ -676,7 +740,7 @@ Utiliser le skill **`frontend-design`** (onglet « Fiche modèle » de `maquette
 - Test : `web/src/pages/ModelsPage.test.tsx`, `web/src/pages/ModelPage.test.tsx`, `web/src/components/catalog/NewModelsCard.test.tsx`
 
 **Interfaces:**
-- Consumes : `web/src/api/catalog.ts`, `<RemoteModelsDialog />`, `<ModelForm />` (Task 11).
+- Consumes : `web/src/api/catalog.ts`, `<RemoteModelsDialog />`, `<ModelForm />` (Task 12).
 - Produces : pages et carte ; aucune nouvelle API.
 
 - [ ] **Step 1: Écrire les tests qui échouent**
@@ -687,8 +751,8 @@ test('tableau : modèle (pastille de couleur), fournisseur, prix $/M, vision, PD
 test('filtres : fournisseur, « disponibles seulement »', async () => { /* … */ });
 test('Admin : bouton « Ajouter des modèles » ; Utilisateur : absent', async () => { /* … */ });
 // ModelPage
-test('fiche : fournisseur, identifiant API, prix, capacités, variable de clé sans valeur', async () => {
-  expect(screen.getByText('claude-opus-5-5')).toBeInTheDocument(); expect(screen.getByText('ANTHROPIC_API_KEY')).toBeInTheDocument();
+test('fiche : fournisseur, identifiant API, prix, capacités, état de la clé sans valeur', async () => {
+  expect(screen.getByText('claude-opus-5-5')).toBeInTheDocument(); expect(screen.getByText('Clé enregistrée')).toBeInTheDocument();
 });
 test('sections de mesures vides : « Aucune série pour l’instant »', async () => { /* qualité, vitesse, radar, historique : plan 4 */ });
 test('Admin : modifier prix, couleur et activation ; Utilisateur : lecture seule', async () => { /* … */ });
@@ -702,23 +766,23 @@ test('aucune nouveauté : « Rien de nouveau sur OpenRouter ces 30 derniers jour
 
 - [ ] **Step 2: Vérifier l'échec** — Run: `npx vitest run --project web web/src/pages/ModelsPage.test.tsx web/src/pages/ModelPage.test.tsx web/src/components/catalog/NewModelsCard.test.tsx` — Expected: FAIL.
 
-- [ ] **Step 3: Implémenter** — fiche selon la maquette : en-tête (pastille de couleur, nom, fournisseur, identifiant API en mono), cartes « Prix » (entrée / sortie en $ par million, source « OpenRouter » ou « saisi »), « Capacités » (vision, PDF, contexte), « Clé » (nom de la variable et pastille d'état), puis les emplacements « Chiffres clés », « Radar par catégorie » et « Historique des séries » à l'état vide. Le tableau de bord garde l'en-tête « Bonjour {name} » et ajoute `NewModelsCard` pour l'Admin.
+- [ ] **Step 3: Implémenter** — fiche selon la maquette : en-tête (pastille de couleur, nom, fournisseur, identifiant API en mono), cartes « Prix » (entrée / sortie en $ par million, source « OpenRouter » ou « saisi »), « Capacités » (vision, PDF, contexte), « Clé » (pastille d'état ; « …wxyz » pour l'Admin), puis les emplacements « Chiffres clés », « Radar par catégorie » et « Historique des séries » à l'état vide. Le tableau de bord garde l'en-tête « Bonjour {name} » et ajoute `NewModelsCard` pour l'Admin.
 
 - [ ] **Step 4: Vérifier le succès** — Run: `npx vitest run --project web && npm run typecheck` — Expected: PASS.
 
-- [ ] **Step 5: Commit** — `git add -A && git commit -m "feat: liste et fiche des modèles, nouveautés OpenRouter sur le tableau de bord"`
+- [ ] **Step 5: Commit** — `git commit -m "feat: liste et fiche des modèles, nouveautés OpenRouter sur le tableau de bord"`
 
 ---
 
-### Task 13: Documentation, vérification complète et parcours dans le navigateur
+### Task 14: Documentation, vérification complète et parcours dans le navigateur
 
 **Files:**
-- Modify : `docs/deploiement.md` (section « Ajouter une clé API » : liste des fournisseurs préconfigurés, vérification sur l'écran Fournisseurs et dans `/health`, `AIC_FAKE_LLM` jamais en production), `README.md` (développement avec `AIC_FAKE_LLM=1`), `docs/superpowers/specs/2026-10-16-comparateur-ia-design.md` (§16 lignes 3 et 5 : fixtures construites d'après la documentation des fournisseurs ; vérification sur appel réel au premier essai rapide du plan 3, les clés n'existant que sur Hostinger ; §6.3 : prix Anthropic vérifiés le 2026-10-17)
+- Modify : `README.md` (développement : `APP_ENCRYPTION_KEY` dans `.env`, `AIC_FAKE_LLM=1`), `docs/deploiement.md` (vérifier la cohérence avec le code livré : préconfigurés, états de clé, `/health`)
 
 - [ ] **Step 1: Mettre à jour la documentation** comme indiqué ci-dessus.
 
 - [ ] **Step 2: Vérification complète** — Run: `npx vitest run && npm run typecheck && npm run build` — Expected: PASS ; `server/test/entry.test.ts` passe (aucun `await` de premier niveau, le SDK Anthropic compris).
 
-- [ ] **Step 3: Parcours dans le navigateur** — `.env` local avec `AIC_FAKE_LLM=1` ; `preview_start` sur `comparateur-api` et `comparateur-web`. Vérifier : écran Fournisseurs (six fournisseurs, pastilles « Faux fournisseur »), assistant sur Mistral (liste `fake-*`, ajout de deux modèles), liste des modèles, fiche d'un modèle (modification du prix), `/health` (présence des clés), compte Utilisateur (pas d'entrée Fournisseurs, fiche en lecture seule). Puis sans `AIC_FAKE_LLM` : pastilles « Clé manquante » et bouton « Interroger /models » désactivé. Capture d'écran de la fiche modèle.
+- [ ] **Step 3: Parcours dans le navigateur** — `.env` local avec `APP_ENCRYPTION_KEY` et `AIC_FAKE_LLM=1` ; `preview_start` sur `comparateur-api` et `comparateur-web`. Vérifier : écran Fournisseurs (huit fournisseurs, pastilles « Faux fournisseur »), saisie d'une clé factice sur Requesty (pastille « …wxyz »), « Tester la connexion », assistant sur Mistral (liste `fake-*`, ajout de deux modèles), liste des modèles, fiche d'un modèle (modification du prix), `/health` (`providers.configured`), compte Utilisateur (pas d'entrée Fournisseurs, fiche en lecture seule). Puis sans `AIC_FAKE_LLM` : pastilles « Clé manquante » et boutons désactivés. Capture d'écran de l'écran Fournisseurs et de la fiche modèle.
 
-- [ ] **Step 4: Commit** — `git add -A && git commit -m "docs: fournisseurs, clés et faux fournisseur"`
+- [ ] **Step 4: Commit** — `git commit -m "docs: fournisseurs, clés chiffrées et faux fournisseur"`
