@@ -3,7 +3,17 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { MODELS_KEY, listModels } from '../../api/catalog';
 import { messageForError } from '../../api/messages';
-import { answersKey, answersPrefix, getAnswers, overrideScore, rankingKey, rescoreRun, type Answer, type RescoreBody } from '../../api/results';
+import {
+  answersKey,
+  answersPrefix,
+  getAnswers,
+  overrideScore,
+  rankingKey,
+  rescoreRun,
+  type Answer,
+  type RescoreBody,
+  type ScoringMethod,
+} from '../../api/results';
 import { RUNS_KEY } from '../../api/runs';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
@@ -57,7 +67,15 @@ function OverrideEditor({ answer, onSaved }: { answer: Answer; onSaved: () => Pr
   return (
     <div className="flex flex-col gap-2">
       {open ? (
-        <div className="flex flex-wrap items-end gap-2">
+        // Formulaire : la touche Entrée dans le champ enregistre la note (si elle est valide).
+        <form
+          aria-label="Note imposée"
+          className="flex flex-wrap items-end gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (value !== undefined && !save.isPending) save.mutate(value);
+          }}
+        >
           <Field
             label="Note imposée (0 à 10)"
             inputMode="decimal"
@@ -67,13 +85,13 @@ function OverrideEditor({ answer, onSaved }: { answer: Answer; onSaved: () => Pr
             error={raw !== '' && value === undefined ? 'Entre 0 et 10, une décimale au plus (ex. 7,5).' : null}
             onChange={(e) => setRaw(e.target.value)}
           />
-          <Button variant="primary" disabled={value === undefined || save.isPending} onClick={() => value !== undefined && save.mutate(value)}>
+          <Button type="submit" variant="primary" disabled={value === undefined || save.isPending}>
             Enregistrer
           </Button>
           <Button variant="ghost" onClick={() => setOpen(false)}>
             Annuler
           </Button>
-        </div>
+        </form>
       ) : (
         <div className="flex flex-wrap gap-2">
           <Button
@@ -101,7 +119,20 @@ function OverrideEditor({ answer, onSaved }: { answer: Answer; onSaved: () => Pr
   );
 }
 
-function AnswerCard({ answer, isAdmin, onOverride }: { answer: Answer; isAdmin: boolean; onOverride: () => Promise<unknown> }) {
+/** Auteur de la justification : la correction automatique pour un test à réponse attendue, le juge sinon. */
+const RATIONALE_LABEL: Record<ScoringMethod, string> = { expected: 'Correction automatique', judge: 'Juge', manual: 'Juge' };
+
+function AnswerCard({
+  answer,
+  method,
+  isAdmin,
+  onOverride,
+}: {
+  answer: Answer;
+  method: ScoringMethod;
+  isAdmin: boolean;
+  onOverride: () => Promise<unknown>;
+}) {
   const failed = answer.status !== 'done';
   return (
     <article
@@ -126,7 +157,11 @@ function AnswerCard({ answer, isAdmin, onOverride }: { answer: Answer; isAdmin: 
           {answer.responseText ? <Markdown text={answer.responseText} /> : <span className="text-mute">Réponse vide.</span>}
         </div>
       )}
-      {answer.judgeRationale ? <p className="m-0 border-l-2 border-orange pl-2 text-[11.5px] text-mute">Juge : {answer.judgeRationale}</p> : null}
+      {answer.judgeRationale ? (
+        <p className="m-0 border-l-2 border-orange pl-2 text-[11.5px] text-mute">
+          {RATIONALE_LABEL[method]} : {answer.judgeRationale}
+        </p>
+      ) : null}
       <footer className="flex flex-wrap gap-x-3 gap-y-1 border-t border-line pt-2 font-mono text-[10.5px] text-mute">
         <Metric label="1er token" value={answer.ttftMs === null ? DASH : `${answer.ttftMs.toLocaleString('fr-FR')} ms`} />
         <Metric label="Débit" value={tokensPerSecond(answer.tokensPerS)} />
@@ -189,14 +224,35 @@ const TAB_LABELS: Record<Tab, string> = { side: 'Côte à côte', blind: 'À l�
  * Réponses d'un test côte à côte avec notes, justification du juge et mesures ; l'Admin peut imposer une note,
  * relancer le juge et consulter les écarts entre évaluateurs.
  */
-export function SideBySide({ runId, tests, isAdmin, judgePending = 0 }: { runId: string; tests: SideBySideTest[]; isAdmin: boolean; judgePending?: number }) {
+export function SideBySide({
+  runId,
+  tests,
+  isAdmin,
+  judgePending = 0,
+  pollMs = false,
+}: {
+  runId: string;
+  tests: SideBySideTest[];
+  isAdmin: boolean;
+  judgePending?: number;
+  /** Intervalle de relecture des réponses (celui du classement pendant la série), `false` une fois tout rendu. */
+  pollMs?: number | false;
+}) {
   const queryClient = useQueryClient();
   const [selected, setSelected] = useState('');
   const [tab, setTab] = useState<Tab>('side');
   const runTestId = tests.some((t) => t.runTestId === selected) ? selected : (tests[0]?.runTestId ?? '');
-  const answers = useQuery({ queryKey: answersKey(runId, runTestId), queryFn: () => getAnswers(runId, runTestId), enabled: runTestId !== '' });
+  const answers = useQuery({
+    queryKey: answersKey(runId, runTestId),
+    queryFn: () => getAnswers(runId, runTestId),
+    enabled: runTestId !== '',
+    refetchInterval: pollMs,
+  });
   const tabs: Tab[] = isAdmin ? ['side', 'blind', 'spread'] : ['side', 'blind'];
   const hiddenCount = answers.data?.answers.filter((a) => a.hiddenUntilScored).length ?? 0;
+  const method = answers.data?.test.scoringMethod;
+  // Relance du juge proposée seulement sur un test noté par le juge (le serveur refuse les autres : `not_rescorable`).
+  const canRescore = isAdmin && method === 'judge';
   const testIndex = tests.findIndex((t) => t.runTestId === runTestId);
 
   // Une note imposée ou une relance change les réponses et le classement (la progression suit le juge en attente).
@@ -248,7 +304,7 @@ export function SideBySide({ runId, tests, isAdmin, judgePending = 0 }: { runId:
       <div role="tabpanel" aria-label={TAB_LABELS[tab]} className="flex flex-col gap-3">
         {tab === 'side' ? (
           <>
-            {isAdmin ? <RescorePanel key={runTestId} runId={runId} runTestId={runTestId} onQueued={refresh} /> : null}
+            {canRescore ? <RescorePanel key={runTestId} runId={runId} runTestId={runTestId} onQueued={refresh} /> : null}
             {answers.isError ? (
               <p role="alert" className="text-sm text-bad">
                 {messageForError(answers.error)}
@@ -267,8 +323,8 @@ export function SideBySide({ runId, tests, isAdmin, judgePending = 0 }: { runId:
                 ) : null}
                 {answers.data.answers.filter((a) => !a.hiddenUntilScored).map((a) => (
                   <div key={a.resultId} className="flex flex-col gap-1.5">
-                    <AnswerCard answer={a} isAdmin={isAdmin} onOverride={refresh} />
-                    {isAdmin && a.status === 'done' ? <ResultRescore runId={runId} resultId={a.resultId} onQueued={refresh} /> : null}
+                    <AnswerCard answer={a} method={answers.data.test.scoringMethod} isAdmin={isAdmin} onOverride={refresh} />
+                    {canRescore && a.status === 'done' ? <ResultRescore runId={runId} resultId={a.resultId} onQueued={refresh} /> : null}
                   </div>
                 ))}
               </div>

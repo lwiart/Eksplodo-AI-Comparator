@@ -1,8 +1,8 @@
-import { useQuery } from '@tanstack/react-query';
-import { lazy, Suspense, useMemo } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { lazy, Suspense, useEffect, useMemo, useRef } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { messageForError } from '../api/messages';
-import { getRanking, rankingKey } from '../api/results';
+import { answersPrefix, getRanking, rankingKey } from '../api/results';
 import { RUNS_KEY, getRun, getRunProgress, getRunResults, type RunProgress, type RunStatus, type RunSummary } from '../api/runs';
 import { useAuth } from '../auth/AuthProvider';
 import { ActivityFeed } from '../components/runs/ActivityFeed';
@@ -147,10 +147,24 @@ function ResultsSection({
   tests: SideBySideTest[];
   judgePending: number;
 }) {
+  // Classement et réponses côte à côte interrogés ensemble tant que la série est active ou que des notes du juge sont
+  // attendues ; une dernière relecture quand la série passe à un état final ou que ces notes sont toutes rendues (sinon
+  // les dernières notes manqueraient jusqu'au rechargement).
+  const pollMs = active || judgePending > 0 ? RANKING_POLL_MS : false;
+  const queryClient = useQueryClient();
+  const previous = useRef({ active, judgePending });
+  useEffect(() => {
+    const before = previous.current;
+    previous.current = { active, judgePending };
+    if ((before.active && !active) || (before.judgePending > 0 && judgePending === 0)) {
+      void queryClient.invalidateQueries({ queryKey: rankingKey(runId) });
+      void queryClient.invalidateQueries({ queryKey: answersPrefix(runId) });
+    }
+  }, [active, judgePending, queryClient, runId]);
   const ranking = useQuery({
     queryKey: rankingKey(runId),
     queryFn: () => getRanking(runId),
-    refetchInterval: active ? RANKING_POLL_MS : false,
+    refetchInterval: pollMs,
     refetchOnWindowFocus: 'always',
   });
   const hasQuality = ranking.data?.models.some((m) => m.quality !== null) ?? false;
@@ -166,7 +180,7 @@ function ResultsSection({
     <Suspense fallback={<p className="text-sm text-mute">Chargement du classement…</p>}>
       <div className="flex flex-col gap-4">
         <ResultsView runId={runId} ranking={ranking.data} isAdmin={isAdmin} />
-        <SideBySide runId={runId} tests={tests} isAdmin={isAdmin} judgePending={judgePending} />
+        <SideBySide runId={runId} tests={tests} isAdmin={isAdmin} judgePending={judgePending} pollMs={pollMs} />
       </div>
     </Suspense>
   );

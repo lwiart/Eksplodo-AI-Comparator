@@ -162,3 +162,34 @@ test('échec de l’enregistrement : message en français', async () => {
   await userEvent.click(save);
   expect(await screen.findByRole('alert')).toHaveTextContent('Le serveur ne répond pas');
 });
+
+test('échec de l’enregistrement (réponse arrivée entre-temps) : question relue, nouvelles réponses affichées, message conservé', async () => {
+  renderPage();
+  const save = await screen.findByRole('button', { name: 'Enregistrer et révéler' });
+  await rate('A', 5);
+  await rate('B', 5);
+  apiFetch.mockRejectedValueOnce(new ApiError('validation', 400, 'Notez toutes les réponses de la question'));
+  apiFetch.mockResolvedValueOnce(
+    question({
+      answers: [
+        { letter: 'A', responseText: 'Réponse deux', myScore: null, myComment: null },
+        { letter: 'B', responseText: 'Réponse trois arrivée', myScore: null, myComment: null },
+        { letter: 'C', responseText: 'Réponse **un**', myScore: null, myComment: null },
+      ],
+    }),
+  );
+  await userEvent.click(save);
+  expect(await screen.findByRole('article', { name: 'Réponse C' })).toBeInTheDocument();
+  expect(screen.getByRole('alert')).toHaveTextContent('Notez toutes les réponses de la question');
+  // Formulaire reparti de zéro : les lettres désignent d'autres réponses.
+  const group = screen.getByRole('radiogroup', { name: 'Note de la réponse A' });
+  expect(within(group).getByRole('radio', { name: '5' })).toHaveAttribute('aria-checked', 'false');
+  expect(apiFetch.mock.calls.filter(([url, init]) => url === '/api/scoring/questions/q1' && init?.method !== 'PUT')).toHaveLength(2);
+});
+
+test('question pas encore prête (réponses en attente) : message en français', async () => {
+  apiFetch.mockReset();
+  apiFetch.mockRejectedValue(new ApiError('question_not_ready', 409, 'x'));
+  renderPage();
+  expect(await screen.findByRole('alert')).toHaveTextContent('pas encore arrivées');
+});

@@ -53,7 +53,10 @@ export type Answer = {
   errorMessage: string | null;
 };
 
-export type Answers = { test: { name: string; category: string; userPrompt: string }; answers: Answer[] };
+export type ScoringMethod = 'expected' | 'judge' | 'manual';
+
+/** `scoringMethod` : la relance du juge n'est proposée que sur un test noté par le juge. */
+export type Answers = { test: { name: string; category: string; userPrompt: string; scoringMethod: ScoringMethod }; answers: Answer[] };
 
 /** Corps de `POST /api/runs/:id/rescore` (miroir de `rescoreBody`). */
 export type RescoreBody = {

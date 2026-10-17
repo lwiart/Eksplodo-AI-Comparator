@@ -62,7 +62,13 @@ export function QualitySpeedChart({ models }: { models: RankingModel[] }) {
           <YAxis type="number" dataKey="quality" name="Qualité" domain={[0, 10]} ticks={[0, 2, 4, 6, 8, 10]} tick={AXIS_TICK} stroke={GRID_STROKE} width={36} />
           <ZAxis range={[110, 110]} />
           <Tooltip cursor={{ stroke: GRID_STROKE }} content={<PointTooltip />} />
-          <Legend formatter={(name) => <span className="text-xs text-ink">{String(name)}</span>} iconType="circle" />
+          {/* Légende en haut : en bas, elle chevauchait le titre de l'axe des vitesses. */}
+          <Legend
+            verticalAlign="top"
+            wrapperStyle={{ paddingBottom: 8 }}
+            formatter={(name) => <span className="text-xs text-ink">{String(name)}</span>}
+            iconType="circle"
+          />
           {points.map((p) => (
             <Scatter key={p.modelId} name={p.name} data={[p]} fill={p.color} isAnimationActive={false} />
           ))}

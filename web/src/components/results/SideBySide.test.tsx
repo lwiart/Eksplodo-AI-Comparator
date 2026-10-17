@@ -39,7 +39,7 @@ const CATALOG = [
   { id: 'm4', displayName: 'Sans clé', providerName: 'Autre', color: '#FFFFFF', available: false },
 ];
 
-const TEST_INFO = { name: 'Résumer un CCTP', category: 'Rédaction', userPrompt: 'Résume.' };
+const TEST_INFO = { name: 'Résumer un CCTP', category: 'Rédaction', userPrompt: 'Résume.', scoringMethod: 'judge' };
 
 let answersBody: unknown;
 beforeEach(() => {
@@ -209,6 +209,55 @@ test('Admin : l’onglet des écarts affiche le détail des évaluateurs du test
   await user.click(await screen.findByRole('tab', { name: 'Écarts entre évaluateurs' }));
   const table = within(await screen.findByRole('table', { name: 'Écarts entre évaluateurs' }));
   expect(table.getByRole('rowheader', { name: 'Claude Opus' })).toBeInTheDocument();
+});
+
+test('Admin, test à réponse attendue : « Correction automatique », aucune relance du juge', async () => {
+  answersBody = {
+    test: { ...TEST_INFO, scoringMethod: 'expected' },
+    answers: [answer({ judgeRationale: 'Réponse identique à la réponse attendue.' })],
+  };
+  renderBlock(true);
+  const card = await screen.findByRole('article', { name: 'Claude Opus, répétition 1' });
+  expect(within(card).getByText('Correction automatique : Réponse identique à la réponse attendue.')).toBeInTheDocument();
+  expect(within(card).queryByText(/^Juge :/)).toBeNull();
+  expect(within(card).getByRole('button', { name: 'Imposer une note' })).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: /Relancer le juge/ })).toBeNull();
+  expect(screen.queryByLabelText('Juge pour la relance')).toBeNull();
+});
+
+test('Admin, test manuel : aucune relance du juge', async () => {
+  answersBody = { test: { ...TEST_INFO, scoringMethod: 'manual' }, answers: [answer({ judgeRationale: null, autoScore: null, manualAvg: 7, finalScore: 7 })] };
+  renderBlock(true);
+  await screen.findByRole('article', { name: 'Claude Opus, répétition 1' });
+  expect(screen.queryByRole('button', { name: /Relancer le juge/ })).toBeNull();
+});
+
+test('Admin : la touche Entrée enregistre la note imposée', async () => {
+  const user = userEvent.setup();
+  renderBlock(true);
+  const card = await screen.findByRole('article', { name: 'Claude Opus, répétition 1' });
+  await user.click(within(card).getByRole('button', { name: 'Imposer une note' }));
+  await user.type(within(card).getByLabelText('Note imposée (0 à 10)'), '6{Enter}');
+  await waitFor(() => expect(apiFetch).toHaveBeenCalledWith('/api/scoring/results/a1/override', { method: 'PUT', body: { score: 6 } }));
+});
+
+test('Admin : la touche Entrée sur une note invalide n’envoie rien', async () => {
+  const user = userEvent.setup();
+  renderBlock(true);
+  const card = await screen.findByRole('article', { name: 'Claude Opus, répétition 1' });
+  await user.click(within(card).getByRole('button', { name: 'Imposer une note' }));
+  await user.type(within(card).getByLabelText('Note imposée (0 à 10)'), '12{Enter}');
+  expect(apiFetch.mock.calls.some(([url]) => String(url).includes('/override'))).toBe(false);
+});
+
+test('relance refusée (test non jugé) : message français dédié', async () => {
+  const user = userEvent.setup();
+  renderBlock(true);
+  await screen.findByRole('article', { name: 'Claude Opus, répétition 1' });
+  const { ApiError } = await import('../../api/client');
+  apiFetch.mockRejectedValueOnce(new ApiError('not_rescorable', 409, 'x'));
+  await user.click(screen.getByRole('button', { name: 'Relancer le juge sur ce test' }));
+  expect(await screen.findByText(/n’est pas noté par le juge/)).toBeInTheDocument();
 });
 
 test('analyse de la note imposée', () => {

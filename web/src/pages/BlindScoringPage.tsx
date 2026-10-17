@@ -14,6 +14,8 @@ const SCORES = Array.from({ length: 11 }, (_, i) => i);
 export function BlindScoringPage() {
   const { runTestId = '' } = useParams();
   const question = useQuery({ queryKey: questionKey(runTestId), queryFn: () => getQuestion(runTestId) });
+  // Erreur du dernier enregistrement, gardée ici : si la question relue a changé, le formulaire repart de zéro sans la perdre.
+  const [saveError, setSaveError] = useState<unknown>(null);
 
   return (
     <div className="mx-auto max-w-[1200px]">
@@ -27,13 +29,26 @@ export function BlindScoringPage() {
       ) : question.isPending ? (
         <p className="mt-4 text-sm text-mute">Chargement de la question…</p>
       ) : (
-        <QuestionForm key={runTestId} question={question.data} />
+        <QuestionForm key={answersSignature(runTestId, question.data)} question={question.data} saveError={saveError} onSaveError={setSaveError} />
       )}
     </div>
   );
 }
 
-function QuestionForm({ question }: { question: BlindQuestion }) {
+/** Clé du formulaire : il repart de zéro quand les réponses de la question relue ne sont plus les mêmes (lettres recalculées). */
+function answersSignature(runTestId: string, question: BlindQuestion): string {
+  return [runTestId, ...question.answers.map((a) => `${a.letter}:${a.responseText.length}`)].join('|');
+}
+
+function QuestionForm({
+  question,
+  saveError,
+  onSaveError,
+}: {
+  question: BlindQuestion;
+  saveError: unknown;
+  onSaveError: (err: unknown) => void;
+}) {
   const queryClient = useQueryClient();
   const [scores, setScores] = useState<Record<string, number | null>>(() =>
     Object.fromEntries(question.answers.map((a) => [a.letter, a.myScore])),
@@ -52,7 +67,14 @@ function QuestionForm({ question }: { question: BlindQuestion }) {
         }),
       ),
     onSuccess: (saved) => {
+      onSaveError(null);
       queryClient.setQueryData(questionKey(question.runTestId), saved);
+      void queryClient.invalidateQueries({ queryKey: TODO_KEY });
+    },
+    // Refus (réponse arrivée entre-temps, question pas encore prête…) : la question est relue pour montrer son état réel.
+    onError: (err) => {
+      onSaveError(err);
+      void queryClient.invalidateQueries({ queryKey: questionKey(question.runTestId) });
       void queryClient.invalidateQueries({ queryKey: TODO_KEY });
     },
   });
@@ -199,9 +221,9 @@ function QuestionForm({ question }: { question: BlindQuestion }) {
         })}
       </div>
 
-      {save.isError ? (
+      {saveError != null ? (
         <p role="alert" className="mt-3 mb-0 text-sm text-bad">
-          {messageForScoreError(save.error)}
+          {messageForScoreError(saveError)}
         </p>
       ) : null}
       <div className="mt-4 flex justify-end gap-2">

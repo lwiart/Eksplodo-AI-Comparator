@@ -142,7 +142,7 @@ beforeEach(() => {
     if (path === '/api/runs/r1/results') return Promise.resolve({ results: RESULTS });
     if (path.startsWith('/api/runs/r1/answers/'))
       return Promise.resolve({
-        test: { name: 'Résumer', category: 'Rédaction', userPrompt: 'Résume.' },
+        test: { name: 'Résumer', category: 'Rédaction', userPrompt: 'Résume.', scoringMethod: 'judge' },
         answers: [{ resultId: 'a1', modelName: 'Claude Opus', color: '#F0631F', repetition: 1, status: 'done', responseText: 'Texte', hiddenUntilScored: false, finalScore: 8, autoScore: 8, manualAvg: null, overrideScore: null, judgeRationale: null, ttftMs: 400, tokensPerS: 50, costUsd: 0.002, errorMessage: null }],
       });
     if (path === '/api/models') return Promise.resolve({ models: CATALOG });
@@ -171,6 +171,8 @@ function renderPage(role: Role = 'admin', ...progress: unknown[]) {
   );
 }
 const progressCalls = () => apiFetch.mock.calls.filter((c) => c[0] === '/api/runs/r1/progress').length;
+const answersCalls = () => apiFetch.mock.calls.filter((c) => String(c[0]).startsWith('/api/runs/r1/answers/')).length;
+const rankingCalls = () => apiFetch.mock.calls.filter((c) => c[0] === '/api/runs/r1/ranking').length;
 const tick = (ms: number) =>
   act(async () => {
     await vi.advanceTimersByTimeAsync(ms);
@@ -422,4 +424,36 @@ test('série en pause avec une qualité : réponses côte à côte accessibles, 
   renderPage('admin', { ...PROGRESS, status: 'paused', pauseReason: 'user' });
   expect(await screen.findByRole('article', { name: 'Claude Opus, répétition 1' })).toBeInTheDocument();
   expect(screen.queryByText(/Notation en cours/)).toBeNull();
+});
+
+test('réponses côte à côte relues comme le classement pendant la série, puis une dernière fois quand elle se termine', async () => {
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+  ranking = { ...RANKING, models: RANKED_MODELS };
+  const judging = { ...PROGRESS, judgePending: 1 };
+  const done = { ...PROGRESS, status: 'completed', etaSeconds: 0, running: [], judgePending: 0 };
+  // Avancement interrogé toutes les 2 s : en cours jusqu'à 10 s, terminée à 12 s.
+  renderPage('admin', judging, judging, judging, judging, judging, judging, done);
+  expect(await screen.findByRole('article', { name: 'Claude Opus, répétition 1' })).toBeInTheDocument();
+  expect(answersCalls()).toBe(1);
+  await tick(10_000);
+  expect(answersCalls()).toBe(2);
+  const [answersBefore, rankingBefore] = [answersCalls(), rankingCalls()];
+  await tick(2_000);
+  await waitFor(() => expect(answersCalls()).toBe(answersBefore + 1));
+  expect(rankingCalls()).toBe(rankingBefore + 1);
+  // Série terminée et notes rendues : plus aucune interrogation.
+  await tick(30_000);
+  expect(answersCalls()).toBe(answersBefore + 1);
+  expect(rankingCalls()).toBe(rankingBefore + 1);
+});
+
+test('notes du juge rendues alors que la série reste active : dernière relecture des réponses et du classement', async () => {
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+  ranking = { ...RANKING, models: RANKED_MODELS };
+  renderPage('admin', { ...PROGRESS, judgePending: 2 }, PROGRESS);
+  expect(await screen.findByRole('article', { name: 'Claude Opus, répétition 1' })).toBeInTheDocument();
+  const [answersBefore, rankingBefore] = [answersCalls(), rankingCalls()];
+  await tick(2_000);
+  await waitFor(() => expect(answersCalls()).toBe(answersBefore + 1));
+  expect(rankingCalls()).toBe(rankingBefore + 1);
 });

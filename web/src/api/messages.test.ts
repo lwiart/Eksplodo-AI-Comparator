@@ -4,7 +4,7 @@ import { messageFor, messageForError, messageForScoreError } from './messages';
 const CODES = [
   'unauthorized', 'forbidden', 'validation', 'rate_limited', 'invitation_invalid', 'invalid_password', 'weak_password',
   'email_taken', 'user_not_active', 'user_not_invited', 'user_not_activated', 'last_admin', 'internal', 'not_found',
-  'run_too_large', 'test_archived',
+  'run_too_large', 'test_archived', 'not_rescorable', 'invalid_score', 'result_not_scorable', 'question_not_ready',
 ];
 
 test('série trop grande : message de la limite de 5 000 appels', () => {
