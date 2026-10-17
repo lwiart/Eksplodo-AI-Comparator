@@ -15,6 +15,13 @@
       "when": 1792241176324,
       "tag": "0001_graceful_sentinel",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1792245626426,
+      "tag": "0002_eminent_talisman",
+      "breakpoints": true
     }
   ]
 }
