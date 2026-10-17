@@ -65,6 +65,14 @@ Plus tard (recommandé) : brancher GitHub dans hPanel (Sites web → Gérer → 
 - **Coût du juge** : les appels du juge sont des appels facturés comme les autres. Leur coût entre dans la dépense du mois et dans le plafond de dépense de la série (réservation avant chaque appel), mais il est suivi à part (origine `judge`) et jamais imputé au modèle évalué.
 - Le juge par défaut se règle dans Admin → Fournisseurs ; il n'a besoin d'aucune configuration serveur.
 
+## Partage et tableau de bord (plan 5)
+
+- **Aucune nouvelle variable d'environnement.**
+- **Migration** : `0006` (table `share_links`) s'applique au démarrage comme les précédentes (`migrate` de `server/src/db/migrate.ts`, sous le verrou nommé). Rien à lancer à la main.
+- **Routes publiques** : `GET /share/:token` et les pages `/p/*` passent par l'application Node, comme toutes les autres routes ; il n'y a rien à ajouter côté proxy ni dans hPanel.
+- **Adresse IP du client** : la route publique est limitée à 60 consultations par minute et par IP (`server/src/plugins/rate-limit.ts`). Vérifier que le proxy transmet l'IP du client (`x-forwarded-for` ou `x-real-ip`) : sans elle, la limite par IP ne s'applique pas à ces requêtes et un avertissement est journalisé. Sur Hostinger, LiteSpeed la fournit (voir « Vérifications de la mise en production »).
+- L'URL du bouton « Audit gratuit » se règle dans l'application (Admin → Liens de partage), pas par variable d'environnement.
+
 ## Tâche cron (hPanel → Avancé → Tâches cron)
 
 Toutes les 15 minutes (`*/15 * * * *`) :

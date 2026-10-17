@@ -86,6 +86,42 @@ Avec `AIC_FAKE_LLM=1`, la directive `[[fake:judge=<texte>]]` placée n'importe o
 
 Le prompt d'un test étant transmis au juge, la directive écrite dans un test noté par le juge fixe sa note ; un texte qui n'est pas du JSON valide sert à tester le nouvel appel puis l'échec de la note.
 
+## Partage et tableau de bord (plan 5)
+
+### Liens de partage (Admin)
+
+Depuis une série, le bouton « Partager » (`web/src/components/sharing/ShareDialog.tsx`) crée un lien vers une page publique en lecture seule. Le formulaire demande :
+
+- un titre et une introduction facultative ;
+- jusqu'à six **verdicts** (titre, modèle éventuel de la série, phrase). Trois sont proposés d'après le classement à la pondération de la série : « Meilleur compromis » (meilleur score global), « Meilleure qualité » et « Le moins cher » (absent si aucun modèle n'a de coût) ;
+- deux options, désactivées par défaut : **Afficher les coûts** et **Afficher les réponses**.
+
+Le jeton fait 24 octets aléatoires en base64url, soit **32 caractères** (`server/src/modules/sharing/token.ts`). Il n'est affiché qu'**une seule fois**, à la création ou à la régénération ; seule son empreinte SHA-256 (hex) est stockée en base, donc un lien perdu ne peut pas être retrouvé, seulement régénéré.
+
+Admin → Liens de partage (`/admin/partages`) liste les liens avec leur **compteur de vues** et permet de les modifier, de les **désactiver** ou réactiver, de **régénérer** le jeton (l'ancien lien renvoie alors 404), et de les **supprimer** (la suppression d'une série supprime aussi ses liens). Le réglage **URL « Audit gratuit »** (`sharing.audit_url`, défaut `https://eksplodo.fr`, `https://` obligatoire, 300 caractères au plus) est sur la même page ; il alimente le bouton de la page publique. Création, modification, régénération, suppression et changement d'URL sont journalisés (`share_link_created`, `share_link_updated`, `share_link_regenerated`, `share_link_deleted`, `audit_url_changed`).
+
+### Page publique `/p/<jeton>`
+
+- **Sans compte** : la page n'a ni menu ni lien vers l'application. Elle n'appelle que `GET /share/:token` (hors `/api`, sans session) ; aucun appel à `/api/*`.
+- **Liste blanche** (`public-share.ts`) : la réponse est construite champ par champ. Aucun identifiant interne (utilisateur, modèle, série, résultat : les modèles sont désignés par des clés opaques `m1`, `m2`…), aucune configuration de fournisseur, aucune note individuelle d'évaluateur. Les agrégats couvrent tous les évaluateurs, sans masquage de l'aveugle : c'est la publication de l'Admin. Avec « Afficher les réponses », la page montre le texte des réponses terminées, leur note finale et l'appréciation du juge.
+- **Accès** : un lien inconnu, désactivé ou régénéré renvoie le même 404 (« Lien introuvable ou désactivé »). La route est limitée à **60 consultations par minute et par IP**, n'est jamais mise en cache (`no-store`) et porte `x-robots-tag: noindex` ; la page `/p/*` a aussi un `noindex`. Chaque consultation réussie incrémente le compteur de vues.
+- **Coûts masqués** : aucun montant (coût moyen, coût total) ni note de coût n'est publié. En revanche, le rang et le score global restent ceux de la pondération de la série, coût compris. Un lecteur attentif peut donc en déduire la **position relative des coûts** entre modèles, mais pas les montants.
+
+### Version imprimable
+
+Le bouton « Version imprimable » ouvre la boîte d'impression du navigateur ; choisir « Enregistrer au format PDF ». Une feuille `@media print` (`web/src/theme/theme.css`, limitée à la page publique) masque la 3D, les boutons et le sélecteur, remplace le podium animé par un podium statique et passe le fond en blanc.
+
+### Tableau de bord
+
+`/` (`server/src/modules/dashboard/`, `web/src/pages/DashboardPage.tsx`) :
+
+- **chiffres clés** : séries lancées (total et mois en cours), modèles suivis, réponses à noter ;
+- **dépense du mois** (dont la part du juge) et **nouveaux modèles** : pour l'Admin seulement ; un Utilisateur voit la même page sans ces deux éléments ;
+- **évolution de la qualité par suite** : qualité de chaque modèle sur les 6 dernières séries terminées de la suite choisie, en ordre chronologique, avec le juge de chaque série ;
+- **dernières séries** (5) avec le vainqueur (rang 1 à la pondération de la série), marqué « provisoire » tant que la série n'est pas terminée.
+
+Pour un Utilisateur, toute qualité affichée (vainqueur, évolution) respecte le masquage de l'aveugle : les questions qu'il n'a pas encore notées comptent comme non notées.
+
 ## Commandes
 
 | Commande | Rôle |
