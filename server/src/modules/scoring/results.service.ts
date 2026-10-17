@@ -5,7 +5,7 @@ import { results, runModels, runTests, runs } from '../../db/schema/runs.js';
 import { NotFoundError } from '../../errors.js';
 import type { Actor } from '../auth/actor.js';
 import type { ResultStatus } from '../runs/runs.repo.js';
-import { maskHiddenRow, resultRowOf, type Weights } from '../runs/runs.service.js';
+import { maskHiddenRow, resultRowOf, type ResultRow, type Weights } from '../runs/runs.service.js';
 import type { ScoringMethod } from '../tests/scoring-config.js';
 import { aggregateRun, rankModels, type ModelAggregate } from './aggregate.js';
 import { csvDocument, csvFileName, type CsvValue } from './csv.js';
@@ -81,6 +81,9 @@ const CSV_HEADER = [
   'réponse',
 ];
 
+/** Cellule « réponse » d'une question manuelle que le compte n'a pas encore notée. */
+const HIDDEN_RESPONSE = "(masquée jusqu'à notation)";
+
 const runNotFound = () => new NotFoundError('Série introuvable');
 
 export function createResultsService(deps: { db: Db }) {
@@ -121,14 +124,36 @@ export function createResultsService(deps: { db: Db }) {
 
   type DetailedRow = Awaited<ReturnType<typeof detailedRows>>[number];
 
-  /** Ligne d'un compte : texte et métriques masqués sur une question manuelle qu'il n'a pas complétée. */
-  const visibleRow = (r: DetailedRow, hidden: Set<string>) => {
-    const row = resultRowOf(r);
-    return hidden.has(row.runTestId) ? maskHiddenRow(row) : row;
+  type Scores = {
+    finalScore: number | null;
+    autoScore: number | null;
+    manualAvg: number | null;
+    overrideScore: number | null;
+    judgeRationale: string | null;
+    judgeCostUsd: number | null;
   };
+  const NO_SCORES: Scores = { finalScore: null, autoScore: null, manualAvg: null, overrideScore: null, judgeRationale: null, judgeCostUsd: null };
 
-  const finalOf = (r: DetailedRow) =>
-    finalScore({ overrideScore: r.result.overrideScore, autoScore: r.result.autoScore, manualAvg: r.manualAvg, method: r.scoringMethod });
+  /**
+   * Ligne d'un compte : sur une question manuelle qu'il n'a pas complétée, texte, métriques et notes masqués (les notes des
+   * autres évaluateurs ne doivent pas orienter sa notation à l'aveugle).
+   */
+  const visibleRow = (r: DetailedRow, hidden: Set<string>): { row: ResultRow; scores: Scores } => {
+    const row = resultRowOf(r);
+    if (hidden.has(row.runTestId)) return { row: maskHiddenRow(row), scores: NO_SCORES };
+    const { overrideScore, autoScore, judgeRationale, judgeCostUsd } = r.result;
+    return {
+      row,
+      scores: {
+        finalScore: finalScore({ overrideScore, autoScore, manualAvg: r.manualAvg, method: r.scoringMethod }),
+        autoScore,
+        manualAvg: r.manualAvg,
+        overrideScore,
+        judgeRationale,
+        judgeCostUsd,
+      },
+    };
+  };
 
   return {
     /** Agrégats par modèle sur toutes les réponses de la série (aucun masquage : un agrégat ne relie aucune lettre à un modèle). */
@@ -190,7 +215,7 @@ export function createResultsService(deps: { db: Db }) {
       return {
         test: { name: rt.snapshot.name, category: rt.snapshot.category, userPrompt: rt.snapshot.userPrompt },
         answers: rows.map((r) => {
-          const row = visibleRow(r, hidden);
+          const { row, scores } = visibleRow(r, hidden);
           return {
             resultId: row.id,
             modelName: row.modelName,
@@ -199,11 +224,11 @@ export function createResultsService(deps: { db: Db }) {
             status: row.status,
             responseText: row.responseText,
             hiddenUntilScored: row.hiddenUntilScored,
-            finalScore: finalOf(r),
-            autoScore: r.result.autoScore,
-            manualAvg: r.manualAvg,
-            overrideScore: r.result.overrideScore,
-            judgeRationale: r.result.judgeRationale,
+            finalScore: scores.finalScore,
+            autoScore: scores.autoScore,
+            manualAvg: scores.manualAvg,
+            overrideScore: scores.overrideScore,
+            judgeRationale: scores.judgeRationale,
             ttftMs: row.ttftMs,
             tokensPerS: row.tokensPerS,
             costUsd: row.costUsd,
@@ -217,7 +242,7 @@ export function createResultsService(deps: { db: Db }) {
     async exportCsv(runId: string, actor: Actor): Promise<{ fileName: string; body: string }> {
       const [run, rows, hidden] = await Promise.all([requireRun(runId), detailedRows(eq(results.runId, runId)), hiddenFor(actor, runId)]);
       const lines: CsvValue[][] = rows.map((r) => {
-        const row = visibleRow(r, hidden);
+        const { row, scores } = visibleRow(r, hidden);
         return [
           run.name,
           row.testName,
@@ -225,10 +250,10 @@ export function createResultsService(deps: { db: Db }) {
           row.modelName,
           row.repetition,
           STATUS_LABELS[row.status],
-          finalOf(r),
-          r.result.autoScore,
-          r.manualAvg,
-          r.result.overrideScore,
+          scores.finalScore,
+          scores.autoScore,
+          scores.manualAvg,
+          scores.overrideScore,
           row.ttftMs,
           row.totalMs,
           row.tokensPerS,
@@ -236,9 +261,9 @@ export function createResultsService(deps: { db: Db }) {
           row.outputTokens,
           row.reasoningTokens,
           row.costUsd,
-          r.result.judgeCostUsd,
+          scores.judgeCostUsd,
           row.errorMessage,
-          row.responseText,
+          row.hiddenUntilScored ? HIDDEN_RESPONSE : row.responseText,
         ];
       });
       return { fileName: csvFileName(run.name), body: csvDocument([CSV_HEADER, ...lines]) };

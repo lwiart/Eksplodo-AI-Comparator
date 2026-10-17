@@ -114,6 +114,26 @@ test('qualité = moyenne par test de la moyenne des répétitions notées ; awai
   expect(a!.byCategory).toEqual({ Culture: 8, Écriture: 4, Logique: 5, Maths: null });
 });
 
+test('aucun résultat : aucun agrégat', () => {
+  expect(aggregateRun([])).toEqual([]);
+  expect(rankModels([], DEFAULT_WEIGHTS)).toEqual([]);
+});
+
+test('note de coût sur le coût moyen non arrondi ; arrondi au micro-dollar pour l’affichage seulement', () => {
+  const aggs = byModel(
+    aggregateRun([
+      row({ modelId: 'm1', costUsd: 0.000001 }),
+      row({ modelId: 'm2', costUsd: 0.000004 }),
+      // Moyenne 0,0000015 $ (affichée 0,000002 $) : 2 + 8 × (1 − ln 1,5 / ln 4) = 7,66 (6 avec la moyenne arrondie).
+      row({ modelId: 'm3', costUsd: 0.000001 }),
+      row({ modelId: 'm3', costUsd: 0.000002 }),
+    ]),
+  );
+  expect(aggs.get('m3')).toMatchObject({ cost: 7.66, raw: { meanCostUsd: 0.000002 } });
+  expect(aggs.get('m1')!.cost).toBe(10);
+  expect(aggs.get('m2')!.cost).toBe(2);
+});
+
 test('qualité arrondie au centième', () => {
   const [a] = aggregateRun([row({ runTestId: 't1', autoScore: 10 }), row({ runTestId: 't2', autoScore: 5 }), row({ runTestId: 't3', autoScore: 5 })]);
   expect(a!.quality).toBe(6.67);

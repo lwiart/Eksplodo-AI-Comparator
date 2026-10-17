@@ -5,12 +5,12 @@ import type { Db } from '../../db/client.js';
 import { models, providers } from '../../db/schema/catalog.js';
 import { ConflictError, NotFoundError, ValidationError } from '../../errors.js';
 import type { Clock } from '../../lib/clock.js';
+import { roundUsd } from '../../lib/money.js';
 import { describeError, reportJobFailure } from '../errors/capture.js';
 import { enqueue, getJob, type JobHandler } from '../jobs/queue.js';
 import type { Registry } from '../providers/registry.js';
 import { buildRequest, measureCall, CALL_TIMEOUT_MS, type CallOutcome } from '../runs/call.js';
 import { estimateInputTokens, isSupported } from '../runs/estimate.js';
-import { roundUsd } from '../runs/engine.js';
 import { candidateModelsOf, snapshotTests } from '../runs/runs.service.js';
 import { scoreExpected } from '../scoring/expected.js';
 import {

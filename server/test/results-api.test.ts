@@ -93,11 +93,25 @@ async function setup() {
   await rate(ids.manA, adminRow.id, 8);
   await rate(ids.manB, adminRow.id, 6);
 
-  return { t, admin, user, get, runId, rtExpected: rtExpected!.id, rtManual: rtManual!.id, ids, mA, mB, userRow, rate };
+  /** Seconde série sur les mêmes tests et modèles : tous ses résultats restent en attente. */
+  const createOtherRun = async () => {
+    const res = await call('POST', '/api/runs', admin, {
+      name: 'Autre série',
+      testIds: [expectedTest.json().test.id, manualTest.json().test.id],
+      modelIds: [mA.id, mB.id],
+      repetitions: 1,
+    });
+    expect(res.statusCode).toBe(201);
+    const otherRunId = res.json().run.id as string;
+    const rts = await t.db.select().from(runTests).where(eq(runTests.runId, otherRunId)).orderBy(asc(runTests.position));
+    return { otherRunId, otherRt: rts[0]!.id };
+  };
+
+  return { t, admin, user, get, runId, rtExpected: rtExpected!.id, rtManual: rtManual!.id, ids, mA, mB, userRow, rate, createOtherRun };
 }
 
 test('API ranking et answers ; Utilisateur : réponses manuelles masquées tant que la question n’est pas notée', async () => {
-  const { admin, user, get, runId, rtExpected, rtManual, ids, mA, mB, userRow, rate } = await setup();
+  const { admin, user, get, runId, rtExpected, rtManual, ids, mA, mB, userRow, rate, createOtherRun } = await setup();
 
   // Classement : mêmes agrégats pour tous les comptes connectés ; modèles du meilleur au moins bon (pondération de la série).
   const ranking = await get(`/api/runs/${runId}/ranking`, user);
@@ -150,14 +164,37 @@ test('API ranking et answers ; Utilisateur : réponses manuelles masquées tant 
     expect.objectContaining({ resultId: ids.expB, modelName: 'Modèle B', responseText: '=SOMME(A1:A2)', finalScore: 0 }),
   ]);
 
-  // Test manuel non noté par l'Utilisateur : ni texte ni métrique ; l'Admin voit tout.
+  // Test manuel non noté par l'Utilisateur : ni texte, ni métrique, ni note (celles des autres évaluateurs orienteraient
+  // sa notation à l'aveugle) ; l'Admin voit tout.
+  const hiddenAnswer = (resultId: string, modelName: string, color: string) => ({
+    resultId,
+    modelName,
+    color,
+    repetition: 1,
+    status: 'done',
+    responseText: null,
+    hiddenUntilScored: true,
+    finalScore: null,
+    autoScore: null,
+    manualAvg: null,
+    overrideScore: null,
+    judgeRationale: null,
+    ttftMs: null,
+    tokensPerS: null,
+    costUsd: null,
+    errorMessage: null,
+  });
   const hidden = await get(`/api/runs/${runId}/answers/${rtManual}`, user);
-  expect(hidden.json().answers).toEqual([
-    expect.objectContaining({ resultId: ids.manA, modelName: 'Modèle A', responseText: null, hiddenUntilScored: true, ttftMs: null, tokensPerS: null, costUsd: null, manualAvg: 8, finalScore: 8 }),
-    expect.objectContaining({ resultId: ids.manB, responseText: null, hiddenUntilScored: true, ttftMs: null, tokensPerS: null, costUsd: null }),
-  ]);
+  expect(hidden.json().answers).toEqual([hiddenAnswer(ids.manA, 'Modèle A', '#aa0001'), hiddenAnswer(ids.manB, 'Modèle B', '#aa0002')]);
   const asAdmin = await get(`/api/runs/${runId}/answers/${rtManual}`, admin);
-  expect(asAdmin.json().answers[0]).toMatchObject({ responseText: 'Haïku de A\nsur deux lignes', hiddenUntilScored: false, ttftMs: 100, costUsd: 0.001 });
+  expect(asAdmin.json().answers[0]).toMatchObject({
+    responseText: 'Haïku de A\nsur deux lignes',
+    hiddenUntilScored: false,
+    ttftMs: 100,
+    costUsd: 0.001,
+    manualAvg: 8,
+    finalScore: 8,
+  });
 
   // Une fois la question notée par l'Utilisateur : réponses visibles, moyenne des deux évaluateurs.
   await rate(ids.manA, userRow.id, 4);
@@ -172,6 +209,10 @@ test('API ranking et answers ; Utilisateur : réponses manuelles masquées tant 
   expect((await get(`/api/runs/${randomUUID()}/ranking`)).statusCode).toBe(404);
   expect((await get(`/api/runs/${randomUUID()}/answers/${rtExpected}`)).statusCode).toBe(404);
   expect((await get(`/api/runs/${runId}/answers/${randomUUID()}`)).statusCode).toBe(404);
+  // Test bien réel, mais d'une autre série, demandé par l'identifiant de la première.
+  const { otherRunId, otherRt } = await createOtherRun();
+  expect((await get(`/api/runs/${otherRunId}/answers/${otherRt}`)).statusCode).toBe(200);
+  expect((await get(`/api/runs/${runId}/answers/${otherRt}`)).statusCode).toBe(404);
   expect((await get(`/api/runs/${runId}/ranking`, null)).statusCode).toBe(401);
   expect((await get(`/api/runs/${runId}/answers/${rtExpected}`, null)).statusCode).toBe(401);
   expect((await get(`/api/runs/${runId}/export.csv`, null)).statusCode).toBe(401);
@@ -183,6 +224,26 @@ test('le coût du juge n’entre jamais dans le coût moyen du modèle', async (
   const models = (await get(`/api/runs/${runId}/ranking`)).json().models as { modelId: string; raw: { meanCostUsd: number } }[];
   // (0,002 + 0,001) / 2 = 0,0015 $ : seuls les coûts des réponses du modèle.
   expect(models.find((m) => m.modelId === mA.id)!.raw.meanCostUsd).toBe(0.0015);
+});
+
+test('série sans résultat terminé : classement sans note, modèles dans l’ordre d’ajout', async () => {
+  const { get, mA, mB, createOtherRun } = await setup();
+  const { otherRunId } = await createOtherRun();
+  const body = (await get(`/api/runs/${otherRunId}/ranking`)).json();
+  expect(body.categories).toEqual(['Culture', 'Écriture']);
+  expect(body.judge).toBeNull();
+  const empty = {
+    quality: null,
+    speed: null,
+    cost: null,
+    reliability: null,
+    raw: { medianTtftMs: null, medianTokensPerS: null, meanCostUsd: null, done: 0, failed: 0, unsupported: 0, scoredTests: 0 },
+    byCategory: { Culture: null, Écriture: null },
+  };
+  expect(body.models).toEqual([
+    { modelId: mA.id, name: 'Modèle A', color: '#aa0001', providerName: 'Fournisseur Alpha', ...empty },
+    { modelId: mB.id, name: 'Modèle B', color: '#aa0002', providerName: 'Fournisseur Alpha', ...empty },
+  ]);
 });
 
 test('note imposée prioritaire, modèle sans test noté classé hors podium', async () => {
@@ -199,7 +260,7 @@ test('note imposée prioritaire, modèle sans test noté classé hors podium', a
 });
 
 test('export CSV : en-têtes, une ligne par résultat, réponses masquées pour l’Utilisateur, formules neutralisées', async () => {
-  const { admin, user, get, runId } = await setup();
+  const { admin, user, get, runId, ids, userRow, rate } = await setup();
   expect((await get(`/api/runs/${randomUUID()}/export.csv`)).statusCode).toBe(404);
 
   const csv = await get(`/api/runs/${runId}/export.csv`, user);
@@ -209,7 +270,7 @@ test('export CSV : en-têtes, une ligne par résultat, réponses masquées pour 
     'attachment; filename="serie-polyvalence-d-octobre.csv"; filename*=UTF-8\'\'serie-polyvalence-d-octobre.csv',
   );
   const text = csv.body;
-  expect(text.startsWith('﻿')).toBe(true);
+  expect(text.startsWith('\uFEFF')).toBe(true);
   const lines = text.slice(1).split('\r\n');
   expect(lines[0]).toBe(
     'série;test;catégorie;modèle;répétition;statut;note finale;note auto;note manuelle (moyenne);note imposée;premier token (ms);durée (ms);tokens/s;tokens entrée;tokens sortie;raisonnement;coût ($);coût du juge ($);erreur;réponse',
@@ -218,13 +279,20 @@ test('export CSV : en-têtes, une ligne par résultat, réponses masquées pour 
   expect(lines.slice(1)).toEqual([
     'Polyvalence d’octobre;Capitale;Culture;Modèle A;1;réussi;10;10;;;100;900;50;10;20;4;0,002;0,5;;Paris',
     "Polyvalence d’octobre;Capitale;Culture;Modèle B;1;réussi;0;0;;;200;1200;100;10;30;;0,004;;;'=SOMME(A1:A2)",
-    // Question manuelle non notée par l'Utilisateur : notes seulement, ni texte ni métrique (11 cellules vides).
-    `${manual};Modèle A;1;réussi;8;;8${';'.repeat(11)}`,
-    `${manual};Modèle B;1;réussi;6;;6${';'.repeat(11)}`,
+    // Question manuelle non notée par l'Utilisateur : ni note, ni métrique, ni texte (13 cellules vides, puis la mention).
+    `${manual};Modèle A;1;réussi${';'.repeat(14)}(masquée jusqu'à notation)`,
+    `${manual};Modèle B;1;réussi${';'.repeat(14)}(masquée jusqu'à notation)`,
     '',
   ]);
 
-  // L'Admin reçoit le texte et les métriques, retour à la ligne entre guillemets.
+  // L'Admin reçoit notes, texte et métriques, retour à la ligne entre guillemets.
   const adminCsv = (await get(`/api/runs/${runId}/export.csv`, admin)).body;
   expect(adminCsv).toContain(`${manual};Modèle A;1;réussi;8;;8;;100;800;50;10;40;;0,001;;;"Haïku de A\nsur deux lignes"\r\n`);
+
+  // Une fois la question notée par l'Utilisateur : notes (moyenne des deux évaluateurs), métriques et texte.
+  await rate(ids.manA, userRow.id, 4);
+  await rate(ids.manB, userRow.id, 7);
+  const scored = (await get(`/api/runs/${runId}/export.csv`, user)).body;
+  expect(scored).toContain(`${manual};Modèle A;1;réussi;6;;6;;100;800;50;10;40;;0,001;;;"Haïku de A\nsur deux lignes"\r\n`);
+  expect(scored).toContain(`${manual};Modèle B;1;réussi;6,5;;6,5;;200;1500;100;10;45;;0,002;;;Haïku de B\r\n`);
 });

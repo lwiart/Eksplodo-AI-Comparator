@@ -8,6 +8,7 @@ import type { Db } from '../../db/client.js';
 import { models, providers } from '../../db/schema/catalog.js';
 import { results, runModels, runTests, runs } from '../../db/schema/runs.js';
 import { AppError } from '../../errors.js';
+import { roundUsd } from '../../lib/money.js';
 import { describeError } from '../errors/capture.js';
 import { redact, reportError } from '../errors/report.js';
 import { InterruptedError, affectedRows, type Job, type JobContext } from '../jobs/queue.js';
@@ -117,9 +118,6 @@ function abortableSleep(ms: number, signal: AbortSignal): Promise<void> {
     signal.addEventListener('abort', onAbort, { once: true });
   });
 }
-
-/** Montant arrondi au micro-dollar (précision de `DECIMAL(12,6)`) : résultat, série et `ai_usage` concordent. */
-export const roundUsd = (usd: number) => Math.round(usd * 1_000_000) / 1_000_000;
 
 /** Échec survenu avant l'appel (clé, pièce jointe…) : définitif. */
 function failedBeforeCall(code: string, message: string): CallOutcome {

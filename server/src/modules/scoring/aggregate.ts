@@ -1,5 +1,5 @@
 // Agrégation et classement des modèles d'une série (fonctions pures) : qualité, vitesse, coût, fiabilité, score global.
-import { roundUsd } from '../runs/engine.js';
+import { roundUsd } from '../../lib/money.js';
 import type { ResultStatus } from '../runs/runs.repo.js';
 import type { Weights } from '../runs/runs.service.js';
 import type { ScoringMethod } from '../tests/scoring-config.js';
@@ -119,16 +119,14 @@ export function aggregateRun(rows: AggregateInputRow[]): ModelAggregate[] {
     acc.byCategory.set(r.category, inCategory);
   }
 
-  const models = [...accs.entries()].map(([modelId, acc]) => {
-    const meanCost = mean(present(acc.done.map((r) => r.costUsd)));
-    return {
-      modelId,
-      acc,
-      medianTtftMs: median(present(acc.done.map((r) => r.ttftMs))),
-      medianTokensPerS: median(present(acc.done.map((r) => r.tokensPerS))),
-      meanCostUsd: meanCost === null ? null : roundUsd(meanCost),
-    };
-  });
+  const models = [...accs.entries()].map(([modelId, acc]) => ({
+    modelId,
+    acc,
+    medianTtftMs: median(present(acc.done.map((r) => r.ttftMs))),
+    medianTokensPerS: median(present(acc.done.map((r) => r.tokensPerS))),
+    /** Non arrondi : la note de coût ne dépend pas de l'arrondi d'affichage. */
+    meanCostUsd: mean(present(acc.done.map((r) => r.costUsd))),
+  }));
   const ttftScores = logScores(models.map((m) => m.medianTtftMs), false);
   const tpsScores = logScores(models.map((m) => m.medianTokensPerS), true);
   const costScores = logScores(models.map((m) => m.meanCostUsd), false);
@@ -146,7 +144,7 @@ export function aggregateRun(rows: AggregateInputRow[]): ModelAggregate[] {
       raw: {
         medianTtftMs,
         medianTokensPerS: medianTokensPerS === null ? null : round2(medianTokensPerS),
-        meanCostUsd,
+        meanCostUsd: meanCostUsd === null ? null : roundUsd(meanCostUsd),
         done: acc.done.length,
         failed: acc.failed,
         unsupported: acc.unsupported,

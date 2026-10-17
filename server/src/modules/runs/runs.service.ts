@@ -7,6 +7,7 @@ import { results, runModels, runTests, runs, type RunWeights } from '../../db/sc
 import { suiteTests, suites, testAttachments, tests } from '../../db/schema/tests.js';
 import { ConflictError, NotFoundError, ValidationError } from '../../errors.js';
 import type { Clock } from '../../lib/clock.js';
+import { roundUsd } from '../../lib/money.js';
 import { audit } from '../audit/audit.js';
 import type { Actor } from '../auth/actor.js';
 import { affectedRows, type DbOrTx } from '../jobs/queue.js';
@@ -22,7 +23,6 @@ import { incompleteManualQuestions } from '../scoring/manual.service.js';
 import { rescore, type RescoreInput } from '../scoring/rescore.js';
 import type { PublicTest } from '../tests/tests.service.js';
 import type { TestRow } from '../tests/tests.repo.js';
-import { roundUsd } from './engine.js';
 import { estimateRun, isSupported, maxCallCostUsd, type ModelForEstimate, type RunEstimate } from './estimate.js';
 import { ACTIVITY_LIMIT, buildProgress, countsOf, type RunProgress, type StatusCounts } from './progress.js';
 import { enqueueRunJob, withTxRetry } from './run-job.js';
