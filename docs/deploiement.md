@@ -20,9 +20,10 @@ Application Node.js hébergée chez Hostinger (compte `u355159080`), site **http
 | `CRON_SECRET` | ≥ 32 caractères, utilisé par la tâche cron. Génération : `node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"` |
 | `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` / `SMTP_FROM` | Tous ou aucun. Boîte proposée : `ia@eksplodo.fr`, serveur `smtp.hostinger.com`, port `465`. Sans SMTP, les e-mails sont seulement journalisés, sans le lien ni le texte : l'Admin copie alors le lien d'invitation ou de réinitialisation depuis l'écran « Utilisateurs » (boîte de dialogue du lien affichée à la création, ou après « Régénérer le lien » / « Lien de réinitialisation »). |
 | `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DATABASE_URL` | Créées automatiquement par Hostinger avec la base. Ne pas modifier. |
+| `APP_ENCRYPTION_KEY` | **Obligatoire** (plan 2). Clé maîtresse de 32 octets encodée en base64, qui chiffre les clés API des fournisseurs enregistrées en base. Génération : `node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"`. **En garder une copie dans un gestionnaire de mots de passe** : si elle change ou se perd, les clés enregistrées deviennent illisibles et doivent être ressaisies. Sans elle, l'application ne démarre pas. |
 | `BOOTSTRAP_ADMIN_EMAIL` + `BOOTSTRAP_ADMIN_PASSWORD` | Les deux ou aucune. Uniquement pour créer le tout premier Admin : **à retirer des variables après la première connexion**. |
 
-Aucune clé de chiffrement n'est nécessaire (`APP_ENCRYPTION_KEY` n'existe pas) : aucune donnée n'est chiffrée en base.
+Seules les clés API des fournisseurs sont chiffrées en base (AES-256-GCM avec `APP_ENCRYPTION_KEY`).
 
 Après toute modification : cliquer sur **« Appliquer les modifications »** (l'étiquette « Modifications non enregistrées » doit disparaître). L'application redémarre.
 
@@ -34,11 +35,13 @@ Les adresses e-mail sont comparées par la base : sa collation doit être insens
 
 ## Ajouter une clé API d'un fournisseur d'IA
 
-Les fournisseurs et leurs clés arrivent avec le plan 2 ; les noms de variables prévus par la spécification sont :
+Les clés des fournisseurs se saisissent **dans l'application**, pas dans hPanel : Admin → Fournisseurs → « Remplacer la clé » (ou à la création d'un fournisseur), puis « Tester la connexion ». La clé est chiffrée avec `APP_ENCRYPTION_KEY` ; l'écran n'affiche ensuite que ses 4 derniers caractères (« …a4f2 »). Aucun redémarrage n'est nécessaire.
 
-`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GOOGLE_API_KEY`, `MISTRAL_API_KEY`, `DEEPSEEK_API_KEY`, `OPENROUTER_API_KEY`.
+Fournisseurs préconfigurés à la première installation, sans clé : OpenRouter, OpenAI, Anthropic, Google, Mistral, DeepSeek, Requesty et Eden AI. On peut en ajouter d'autres (type compatible OpenAI, Anthropic ou Google).
 
-Procédure : hPanel → Sites web → ia.eksplodo.fr → Variables d'environnement → ajouter la variable et sa valeur → **« Appliquer les modifications »**. L'application redémarre et prend la clé en compte. Ne jamais passer par l'API `hosting_nodejs_replace-environment-variables` (remplacement de tout l'ensemble).
+« Clé illisible » sur un fournisseur : `APP_ENCRYPTION_KEY` a changé depuis l'enregistrement de la clé ; la ressaisir.
+
+`AIC_FAKE_LLM=1` (faux fournisseur, sans appel réel) sert au développement local et n'a aucun effet en production.
 
 ## Déployer une nouvelle version
 

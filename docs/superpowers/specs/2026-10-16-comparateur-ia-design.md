@@ -17,7 +17,7 @@ Deux usages :
 
 ### Critères de réussite V1
 
-1. L'Admin connecte au moins OpenRouter, Anthropic, Google et un fournisseur compatible OpenAI (Mistral ou DeepSeek) grâce aux seules variables d'environnement, et voit pour chacun l'état « clé présente » ou « clé manquante ».
+1. L'Admin connecte au moins OpenRouter, Anthropic, Google et un fournisseur compatible OpenAI (Mistral ou DeepSeek) en saisissant leur clé dans l'écran « Fournisseurs », et voit pour chacun l'état « clé enregistrée (…a4f2) », « clé manquante » ou « clé illisible », ainsi que le résultat de « Tester la connexion ».
 2. Il crée un test avec pièce jointe (image ou PDF) et l'une des trois méthodes de notation, puis le vérifie avec l'**essai rapide**.
 3. Il lance une série de 24 tests × 6 modèles × 2 répétitions. Elle se termine seule sur Hostinger, survit à un redémarrage de l'application et respecte son plafond de dépense.
 4. Il ajoute un 7ᵉ modèle à cette série : seules les combinaisons manquantes sont exécutées.
@@ -31,7 +31,7 @@ Deux usages :
 
 ### Inclus en V1
 
-- Fournisseurs de trois types : **compatible OpenAI** (OpenAI, Mistral, DeepSeek, Qwen/DashScope, Kimi/Moonshot, OpenRouter, Groq, xAI, Ollama en local…), **Anthropic** et **Google Gemini**. Les clés API proviennent **exclusivement des variables d'environnement**.
+- Fournisseurs de trois types : **compatible OpenAI** (OpenAI, Mistral, DeepSeek, Qwen/DashScope, Kimi/Moonshot, OpenRouter, Groq, xAI, Ollama en local…, et des agrégateurs comme OpenRouter, Requesty ou Eden AI), **Anthropic** et **Google Gemini**. L'Admin ajoute les fournisseurs et **saisit leur clé API dans l'interface** ; elle est stockée **chiffrée** (AES-256-GCM) avec la clé maîtresse `APP_ENCRYPTION_KEY`. Le modèle juge utilise le même mécanisme.
 - Catalogue de modèles, avec un assistant d'ajout qui interroge `/models`. Pour OpenRouter, les prix et les capacités sont importés automatiquement.
 - **Nouveautés OpenRouter** : détection quotidienne des modèles apparus dans le catalogue OpenRouter et absents du catalogue local.
 - Tests (prompt système, prompt utilisateur, pièces jointes image ou PDF, paramètres, catégorie, tags) et suites de tests.
@@ -52,7 +52,7 @@ Deux usages :
 - Appels d'outils et sorties structurées comme critères de test.
 - Classement général entre séries différentes (les notes de vitesse et de coût sont relatives à une série, voir §8.4).
 - Planification automatique de séries récurrentes.
-- Saisie des clés API dans l'interface.
+- Connecteurs dédiés pour les fournisseurs dont l'API n'est compatible avec aucun des trois types.
 
 ---
 
@@ -146,7 +146,7 @@ server/
       providers/
         types.ts           # interface ProviderAdapter + types communs
         openai-compatible.ts  anthropic.ts  google.ts  fake.ts
-        registry.ts        # fournisseur → adaptateur + clé lue dans process.env
+        registry.ts        # fournisseur → adaptateur + clé déchiffrée au moment de l'appel
         errors.ts          # normalisation des erreurs fournisseur
       catalog/             # modèles, assistant /models, import OpenRouter, nouveautés
       tests/               # tests, pièces jointes, suites, essai rapide
@@ -189,7 +189,7 @@ Toutes les tables utilisent des identifiants UUID v4 en `CHAR(36)` (comme l'app 
 
 ### 5.2 Catalogue
 
-- `providers` : nom, `type` (`openai_compatible` | `anthropic` | `google`), `base_url`, **`api_key_env`** (nom de la variable d'environnement, par exemple `MISTRAL_API_KEY`), `max_concurrency` (2 par défaut), `enabled`. **La valeur de la clé n'est jamais stockée.**
+- `providers` : nom, `type` (`openai_compatible` | `anthropic` | `google`), `base_url`, **`api_key_encrypted`** (clé API chiffrée en AES-256-GCM avec `APP_ENCRYPTION_KEY`, nullable), **`api_key_last4`** (4 derniers caractères, pour l'affichage masqué « …a4f2 »), `max_concurrency` (2 par défaut), `enabled`. **La clé en clair n'est jamais stockée, renvoyée ni journalisée.**
 - `models` : fournisseur, `api_model_id`, nom affiché, couleur d'affichage, prix entrée et sortie par million de tokens (`DECIMAL(10,4)`), `price_source` (`manual` | `openrouter`), `supports_vision`, `supports_pdf`, fenêtre de contexte, `enabled`, dates.
 - `openrouter_catalog` : identifiant OpenRouter, nom, prix, modalités d'entrée, `first_seen_at`, `dismissed_at`.
 
@@ -260,13 +260,13 @@ Les erreurs sont levées sous forme de `ProviderError` normalisée (§12.1).
 | `fake` | aucun appel réseau | toutes acceptées | tokens simulés | liste fixe |
 
 - **Faux fournisseur** (`AIC_FAKE_LLM=1`, ignoré en production) : il simule une latence avant le premier token, un débit, des erreurs 429 et 5xx, des timeouts et des refus, à partir d'une graine. Il sert aux tests, au développement et aux démonstrations hors ligne.
-- **Clé** : `registry.ts` lit `process.env[provider.api_key_env]` au moment de l'appel. Si la variable est vide, le fournisseur est « clé manquante » et ses modèles ne peuvent être choisis ni dans une série ni dans un essai rapide.
-- Fournisseurs préconfigurés à la première installation (modifiables) : OpenAI (`OPENAI_API_KEY`), Anthropic (`ANTHROPIC_API_KEY`), Google (`GOOGLE_API_KEY`), Mistral (`MISTRAL_API_KEY`, `https://api.mistral.ai/v1`), DeepSeek (`DEEPSEEK_API_KEY`, `https://api.deepseek.com/v1`), OpenRouter (`OPENROUTER_API_KEY`, `https://openrouter.ai/api/v1`).
+- **Clé** : l'Admin la saisit à la création du fournisseur ou par « Remplacer la clé » ; `registry.ts` la déchiffre au moment de l'appel. Sans clé, le fournisseur est « clé manquante » ; si `APP_ENCRYPTION_KEY` a changé, le déchiffrement échoue et le fournisseur est « clé illisible, ressaisissez-la » (comme dans l'app AO). Dans les deux cas, ses modèles ne peuvent être choisis ni dans une série ni dans un essai rapide. « Tester la connexion » interroge `listModels()` (moins de 15 s, donc dans la requête HTTP) et affiche le résultat normalisé.
+- Fournisseurs préconfigurés à la première installation, **sans clé** (l'Admin les complète) : OpenRouter (`https://openrouter.ai/api/v1`), OpenAI (`https://api.openai.com/v1`), Anthropic (`https://api.anthropic.com`), Google (`https://generativelanguage.googleapis.com/v1beta`), Mistral (`https://api.mistral.ai/v1`), DeepSeek (`https://api.deepseek.com/v1`), Requesty (`https://router.requesty.ai/v1`) et Eden AI (`https://api.edenai.run/v3`, API compatible OpenAI, modèles nommés `fournisseur/modèle`). Si un agrégateur n'expose pas `/models`, l'Admin ajoute ses modèles à la main.
 
 ### 6.3 Ajout de modèles et nouveautés
 
 - L'**assistant** interroge `listModels()` du fournisseur et propose une liste filtrable. Pour OpenRouter, les prix (convertis en $ par million) et les capacités (modalités `image` et `file`) sont préremplis. Pour les autres fournisseurs, l'Admin saisit les prix et coche les capacités.
-- Prix Anthropic connus préremplis : Claude Opus 5.5 4 $ / 20 $, Claude Sonnet 5.5 2 $ / 10 $ par million de tokens (tarifs relevés dans la spec de l'app AO, à vérifier à la mise en service).
+- Prix Anthropic connus préremplis : Claude Opus 5.5 4 $ / 20 $, Claude Sonnet 5.5 2 $ / 10 $, Claude Haiku 5.5 0,10 $ / 0,50 $ par million de tokens (vérifiés le 2026-10-17).
 - **Nouveautés** : la tâche planifiée `catalog_refresh` (tous les jours à 6 h, heure de Paris) lit `https://openrouter.ai/api/v1/models`, qui est public et ne demande pas de clé. Les modèles inconnus sont ajoutés à `openrouter_catalog` avec `first_seen_at`. La **première synchronisation marque tout comme déjà vu**, pour ne pas inonder le tableau de bord. Ensuite, le tableau de bord liste les modèles vus depuis moins de 30 jours, absents du catalogue local et non écartés, avec les boutons « Ajouter » (préremplit l'assistant sur le fournisseur OpenRouter) et « Ignorer ».
 
 ---
@@ -286,7 +286,7 @@ Les erreurs sont levées sous forme de `ProviderError` normalisée (§12.1).
 ### 8.1 Lancement (assistant en 4 étapes)
 
 1. **Suite** (ou tests choisis à la carte).
-2. **Modèles** : seuls les modèles dont la clé est présente sont sélectionnables, avec leurs capacités affichées.
+2. **Modèles** : seuls les modèles dont le fournisseur a une clé enregistrée et lisible sont sélectionnables, avec leurs capacités affichées.
 3. **Paramètres** : répétitions (1 à 5, défaut 1), modèle juge (défaut : réglage « juge par défaut »), concurrence, plafond de dépense facultatif, pondération par défaut.
 4. **Récapitulatif et estimation** :
    - nombre d'appels et nombre de combinaisons « non supportées » (pièce jointe que le modèle ne gère pas) ;
@@ -376,7 +376,7 @@ Chiffres clés (séries, modèles suivis, dépense du mois avec la part du juge,
 
 ### 9.3 Fiche modèle
 
-Fournisseur, identifiant API, prix, capacités, état de la clé (nom de la variable, jamais sa valeur), qualité moyenne, premier token et débit médians avec leur rang, fiabilité, radar par catégorie comparé à la moyenne des modèles, et historique des séries (rang, qualité, score global).
+Fournisseur, identifiant API, prix, capacités, état de la clé (enregistrée, manquante ou illisible ; jamais sa valeur), qualité moyenne, premier token et débit médians avec leur rang, fiabilité, radar par catégorie comparé à la moyenne des modèles, et historique des séries (rang, qualité, score global).
 
 ### 9.4 Liens de partage
 
@@ -395,7 +395,7 @@ Toutes les routes `/api/*` exigent une session, sauf l'authentification. Les rou
 
 - Authentification : `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/me`, `POST /api/auth/invitations/:token/accept`, `POST /api/auth/password`.
 - Utilisateurs **A** : `GET/POST /api/users/invitations`, `PATCH /api/users/:id` (rôle, statut).
-- Catalogue : `GET /api/providers` (avec `keyPresent`), **A** `POST/PATCH /api/providers`, `GET /api/providers/:id/remote-models` **A**, `GET /api/models`, `GET /api/models/:id`, **A** `POST/PATCH /api/models`, `GET /api/catalog/new` **A**, `POST /api/catalog/:id/dismiss` **A**.
+- Catalogue : `GET /api/providers` (avec l'état de la clé, jamais sa valeur), **A** `POST/PATCH /api/providers` (champ `apiKey` en écriture seule), **A** `POST /api/providers/:id/test` (« Tester la connexion »), `GET /api/providers/:id/remote-models` **A**, `GET /api/models`, `GET /api/models/:id`, **A** `POST/PATCH /api/models`, `GET /api/catalog/new` **A**, `POST /api/catalog/:id/dismiss` **A**.
 - Tests **A** : CRUD `/api/tests`, `POST /api/tests/:id/attachments`, `POST /api/tests/try` (crée la tâche d'essai rapide, renvoie son identifiant) et `GET /api/tests/try/:jobId` (état et résultat), CRUD `/api/suites`.
 - Séries : `GET /api/runs`, `GET /api/runs/:id`, `GET /api/runs/:id/progress`, `GET /api/runs/:id/results`, `GET /api/runs/:id/export.csv` ; **A** `POST /api/runs/estimate`, `POST /api/runs`, `POST /api/runs/:id/{pause,resume,retry-errors,rescore}`, `POST /api/runs/:id/models`, `PATCH /api/runs/:id` (plafond, pondération).
 - Notation : `GET /api/scoring/todo`, `GET /api/scoring/questions/:runTestId` (version anonymisée), `PUT /api/scoring/results/:id/manual` ; **A** `PUT /api/scoring/results/:id/override`.
@@ -471,7 +471,7 @@ Les messages d'erreur sont masqués avant tout enregistrement : clés, jetons `B
 - Mots de passe argon2id (12 caractères minimum). Sessions en cookie `HttpOnly`, `Secure` et `SameSite=Lax`, avec expiration glissante de 7 jours, stockées hachées.
 - Protection CSRF sur toutes les requêtes modifiantes, limitation des tentatives de connexion (par IP et par compte), en-têtes de sécurité (helmet : CSP, HSTS…).
 - **Contrôle du rôle sur chaque route côté serveur.** Les routes de notation vérifient que la question demandée est anonymisée pour un Utilisateur.
-- Clés API uniquement dans les variables d'environnement ; elles ne sont ni stockées, ni renvoyées, ni journalisées.
+- Clés API des fournisseurs saisies par l'Admin, stockées chiffrées (AES-256-GCM, clé maîtresse `APP_ENCRYPTION_KEY` de 32 octets en base64, obligatoire et validée au démarrage) ; jamais renvoyées par l'API (seuls les 4 derniers caractères le sont, à l'Admin), jamais journalisées ni écrites dans le journal d'audit.
 - Pièces jointes hors du dossier public, noms générés, types MIME vérifiés par signature de fichier.
 - Les réponses des modèles sont des données non fiables : elles sont échappées à l'affichage (aucun HTML exécuté ; rendu Markdown assaini) et délimitées pour le juge (§8.3).
 - Les prompts et les réponses ne sont jamais écrits dans les journaux techniques.
@@ -480,7 +480,7 @@ Les messages d'erreur sont masqués avant tout enregistrement : clés, jetons `B
 ### 12.3 Observabilité
 
 - **Journal des erreurs** repris de l'app AO : références `E-XXXXX`, regroupement, masquage, page Admin « Journal des erreurs » et récapitulatif par e-mail facultatif.
-- **`GET /health`** : `db`, `worker`, séries en cours, et pour chaque fournisseur la présence de la clé (booléen).
+- **`GET /health`** : `db`, `worker`, séries en cours, et le nombre de fournisseurs configurés (actifs et munis d'une clé lisible).
 - Les journaux sont structurés en JSON.
 
 ---
@@ -517,8 +517,8 @@ Les messages d'erreur sont masqués avant tout enregistrement : clés, jetons `B
   - `DB_*` et `DATABASE_URL`, créées par Hostinger ;
   - `SMTP_*` (expéditeur proposé : `ia@eksplodo.fr`) ;
   - `BOOTSTRAP_ADMIN_EMAIL` et `BOOTSTRAP_ADMIN_PASSWORD`, au premier démarrage seulement ;
-  - les clés `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GOOGLE_API_KEY`, `MISTRAL_API_KEY`, `DEEPSEEK_API_KEY`, `OPENROUTER_API_KEY`, et toute autre clé nommée dans un fournisseur.
-- **Ajouter une clé** : la saisir dans hPanel, cliquer sur « Appliquer les modifications » (l'app redémarre), puis vérifier que le fournisseur passe à « clé présente ». L'API Hostinger remplace **toutes** les variables d'un coup : on ne l'utilise pas pour ce besoin.
+  - `APP_ENCRYPTION_KEY` (32 octets en base64), à conserver aussi dans un gestionnaire de mots de passe : sans elle, les clés des fournisseurs enregistrées deviennent illisibles.
+- **Ajouter une clé de fournisseur** : écran « Fournisseurs » de l'app (« Remplacer la clé » puis « Tester la connexion ») ; aucune variable d'environnement ni redémarrage. L'API Hostinger remplace **toutes** les variables d'un coup : on ne l'utilise jamais.
 - Cron hPanel toutes les 15 minutes : `curl -s -X POST -H "x-cron-secret: <CRON_SECRET>" https://ia.eksplodo.fr/internal/tick`.
 - Vérification : `/health` renvoie `"status":"ok"`, `"db":"ok"` et `"worker":"running"`, puis on teste la page de connexion.
 - Tout est documenté dans `docs/deploiement.md`. **Aucune action sur Hostinger** (création du site ou de la base, envoi, build) n'est faite sans l'accord explicite de l'utilisateur au moment voulu.
@@ -545,9 +545,9 @@ Chaque plan est rédigé, relu puis exécuté l'un après l'autre.
 |---|---|---|
 | 1 | LiteSpeed coupe les requêtes longues de l'essai rapide (jusqu'à 90 s) | **Vérifié le 2026-10-17 : coupure à 60 s** (307 du proxy Hostinger). Décision validée par Laurent : l'essai rapide (§7) passe par une tâche de la file et un suivi par interrogation ; aucune requête HTTP ne doit dépasser 60 s |
 | 2 | Nombre de connexions sortantes simultanées et mémoire sur l'hébergement mutualisé | Plan 3 : série de démonstration à 4 appels simultanés sur Hostinger, avec mesure de la mémoire résidente |
-| 3 | Différences de format entre fournisseurs : usage absent du flux, tokens de raisonnement, PDF acceptés ou non | Plan 2 : flux réels enregistrés en fixtures pour chaque fournisseur configuré |
+| 3 | Différences de format entre fournisseurs : usage absent du flux, tokens de raisonnement, PDF acceptés ou non | Plan 2 : fixtures construites d'après la documentation publique de chaque fournisseur ; vérification sur un appel réel au premier essai rapide (plan 3), avec l'accord de Laurent pour la dépense |
 | 4 | Limites de taille des pièces jointes en base64 selon les fournisseurs | Plan 2 : vérification à l'ajout (10 Mo par fichier) et message clair en cas de refus |
-| 5 | Coût réel OpenRouter (`usage.cost`) disponible en streaming | Plan 2 : vérification sur un appel réel ; sinon calcul avec les prix importés |
+| 5 | Coût réel OpenRouter (`usage.cost`) disponible en streaming | Plan 2 : lecture de `usage.cost` dans le flux (fixture) ; vérification sur un appel réel au plan 3, sinon calcul avec les prix importés |
 | 6 | Biais du juge (préférence pour les réponses longues ou pour son propre fournisseur) | Avertissement à l'écran, choix du juge par série, recalcul possible, notation manuelle en complément |
 | 7 | Performance de la 3D sur des portables modestes en démonstration | Plan 1 : scène de connexion livrée (fragment Three.js chargé à la demande, pause hors écran, repli 2D, 60 rayons sur mobile). Temps d'image restant à mesurer par Laurent sur le portable de démonstration |
 
