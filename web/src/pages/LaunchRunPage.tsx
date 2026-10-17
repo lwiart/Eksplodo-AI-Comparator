@@ -40,7 +40,8 @@ function parseBudget(raw: string): number | null | undefined {
   const text = raw.trim().replace(',', '.');
   if (text === '') return null;
   const n = Number(text);
-  return Number.isFinite(n) && n >= 0.0001 && n <= 999_999 ? Math.round(n * 10_000) / 10_000 : undefined;
+  const fourDecimals = Math.abs(n * 10_000 - Math.round(n * 10_000)) < 1e-6;
+  return Number.isFinite(n) && n >= 0.0001 && n <= 999_999 && fourDecimals ? Math.round(n * 10_000) / 10_000 : undefined;
 }
 
 type PickedTest = { id: string; name: string; scoringMethod: ScoringMethod };
@@ -272,18 +273,19 @@ export function LaunchRunPage() {
 
   const judgeRequired = picked.some((t) => t.scoringMethod === 'judge');
   const budgetValue = parseBudget(budget);
+  const weightNumber = (raw: string) => (raw.trim() === '' ? NaN : Number(raw));
   const weightNumbers = {
-    quality: Number(weights.quality),
-    speed: Number(weights.speed),
-    cost: Number(weights.cost),
-    reliability: Number(weights.reliability),
+    quality: weightNumber(weights.quality),
+    speed: weightNumber(weights.speed),
+    cost: weightNumber(weights.cost),
+    reliability: weightNumber(weights.reliability),
   };
   const weightsValid = Object.values(weightNumbers).every((n) => Number.isInteger(n) && n >= 0 && n <= 100);
   const weightsTotal = Object.values(weightNumbers).reduce((a, b) => a + (Number.isFinite(b) ? b : 0), 0);
   const weightsOk = weightsValid && weightsTotal === 100;
   const judgeEvaluated = judgeId !== '' && modelIds.includes(judgeId);
 
-  const defaultName = suite ? suite.name : `Série du ${new Date().toLocaleDateString('fr-FR')}`;
+  const defaultName = source === 'suite' && suite ? suite.name : `Série du ${new Date().toLocaleDateString('fr-FR')}`;
   const body: RunInput = {
     name: name.trim() || defaultName,
     ...(source === 'suite' && suiteId ? { suiteId } : {}),

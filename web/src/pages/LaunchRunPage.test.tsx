@@ -195,3 +195,55 @@ test('juge requis si un test est noté par le juge, avec alerte si le juge est a
     SUITE.tests.pop();
   }
 });
+
+test('le nom par défaut suit la source : repasser en tests à la carte abandonne le nom de la suite', async () => {
+  const user = userEvent.setup();
+  renderPage();
+  await user.click(await screen.findByRole('radio', { name: /Polyvalence/ }));
+  await user.click(screen.getByRole('tab', { name: 'Tests à la carte' }));
+  await user.click(await screen.findByRole('checkbox', { name: /Résumer/ }));
+  await next(user);
+  await user.click(await screen.findByRole('checkbox', { name: /Claude Opus/ }));
+  await next(user);
+  expect(screen.getByLabelText('Nom de la série')).toHaveAttribute('placeholder', expect.stringMatching(/^Série du /));
+  await next(user);
+  await waitFor(() => expect(estimateCalls().length).toBeGreaterThan(0));
+  const body = estimateCalls().at(-1)![1].body;
+  expect(body.name).toMatch(/^Série du /);
+  expect(body.suiteId).toBeUndefined();
+});
+
+test('plafond à plus de 4 décimales et pondération vide sont refusés', async () => {
+  const user = userEvent.setup();
+  await toParams(user);
+  fireEvent.change(screen.getByLabelText('Plafond en $ (facultatif)'), { target: { value: '1,23456' } });
+  expect(screen.getByRole('button', { name: /^Continuer/ })).toBeDisabled();
+  fireEvent.change(screen.getByLabelText('Plafond en $ (facultatif)'), { target: { value: '1,2345' } });
+  expect(screen.getByRole('button', { name: /^Continuer/ })).toBeEnabled();
+  fireEvent.change(screen.getByLabelText('Vitesse'), { target: { value: '' } });
+  fireEvent.change(screen.getByLabelText('Qualité'), { target: { value: '70' } });
+  expect(screen.getByText(/Total : 100/)).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: /^Continuer/ })).toBeDisabled();
+});
+
+test('estimation périmée : « Lancer » reste désactivé jusqu’à l’estimation du nouveau corps', async () => {
+  const user = userEvent.setup();
+  await toParams(user);
+  await next(user);
+  const launch = screen.getByRole('button', { name: 'Lancer la série' });
+  await waitFor(() => expect(launch).toBeEnabled());
+  await user.click(screen.getByRole('button', { name: 'Retour' }));
+  fireEvent.change(screen.getByLabelText('Répétitions'), { target: { value: '3' } });
+  let resolve!: (v: unknown) => void;
+  const pending = new Promise((r) => (resolve = r));
+  const impl = apiFetch.getMockImplementation()!;
+  apiFetch.mockImplementation((path: string, init?: { method?: string }) =>
+    path === '/api/runs/estimate' ? pending : impl(path, init),
+  );
+  await next(user);
+  expect(screen.getByRole('button', { name: 'Lancer la série' })).toBeDisabled();
+  await waitFor(() => expect(estimateCalls().at(-1)![1].body.repetitions).toBe(3));
+  expect(screen.getByRole('button', { name: 'Lancer la série' })).toBeDisabled();
+  resolve({ estimate: ESTIMATE });
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Lancer la série' })).toBeEnabled());
+});
