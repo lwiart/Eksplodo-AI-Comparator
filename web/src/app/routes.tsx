@@ -6,6 +6,7 @@ import { DashboardPage } from '../pages/DashboardPage';
 import { InvitationPage } from '../pages/InvitationPage';
 import { LoginPage } from '../pages/LoginPage';
 import { ErrorLogPage } from '../pages/admin/ErrorLogPage';
+import { ProvidersPage } from '../pages/admin/ProvidersPage';
 import { UsersPage } from '../pages/admin/UsersPage';
 import { ResetPasswordPage } from '../pages/ResetPasswordPage';
 import { AppShell } from './AppShell';
@@ -56,6 +57,7 @@ export function AppRoutes() {
           <Route path="/compte" element={<AccountPage />} />
           <Route element={<RequireRole roles={['admin']} />}>
             <Route path="/admin/utilisateurs" element={<UsersPage />} />
+            <Route path="/admin/fournisseurs" element={<ProvidersPage />} />
             <Route path="/admin/erreurs" element={<ErrorLogPage />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />

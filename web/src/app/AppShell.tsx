@@ -14,6 +14,7 @@ type NavItem = { to: string; label: string; icon: string; end?: boolean; badge?:
 const EXPLORE: NavItem[] = [{ to: '/', label: 'Tableau de bord', icon: '◎', end: true }];
 const ADMIN: NavItem[] = [
   { to: '/admin/utilisateurs', label: 'Utilisateurs', icon: '☻' },
+  { to: '/admin/fournisseurs', label: 'Fournisseurs', icon: '⌁' },
   { to: '/admin/erreurs', label: 'Journal des erreurs', icon: '⚠' },
 ];
 
