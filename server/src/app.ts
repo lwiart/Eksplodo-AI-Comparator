@@ -14,6 +14,8 @@ import type { ScheduleEntry } from './modules/jobs/scheduler.js';
 import { registerTickRoutes } from './modules/jobs/tick.routes.js';
 import { registerCatalogRoutes } from './modules/catalog/catalog.routes.js';
 import { createCatalogService } from './modules/catalog/catalog.service.js';
+import { registerTestsRoutes } from './modules/tests/tests.routes.js';
+import { createTestsService } from './modules/tests/tests.service.js';
 import type { Mailer } from './modules/mail/mailer.js';
 import type { Registry } from './modules/providers/registry.js';
 import { registerAuthRoutes } from './modules/auth/auth.routes.js';
@@ -172,6 +174,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   registerAuthRoutes(app, deps);
   registerUserRoutes(app, createUsersService(deps));
   registerCatalogRoutes(app, catalog);
+  registerTestsRoutes(app, createTestsService(deps));
   registerTickRoutes(app, deps);
   registerErrorRoutes(app, deps);
 

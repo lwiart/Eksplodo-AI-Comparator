@@ -14,6 +14,8 @@ import {
   varchar,
 } from 'drizzle-orm/mysql-core';
 
+import type { ScoringConfig } from '../../modules/tests/scoring-config.js';
+
 const now = () => sql`CURRENT_TIMESTAMP(3)`;
 const createdAt = () => datetime('created_at', { mode: 'date', fsp: 3 }).notNull().default(now());
 const updatedAt = () =>
@@ -34,7 +36,7 @@ export const tests = mysqlTable(
     temperature: decimal('temperature', { precision: 3, scale: 2, mode: 'number' }).notNull().default(0.2),
     maxTokens: int('max_tokens').notNull().default(1000),
     scoringMethod: mysqlEnum('scoring_method', ['judge', 'expected', 'manual']).notNull(),
-    scoringConfig: json('scoring_config').$type<Record<string, unknown>>().notNull(),
+    scoringConfig: json('scoring_config').$type<ScoringConfig>().notNull(),
     archivedAt: datetime('archived_at', { mode: 'date', fsp: 3 }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
