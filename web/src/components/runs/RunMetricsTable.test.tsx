@@ -1,6 +1,7 @@
+import { render, screen, within } from '@testing-library/react';
 import { expect, test } from 'vitest';
 import type { ResultRow } from '../../api/runs';
-import { median, modelMetrics } from './RunMetricsTable';
+import { median, modelMetrics, RunMetricsTable } from './RunMetricsTable';
 
 const row = (over: Partial<ResultRow>): ResultRow => ({
   id: 'x',
@@ -28,6 +29,7 @@ const row = (over: Partial<ResultRow>): ResultRow => ({
   errorMessage: null,
   scoreStatus: 'pending',
   completedAt: null,
+  hiddenUntilScored: false,
   ...over,
 });
 
@@ -50,4 +52,15 @@ test('métriques par modèle : réussis, erreurs (erreur + délai), médianes de
     { modelId: 'm1', modelName: 'A', color: '#F0631F', successes: 2, errors: 2, medianTtftMs: 500, medianTokensPerS: 60, meanCostUsd: 0.003 },
     { modelId: 'm2', modelName: 'B', color: '#3FA2E0', successes: 0, errors: 0, medianTtftMs: null, medianTokensPerS: null, meanCostUsd: null },
   ]);
+});
+
+test('réponses masquées avant notation (mesures nulles) : réussites comptées, mesures « — »', () => {
+  const hidden = { hiddenUntilScored: true, attempts: null, responseText: null, finishReason: null, inputTokens: null, outputTokens: null, completedAt: null };
+  const rows = [row(hidden), row(hidden)];
+  expect(modelMetrics(rows)).toEqual([
+    { modelId: 'm1', modelName: 'A', color: '#F0631F', successes: 2, errors: 0, medianTtftMs: null, medianTokensPerS: null, meanCostUsd: null },
+  ]);
+  render(<RunMetricsTable rows={rows} />);
+  const cells = within(screen.getByRole('row', { name: /A/ })).getAllByRole('cell');
+  expect(cells.map((c) => c.textContent)).toEqual(['2', '0', '—', '—', '—']);
 });

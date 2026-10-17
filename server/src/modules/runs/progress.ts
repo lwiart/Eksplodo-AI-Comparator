@@ -37,6 +37,8 @@ export type RunProgress = {
     totalMs: number | null;
     costUsd: number | null;
     completedAt: string;
+    /** Durée et coût masqués : question manuelle que l'Utilisateur n'a pas encore notée. */
+    hiddenUntilScored: boolean;
   }[];
   matrix: { runTestId: string; testName: string; cells: MatrixCell[] }[];
   models: { id: string; name: string; color: string }[];

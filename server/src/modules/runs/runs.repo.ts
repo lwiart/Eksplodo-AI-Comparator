@@ -146,6 +146,7 @@ export function createRunsRepo(db: Db) {
       return db
         .select({
           resultId: results.id,
+          runTestId: results.runTestId,
           testName: snapshotName,
           modelId: results.modelId,
           modelName: models.displayName,

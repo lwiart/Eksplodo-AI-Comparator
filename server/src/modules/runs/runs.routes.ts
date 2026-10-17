@@ -103,7 +103,7 @@ export function registerRunsRoutes(app: FastifyInstance, service: RunsService): 
 
   app.get('/api/runs/:id/progress', connected, async (req) => {
     const { id } = idParams.parse(req.params);
-    return { progress: await service.progress(id) };
+    return { progress: await service.progress(id, req.actor!) };
   });
 
   app.get('/api/runs/:id/results', connected, async (req) => {

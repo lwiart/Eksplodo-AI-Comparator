@@ -52,8 +52,8 @@ const PROGRESS = {
   etaSeconds: 125,
   running: [{ modelId: 'm2', testName: 'Résumer' }],
   activity: [
-    { resultId: 'x2', testName: 'Extraire', modelId: 'm1', modelName: 'Claude Opus', color: '#F0631F', status: 'error', totalMs: null, costUsd: null, completedAt: '2026-10-17T12:32:08.000Z' },
-    { resultId: 'x1', testName: 'Résumer', modelId: 'm1', modelName: 'Claude Opus', color: '#F0631F', status: 'done', totalMs: 3100, costUsd: 0.0021, completedAt: '2026-10-17T12:31:57.000Z' },
+    { resultId: 'x2', testName: 'Extraire', modelId: 'm1', modelName: 'Claude Opus', color: '#F0631F', status: 'error', totalMs: null, costUsd: null, completedAt: '2026-10-17T12:32:08.000Z', hiddenUntilScored: false },
+    { resultId: 'x1', testName: 'Résumer', modelId: 'm1', modelName: 'Claude Opus', color: '#F0631F', status: 'done', totalMs: 3100, costUsd: 0.0021, completedAt: '2026-10-17T12:31:57.000Z', hiddenUntilScored: false },
   ],
   matrix: [
     { runTestId: 'rt1', testName: 'Résumer', cells: [cell('m1', { done: 1 }), cell('m2', { running: 1 })] },
@@ -89,6 +89,7 @@ const result = (over: Record<string, unknown>) => ({
   errorMessage: null,
   scoreStatus: 'pending',
   completedAt: '2026-10-17T12:31:57.000Z',
+  hiddenUntilScored: false,
   ...over,
 });
 const RESULTS = [

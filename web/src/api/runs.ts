@@ -86,9 +86,11 @@ export type RunProgress = {
     modelName: string;
     color: string;
     status: ResultStatus;
+    /** Nuls quand `hiddenUntilScored` : question manuelle pas encore notée par ce compte. */
     totalMs: number | null;
     costUsd: number | null;
     completedAt: string;
+    hiddenUntilScored: boolean;
   }[];
   matrix: { runTestId: string; testName: string; cells: MatrixCell[] }[];
   models: { id: string; name: string; color: string }[];
@@ -104,7 +106,8 @@ export type ResultRow = {
   color: string;
   repetition: number;
   status: ResultStatus;
-  attempts: number;
+  /** Nul, comme le texte et les autres mesures, quand `hiddenUntilScored`. */
+  attempts: number | null;
   responseText: string | null;
   finishReason: string | null;
   inputTokens: number | null;
@@ -120,6 +123,8 @@ export type ResultRow = {
   errorMessage: string | null;
   scoreStatus: 'pending' | 'done' | 'awaiting_manual' | 'judge_failed';
   completedAt: string | null;
+  /** Test manuel que ce compte n'a pas encore noté : texte et mesures masqués (nuls). */
+  hiddenUntilScored: boolean;
 };
 
 export const RUNS_KEY = ['runs'] as const;

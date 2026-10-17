@@ -404,3 +404,33 @@ test('ordre servi non recalculable à partir des identifiants visibles dans les 
   const otherAnswers = (await s.get(`/api/scoring/questions/${s.rt}`, s.other)).json().answers as Answer[];
   expect(otherAnswers.map((a) => byText.get(a.responseText))).not.toEqual(served);
 });
+
+test('fil d’activité : durée et coût masqués à l’Utilisateur sur une question manuelle non notée, visibles après', async () => {
+  const s = await setup();
+  type Item = { resultId: string; testName: string; modelName: string; status: string; totalMs: number | null; costUsd: number | null; hiddenUntilScored: boolean };
+  const activity = async (session: Setup['admin']) => (await s.get(`/api/runs/${s.runId}/progress`, session)).json().progress.activity as Item[];
+  const manualIds = new Set(s.manualResults.map((r) => r.id));
+  const isManual = (i: Item) => manualIds.has(i.resultId);
+
+  let items = await activity(s.user);
+  expect(items.filter(isManual)).toHaveLength(4);
+  for (const i of items.filter(isManual)) {
+    // Le fil continue d'avancer : modèle, test et statut restent visibles.
+    expect(i).toMatchObject({ testName: 'Rédaction', modelName: expect.stringMatching(/^Faux /), status: 'done', totalMs: null, costUsd: null, hiddenUntilScored: true });
+  }
+  // L'Admin voit les mesures.
+  for (const i of (await activity(s.admin)).filter(isManual)) {
+    expect(i.hiddenUntilScored).toBe(false);
+    expect(i.totalMs).not.toBeNull();
+    expect(i.costUsd).not.toBeNull();
+  }
+  expect((await scoreAll(s, s.user, () => 5)).statusCode).toBe(200);
+  items = await activity(s.user);
+  for (const i of items.filter(isManual)) {
+    expect(i.hiddenUntilScored).toBe(false);
+    expect(i.totalMs).not.toBeNull();
+    expect(i.costUsd).not.toBeNull();
+  }
+  // Un autre Utilisateur qui n'a pas noté reste masqué.
+  expect((await activity(s.other)).filter(isManual).every((i) => i.hiddenUntilScored && i.totalMs === null && i.costUsd === null)).toBe(true);
+});

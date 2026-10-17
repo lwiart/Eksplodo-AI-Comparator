@@ -565,10 +565,14 @@ export function createRunsService(deps: RunsServiceDeps) {
     /** Recalcul des notes du juge (série, test ou résultat), éventuellement avec un autre juge. */
     rescore: (actor: Actor, id: string, input: RescoreInput) => rescore(db, actor, id, input, { registry, now: deps.clock() }),
 
-    async progress(id: string): Promise<RunProgress> {
+    /**
+     * Avancement d'une série ; pour un Utilisateur, durée et coût masqués dans le fil d'activité sur les questions
+     * manuelles qu'il n'a pas complétées (ils rapprocheraient une réponse à l'aveugle de son modèle).
+     */
+    async progress(id: string, actor: Actor): Promise<RunProgress> {
       const run = await requireRun(id);
       const budgetPause = run.status === 'paused' && run.pauseReason === 'budget';
-      const [runModelRows, runTestRows, cells, running, activity, averageTotalMs, nextUsd, judgePending] = await Promise.all([
+      const [runModelRows, runTestRows, cells, running, activityRows, averageTotalMs, nextUsd, judgePending, hidden] = await Promise.all([
         repo.runModelsOf(id),
         repo.runTestsOf(id),
         repo.cellCounts(id),
@@ -577,7 +581,11 @@ export function createRunsService(deps: RunsServiceDeps) {
         repo.averageTotalMs(id),
         budgetPause ? nextCallMaxCostUsd(db, id) : null,
         countPendingJudgements(db, id),
+        actor.role === 'admin' ? new Set<string>() : incompleteManualQuestions(db, actor.userId, id),
       ]);
+      const activity = activityRows.map(({ runTestId, ...a }) =>
+        hidden.has(runTestId) ? { ...a, totalMs: null, costUsd: null, hiddenUntilScored: true } : { ...a, hiddenUntilScored: false },
+      );
       return buildProgress({
         run,
         now: deps.clock(),
