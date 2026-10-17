@@ -7,12 +7,21 @@ import { AppRoutes } from './routes';
 
 afterEach(() => vi.unstubAllGlobals());
 
+const EMPTY_DASHBOARD = {
+  runs: { total: 0, thisMonth: 0 },
+  models: { tracked: 0, providers: 0 },
+  spend: null,
+  toScore: { questions: 0, runName: null },
+  recentRuns: [],
+  evolutionSuites: [],
+};
+
 function stubMe(user: PublicUser | null) {
   vi.stubGlobal(
     'fetch',
-    vi.fn().mockImplementation(async () =>
+    vi.fn().mockImplementation(async (input: RequestInfo | URL) =>
       user
-        ? new Response(JSON.stringify({ user }), { status: 200 })
+        ? new Response(JSON.stringify(String(input).includes('/api/dashboard') ? EMPTY_DASHBOARD : { user }), { status: 200 })
         : new Response(JSON.stringify({ error: { code: 'unauthorized', message: 'x' } }), { status: 401 }),
     ),
   );
@@ -50,7 +59,7 @@ test('connecté → tableau de bord avec « Bonjour {nom} »', async () => {
   stubMe(USER);
   renderAt('/');
   expect(await screen.findByRole('heading', { name: 'Bonjour Alice' })).toBeInTheDocument();
-  expect(screen.getByText('Les séries et les classements arriveront ici.')).toBeInTheDocument();
+  expect(await screen.findByText('Séries lancées')).toBeInTheDocument();
 });
 
 test('Utilisateur sur /admin/utilisateurs → page « Accès refusé »', async () => {
