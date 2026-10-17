@@ -3,7 +3,7 @@ import { magnetOffset, pickNearest, springStep } from './fanout-physics';
 import { MAIN_PROVIDERS } from './providers';
 import type { SceneFactory } from './useThreeScene';
 
-// Valeurs de la maquette validée (docs/superpowers/maquettes/connexion-fanout.html, « Retenu · Bulle & jauge ronde »).
+// Valeurs de la maquette validée (maquettes/connexion-fanout.html, « Retenu · Bulle & jauge ronde »).
 const CYCLE = 7.5; // durée d'un tour : envoi, réponses, notes, podium
 const OFFSET_X = 3.2; // la scène est poussée vers la droite : la carte de connexion occupe la gauche
 const PX = -2.4; // bulle du prompt

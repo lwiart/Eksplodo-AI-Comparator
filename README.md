@@ -32,5 +32,5 @@ Le développement lit `.env`. Pour l'aperçu dans Claude Code, `.claude/launch.j
 
 - Spécification : [`docs/superpowers/specs/2026-10-16-comparateur-ia-design.md`](docs/superpowers/specs/2026-10-16-comparateur-ia-design.md)
 - Plan 1 (fondations) : [`docs/superpowers/plans/2026-10-16-plan-1-fondations.md`](docs/superpowers/plans/2026-10-16-plan-1-fondations.md)
-- Maquettes : [`docs/superpowers/maquettes/`](docs/superpowers/maquettes/)
+- Maquettes : [`maquettes/`](maquettes/)
 - Déploiement Hostinger : [`docs/deploiement.md`](docs/deploiement.md)

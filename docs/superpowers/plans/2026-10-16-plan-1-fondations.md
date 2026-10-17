@@ -8,7 +8,7 @@
 
 **Tech Stack:** Node.js 24, TypeScript strict (ESM), Fastify 5, Zod, Drizzle ORM + mysql2 + drizzle-kit, MariaDB 11.8 (Docker en local), @node-rs/argon2, Nodemailer, luxon, React 19 + Vite + React Router + TanStack Query, Tailwind CSS v4, @fontsource, Three.js, Vitest + Testing Library.
 
-**Spec:** `docs/superpowers/specs/2026-10-16-comparateur-ia-design.md` (sections 3, 4, 5.1, 5.5, 11, 12, 13, 14, 15 et 16 pour ce plan). Maquettes : `docs/superpowers/maquettes/`.
+**Spec:** `docs/superpowers/specs/2026-10-16-comparateur-ia-design.md` (sections 3, 4, 5.1, 5.5, 11, 12, 13, 14, 15 et 16 pour ce plan). Maquettes : `maquettes/`.
 
 ### Feuille de route des plans
 
@@ -39,7 +39,7 @@
 - Ports de développement : API **3000**, Vite **5173** (proxy `/api`, `/internal`, `/health` vers l'API).
 - Titre de l'application : **« Eksplodo · Comparateur IA »** ; nom du paquet `eksplodo-comparateur-ia`.
 - Interface en français, thème « Nuit » (spec §11.1) : fonds `#00131D` / `#011F2E` / `#032A3D` (dégradé radial vers `#06405D`), lignes `rgba(120,190,230,.14)` et `.28`, texte `#D8ECF5`, secondaire `#7FA3B5`, orange `#F0631F`, pêche `#FFB48A`, bleus `#3FA2E0` / `#0C659D` / `#7CC4EF`, succès `#4FD1A5`, erreur `#FF7A7A` ; grille de points ; cartes arrondies 18 px ; boutons et pastilles 100 px. Polices auto-hébergées via `@fontsource` : Archivo (titres 700-800), Instrument Sans (texte), Noto Sans Mono (étiquettes, chiffres). Logo : `docs/brand/eksplodo-icon-white.png`.
-- Toute tâche d'interface utilise le skill **`frontend-design`** en partant des maquettes `docs/superpowers/maquettes/`.
+- Toute tâche d'interface utilise le skill **`frontend-design`** en partant des maquettes `maquettes/`.
 - Toute action sur Hostinger (création de site, de base, variables, envoi, build, cron) est **visible de l'extérieur** : demander l'accord explicite de Laurent avant chacune. Ne jamais appeler `hosting_nodejs_replace-environment-variables` (remplace toutes les variables).
 
 ## Review Focus
@@ -422,7 +422,7 @@ test('masquage : une clé sk-… et un paramètre key= n’atteignent jamais err
 
 ### Task 7: Socle de l'interface : Vite, Tailwind « Nuit », coque et authentification côté client
 
-Utiliser le skill **`frontend-design`** ; référence visuelle : `docs/superpowers/maquettes/resultats-nuit.html` (barre latérale, cartes, pastilles, boutons).
+Utiliser le skill **`frontend-design`** ; référence visuelle : `maquettes/resultats-nuit.html` (barre latérale, cartes, pastilles, boutons).
 
 **Files:**
 - Create : `vite.config.ts` (copie de `$AO`, proxy ajouté pour `/health`), `web/index.html` (titre « Eksplodo · Comparateur IA », `lang="fr"`), `web/public/` (favicon dérivé de `docs/brand/eksplodo-icon-white.png`, `logo-icon-white.png`)
@@ -472,7 +472,7 @@ test('localStorage indisponible → défaut sans erreur', () => { /* getItem qui
 
 ### Task 8: Three.js (gerbe Eksplodo) et pages d'authentification
 
-Utiliser le skill **`frontend-design`** ; référence : onglet « Connexion » de `docs/superpowers/maquettes/ecrans-nuit.html` (fonction `burst`).
+Utiliser le skill **`frontend-design`** ; référence : onglet « Connexion » de `maquettes/ecrans-nuit.html` (fonction `burst`).
 
 **Files:**
 - Create : `web/src/three/animation-policy.ts`, `web/src/three/useThreeScene.ts`, `web/src/three/burst-scene.ts`, `web/src/three/BurstFallback.tsx`, `web/src/three/ThreeStage.tsx`

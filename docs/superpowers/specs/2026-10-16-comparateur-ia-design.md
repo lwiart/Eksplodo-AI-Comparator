@@ -3,7 +3,7 @@
 - **Date :** 2026-10-16
 - **Statut :** validée section par section en brainstorming, en attente de relecture de ce document
 - **Projet de référence :** `Code-appels offre` (app `ao.eksplodo.fr`), dont on reprend la stack, l'hébergement, la file de tâches, l'authentification et le journal des erreurs
-- **Maquettes validées :** [`docs/superpowers/maquettes/`](../maquettes/) (`resultats-nuit.html`, `ecrans-nuit.html`)
+- **Maquettes validées :** [`maquettes/`](../../../maquettes/) (`resultats-nuit.html`, `ecrans-nuit.html`, `connexion-fanout.html` pour la page de connexion)
 
 ---
 
@@ -167,7 +167,8 @@ web/
     components/  pages/  api/
 docs/
   brand/                   # logo Eksplodo et icône blanche
-  superpowers/specs/  superpowers/plans/  superpowers/maquettes/
+  superpowers/specs/  superpowers/plans/
+maquettes/                 # maquettes HTML validées (design, écrans, animations)
   deploiement.md
 ```
 

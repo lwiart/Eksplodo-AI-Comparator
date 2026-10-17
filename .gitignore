@@ -12,3 +12,4 @@ Thumbs.db
 .claude/settings.local.json
 .superpowers/
 docs/reference-ao/
+.playwright-mcp/
