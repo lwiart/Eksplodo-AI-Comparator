@@ -122,22 +122,6 @@ export function createQuickTryHandler(deps: QuickTryHandlerDeps): JobHandler {
         await reportJobFailure(deps.db, job, { code: d.name, message: d.message, stack: d.stack, severity: 'normale' }, ctx.now());
       }
     };
-    let score: QuickTryScore | null = null;
-    if (outcome.status === 'done') {
-      await recordSafely({
-        origin: 'quick_try',
-        runId: null,
-        modelId,
-        inputTokens: outcome.inputTokens,
-        outputTokens: outcome.outputTokens,
-        reasoningTokens: outcome.reasoningTokens ?? 0,
-        costUsd: roundUsd(outcome.costUsd ?? 0),
-        now: ctx.now(),
-      });
-      score = await scoreOutcome(snapshot!, outcome.text);
-    }
-    await ctx.reportProgress({ outcome: { ...outcome, modelName: model.displayName, score } });
-
     /** Note de la réponse : réponse attendue tout de suite, juge par défaut en deux appels au plus ; jamais d'échec de la tâche. */
     async function scoreOutcome(snap: TestSnapshot, text: string): Promise<QuickTryScore | null> {
       if (snap.scoringMethod === 'expected') {
@@ -184,5 +168,29 @@ export function createQuickTryHandler(deps: QuickTryHandlerDeps): JobHandler {
         if (attempt >= MAX_INVALID_REPLIES) return { ...base, score: null, rationale: UNREADABLE_REPLY, judgeCostUsd: costUsd };
       }
     }
+
+    let score: QuickTryScore | null = null;
+    if (outcome.status === 'done') {
+      await recordSafely({
+        origin: 'quick_try',
+        runId: null,
+        modelId,
+        inputTokens: outcome.inputTokens,
+        outputTokens: outcome.outputTokens,
+        reasoningTokens: outcome.reasoningTokens ?? 0,
+        costUsd: roundUsd(outcome.costUsd ?? 0),
+        now: ctx.now(),
+      });
+      try {
+        score = await scoreOutcome(snapshot!, outcome.text);
+      } catch (err) {
+        // Arrêt de la tâche : on le laisse remonter ; toute autre erreur laisse l'essai sans note, mais avec son issue.
+        if (ctx.signal.aborted) throw err;
+        const d = describeError(err);
+        await reportJobFailure(deps.db, job, { code: d.name, message: d.message, stack: d.stack, severity: 'normale' }, ctx.now());
+        score = snapshot!.scoringMethod === 'manual' ? null : { method: snapshot!.scoringMethod as 'expected' | 'judge', score: null, rationale: 'Note indisponible' };
+      }
+    }
+    await ctx.reportProgress({ outcome: { ...outcome, modelName: model.displayName, score } });
   };
 }

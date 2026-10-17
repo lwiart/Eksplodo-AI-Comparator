@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { eq, sql } from 'drizzle-orm';
-import { afterEach, expect, test } from 'vitest';
+import { afterEach, expect, test, vi } from 'vitest';
+import * as settingsModule from '../src/modules/scoring/settings.js';
 import { errorEvents } from '../src/db/schema/errors.js';
 import { jobs } from '../src/db/schema/jobs.js';
 import { aiUsage, results } from '../src/db/schema/runs.js';
@@ -346,4 +347,20 @@ test('modèle évalué en erreur : aucune note', async () => {
   });
   expect(body.outcome.status).toBe('error');
   expect(body.outcome.score).toBeNull();
+});
+
+test('notation qui lève une erreur : essai done, issue gardée, score nul, erreur journalisée', async () => {
+  const t = await setup();
+  // La recherche du juge par défaut échoue.
+  const spy = vi.spyOn(settingsModule, 'getDefaultJudge').mockRejectedValue(new Error('lecture impossible'));
+  try {
+    const body = await tryTest(t, { scoringMethod: 'judge', scoringConfig: { criteria: 'Clarté' }, userPrompt: 'Explique' });
+    expect(body.status).toBe('done');
+    expect(body.outcome.status).toBe('done');
+    expect(body.outcome.text.length).toBeGreaterThan(0);
+    expect(body.outcome.score).toEqual({ method: 'judge', score: null, rationale: 'Note indisponible' });
+    expect(await t.db.select().from(errorEvents)).toHaveLength(1);
+  } finally {
+    spy.mockRestore();
+  }
 });
