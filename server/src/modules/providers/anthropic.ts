@@ -99,6 +99,7 @@ export function createAnthropicAdapter(cfg: ProviderConfig): ProviderAdapter {
       }
     }
 
+    // `output_tokens` inclut la réflexion (thinking) sans la détailler : pas de `reasoningTokens`, la sortie la contient.
     if (inputTokens !== undefined || outputTokens !== undefined) yield { type: 'usage', inputTokens, outputTokens };
     if (finish !== null) yield { type: 'finish', reason: finish };
   }

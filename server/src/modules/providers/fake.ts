@@ -177,7 +177,7 @@ export function createFakeAdapter(
     yield {
       type: 'usage',
       inputTokens: inputTokens(req),
-      outputTokens: outputTokens + reasoningTokens,
+      outputTokens, // hors raisonnement, compté à part
       ...(reasoningTokens > 0 ? { reasoningTokens } : {}),
     };
     yield { type: 'finish', reason: refusal ? 'refusal' : cappedByLength ? 'length' : 'stop' };

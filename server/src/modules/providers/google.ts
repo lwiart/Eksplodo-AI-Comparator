@@ -91,6 +91,7 @@ export function createGoogleAdapter(cfg: ProviderConfig): ProviderAdapter {
           usage = {
             type: 'usage',
             inputTokens: num(packet.usageMetadata.promptTokenCount),
+            // `candidatesTokenCount` exclut déjà les pensées (`thoughtsTokenCount`).
             outputTokens: num(packet.usageMetadata.candidatesTokenCount),
             reasoningTokens: num(packet.usageMetadata.thoughtsTokenCount),
             costUsd: undefined,

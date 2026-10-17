@@ -1,9 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { and, eq, inArray, sql } from 'drizzle-orm';
-import { afterEach, beforeEach, expect, test } from 'vitest';
+import { afterEach, beforeEach, expect, test, vi } from 'vitest';
+import type { Db } from '../src/db/client.js';
+import { errorEvents } from '../src/db/schema/errors.js';
 import { jobs } from '../src/db/schema/jobs.js';
-import { aiUsage, results, runs } from '../src/db/schema/runs.js';
+import { aiUsage, results, runTests, runs } from '../src/db/schema/runs.js';
 import { tests } from '../src/db/schema/tests.js';
 import { InterruptedError, getJob, type Job, type JobContext, type JobHandlers } from '../src/modules/jobs/queue.js';
 import { runWorkerOnce } from '../src/modules/jobs/worker.js';
@@ -453,6 +455,108 @@ test('arrêt du processus : appels annulés, résultats pending avec tentative r
     ['pending', 0],
   ]);
   expect(await runRow(runId)).toMatchObject({ status: 'running', activeJobId: job.id });
+});
+
+test('erreur pendant les lancements : les appels en cours se terminent et sont enregistrés avant que la tranche échoue', async () => {
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => (release = resolve));
+  let started = 0;
+  const registry = wrappedRegistry((inner) => ({
+    ...inner,
+    async *generate(req, signal) {
+      started++;
+      await gate;
+      yield* inner.generate(req, signal);
+    },
+  }));
+  const { runId } = await seedRun({ prompts: ['Un', 'Deux'], concurrency: 2 });
+  // La deuxième prise de résultat (UPDATE results) échoue : connexion perdue.
+  let updates = 0;
+  const flaky = new Proxy(t.db, {
+    get(target, prop, receiver) {
+      if (prop === 'update') {
+        return (table: unknown) => {
+          if (table === results && ++updates === 2) {
+            setTimeout(release, 20); // l'appel en cours se termine après l'erreur
+            throw new Error('connexion perdue');
+          }
+          return target.update(table as typeof results);
+        };
+      }
+      const value = Reflect.get(target, prop, receiver) as unknown;
+      return typeof value === 'function' ? (value as (...a: unknown[]) => unknown).bind(target) : value;
+    },
+  }) as Db;
+  const job = await activeJob(runId);
+  await expect(executeRunSlice(engineDeps({ db: flaky, registry }), job, ctxOf())).rejects.toThrow('connexion perdue');
+  expect(started).toBe(1);
+  const rows = await resultRows(runId);
+  expect(rows.filter((r) => r.status === 'done')).toHaveLength(1);
+  expect(rows.filter((r) => r.status === 'running')).toHaveLength(0);
+  expect(rows.filter((r) => r.status === 'pending')).toHaveLength(3);
+  // Aucune écriture finale : la tâche reste active pour sa reprise.
+  expect(await runRow(runId)).toMatchObject({ status: 'running', activeJobId: job.id });
+});
+
+test('onResultFinished en échec : erreur journalisée, résultat done, la tranche continue', async () => {
+  let calls = 0;
+  const { runId } = await seedRun({ prompts: ['Un', 'Deux'] });
+  await drain(
+    engineDeps({
+      onResultFinished: async () => {
+        calls++;
+        throw new Error('notation impossible');
+      },
+    }),
+  );
+  expect(calls).toBe(4);
+  expect((await resultRows(runId)).every((r) => r.status === 'done')).toBe(true);
+  expect((await runRow(runId)).status).toBe('completed');
+  const events = await t.db.select().from(errorEvents);
+  expect(events).toHaveLength(1); // occurrences regroupées
+  expect(events[0]).toMatchObject({ source: 'job', origin: 'run_execute', severity: 'normale', occurrences: 4, targetType: 'result' });
+  expect(events[0]!.message).toContain('notation impossible');
+});
+
+test('pièce jointe illisible : erreur définitive attachment_unreadable avec le code, cause journalisée', async () => {
+  const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+  try {
+    const { runId, modelIds } = await seedRun({ prompts: ['Décris'] });
+    await t.db.delete(results).where(and(eq(results.runId, runId), eq(results.modelId, modelIds[1]!)));
+    const [rt] = await t.db.select().from(runTests).where(eq(runTests.runId, runId));
+    const attachment = {
+      id: randomUUID(),
+      originalName: 'absente.png',
+      mime: 'image/png',
+      size: 10,
+      sha256: 'a'.repeat(64),
+      pages: null,
+      storagePath: `attachments/${randomUUID()}/${randomUUID()}`,
+    };
+    await t.db
+      .update(runTests)
+      .set({ snapshot: { ...rt!.snapshot, attachments: [attachment] } })
+      .where(eq(runTests.id, rt!.id));
+    await drain(engineDeps());
+    const [r] = await resultRows(runId);
+    expect(r).toMatchObject({ status: 'error', attempts: 1, errorCode: 'attachment_unreadable' });
+    expect(r!.errorMessage).toContain('ENOENT');
+    expect(warn).toHaveBeenCalledWith('run_execute : pièce jointe illisible', { resultId: r!.id, code: 'ENOENT' });
+  } finally {
+    warn.mockRestore();
+  }
+});
+
+test('modèle à raisonnement : coût sans double compte du raisonnement', async () => {
+  const { runId } = await seedRun({ prompts: ['[[fake:reasoning]] Pourquoi ?'] });
+  await drain(engineDeps());
+  for (const r of await resultRows(runId)) {
+    expect(r).toMatchObject({ status: 'done', reasoningTokens: 24, tokensEstimated: false });
+    expect(r.outputTokens! * 4).toBe(r.responseText!.length); // sortie = texte visible seulement
+    // Prix : 2 $ en entrée, 8 $ en sortie (raisonnement compris), par million de tokens.
+    const expected = Math.round(((r.inputTokens! * 2 + (r.outputTokens! + 24) * 8) / 1_000_000) * 1e6) / 1e6;
+    expect(r.costUsd).toBeCloseTo(expected, 6);
+  }
 });
 
 test('monthSpend : mois civil en Europe/Paris, part du juge séparée', async () => {

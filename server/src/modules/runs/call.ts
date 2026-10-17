@@ -33,7 +33,8 @@ export const MAX_RESPONSE_CHARS = 200_000;
 /** En deçà, la phase de génération est trop courte pour un débit significatif. */
 const MIN_GENERATION_MS = 100;
 const CHARS_PER_TOKEN = 4;
-// Mêmes forfaits que l'estimation (le nombre de pages d'un PDF n'est pas connu ici : une page).
+// Forfaits de l'estimation, à défaut de `estimatedInputTokens` (le nombre de pages d'un PDF n'est pas dans la requête :
+// une page).
 const TOKENS_PER_IMAGE = 1500;
 const TOKENS_PER_PDF = 800;
 
@@ -50,13 +51,14 @@ const timeoutReason = () => new DOMException('Délai dépassé', 'TimeoutError')
 
 /**
  * Appelle le modèle et mesure le flux. Les erreurs du fournisseur sont renvoyées dans l'issue (jamais levées) ;
- * une annulation par `deps.signal` (arrêt de la tâche) rejette avec la raison du signal.
+ * une annulation par `deps.signal` (arrêt de la tâche) rejette avec la raison du signal. `estimatedInputTokens` : entrée
+ * estimée d'après l'instantané du test (`estimateInputTokens`, 800 par page de PDF), utilisée si l'usage manque.
  */
 export async function measureCall(
   adapter: ProviderAdapter,
   req: GenerateRequest,
   model: ModelPrices,
-  deps: { now: () => number; signal?: AbortSignal; timeoutMs?: number },
+  deps: { now: () => number; signal?: AbortSignal; timeoutMs?: number; estimatedInputTokens?: number },
 ): Promise<CallOutcome> {
   const timeout = new AbortController();
   const timer = setTimeout(() => timeout.abort(timeoutReason()), deps.timeoutMs ?? CALL_TIMEOUT_MS);
@@ -103,7 +105,7 @@ export async function measureCall(
 
   const totalMs = (finishedAt ?? deps.now()) - t0;
   const tokensEstimated = usage.inputTokens === undefined || usage.outputTokens === undefined;
-  const inputTokens = usage.inputTokens ?? estimatedInputTokens(req);
+  const inputTokens = usage.inputTokens ?? deps.estimatedInputTokens ?? estimatedInputTokens(req);
   const outputTokens = usage.outputTokens ?? tokensOfChars(outputChars);
   // Usage complet sans détail du raisonnement : aucun (il peut être compté dans la sortie, comme chez Anthropic).
   const reasoningTokens =

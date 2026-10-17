@@ -7,13 +7,15 @@ import type { Db } from '../../db/client.js';
 import { models, providers } from '../../db/schema/catalog.js';
 import { results, runModels, runTests, runs } from '../../db/schema/runs.js';
 import { AppError } from '../../errors.js';
-import { redact } from '../errors/report.js';
+import { describeError } from '../errors/capture.js';
+import { redact, reportError } from '../errors/report.js';
 import { InterruptedError, affectedRows, type Job, type JobContext } from '../jobs/queue.js';
 import type { ProviderLike, Registry } from '../providers/registry.js';
 import { readAttachment } from '../tests/attachments.js';
 import { recordUsage } from '../usage/usage.js';
 import { buildRequest, measureCall, type CallOutcome, type ModelPrices } from './call.js';
-import { enqueueRunJob } from './run-job.js';
+import { estimateInputTokens } from './estimate.js';
+import { RUN_EXECUTE, enqueueRunJob } from './run-job.js';
 import type { TestSnapshot } from './snapshot.js';
 
 /** Durée d'une tranche : ni lancement ni nouvelle tentative au-delà (les appels en cours se terminent, ≤ 120 s). */
@@ -111,6 +113,12 @@ function failedBeforeCall(code: string, message: string): CallOutcome {
     retryable: false,
     retryAfterMs: null,
   };
+}
+
+function attachmentErrorCode(err: unknown): string {
+  const code = (err as { code?: unknown } | null)?.code;
+  if (typeof code === 'string' && /^[A-Z0-9_]{1,40}$/.test(code)) return code;
+  return err instanceof Error ? err.name : 'Error';
 }
 
 /** Délai avant la prochaine tentative : `Retry-After` (plafonné à 30 s), sinon 2 s puis 8 s. */
@@ -262,10 +270,17 @@ export async function executeRunSlice(deps: EngineDeps, job: Job, ctx: JobContex
     let req;
     try {
       req = await buildRequest(item.snapshot, item.apiModelId, (a) => readAttachment(deps.config, a));
-    } catch {
-      return failedBeforeCall('attachment_unreadable', "Pièce jointe illisible : le fichier n'a pas pu être lu");
+    } catch (err) {
+      // Cause journalisée sans chemin ni contenu : nom ou code système seulement (ENOENT, EACCES…).
+      const code = attachmentErrorCode(err);
+      console.warn('run_execute : pièce jointe illisible', { resultId: item.resultId, code });
+      return failedBeforeCall('attachment_unreadable', `Pièce jointe illisible (${code}) : le fichier n'a pas pu être lu`);
     }
-    return measureCall(adapter, req, item.prices, { now: nowMs, signal: ctx.signal });
+    return measureCall(adapter, req, item.prices, {
+      now: nowMs,
+      signal: ctx.signal,
+      estimatedInputTokens: estimateInputTokens(item.snapshot), // 800 tokens par page de PDF
+    });
   }
 
   async function finishDone(item: WorkItem, o: CallOutcome): Promise<void> {
@@ -313,8 +328,22 @@ export async function executeRunSlice(deps: EngineDeps, job: Job, ctx: JobContex
     if (!committed) return;
     finished++;
     if (deps.onResultFinished) {
-      await deps.onResultFinished(item.resultId).catch((err: unknown) => {
-        console.error('run_execute : échec du traitement de fin de résultat', { resultId: item.resultId, err });
+      await deps.onResultFinished(item.resultId).catch(async (err: unknown) => {
+        // Journal des erreurs (message masqué par le journal) ; le résultat reste `done` et la tranche continue.
+        const d = describeError(err);
+        await reportError(
+          db,
+          {
+            source: 'job',
+            origin: RUN_EXECUTE,
+            code: d.name,
+            message: d.message,
+            stack: d.stack,
+            severity: 'normale',
+            target: { type: 'result', id: item.resultId },
+          },
+          ctx.now(),
+        );
       });
     }
   }
@@ -378,35 +407,41 @@ export async function executeRunSlice(deps: EngineDeps, job: Job, ctx: JobContex
   }
 
   try {
-    // 4. Lancements dans la limite de la série et de chaque fournisseur.
-    while (!stopLaunching && !ctx.signal.aborted && !expired()) {
-      const index =
-        inFlight.size < concurrency ? queue.findIndex((it) => (perProvider.get(it.provider.id) ?? 0) < it.maxConcurrency) : -1;
-      if (index === -1) {
-        if (inFlight.size === 0) break; // file vide
-        await Promise.race(inFlight);
-        continue;
+    // 4. Lancements dans la limite de la série et de chaque fournisseur. Une erreur ici (lecture du statut, prise d'un
+    // résultat) arrête les lancements sans abandonner les appels en cours : ils se terminent avant qu'elle soit relevée.
+    try {
+      while (!stopLaunching && !ctx.signal.aborted && !expired()) {
+        const index =
+          inFlight.size < concurrency ? queue.findIndex((it) => (perProvider.get(it.provider.id) ?? 0) < it.maxConcurrency) : -1;
+        if (index === -1) {
+          if (inFlight.size === 0) break; // file vide
+          await Promise.race(inFlight);
+          continue;
+        }
+        const item = queue[index]!;
+        if (!(await mayLaunch(item))) break;
+        queue.splice(index, 1);
+        const claimed = await withTxRetry(async () =>
+          affectedRows(
+            await db
+              .update(results)
+              .set({ status: 'running', attempts: sql`${results.attempts} + 1`, startedAt: ctx.now() })
+              .where(and(eq(results.id, item.resultId), eq(results.status, 'pending'))),
+          ),
+        );
+        if (claimed !== 1) continue;
+        item.attempts++;
+        const providerId = item.provider.id;
+        perProvider.set(providerId, (perProvider.get(providerId) ?? 0) + 1);
+        const task: Promise<void> = work(item).finally(() => {
+          perProvider.set(providerId, perProvider.get(providerId)! - 1);
+          inFlight.delete(task);
+        });
+        inFlight.add(task);
       }
-      const item = queue[index]!;
-      if (!(await mayLaunch(item))) break;
-      queue.splice(index, 1);
-      const claimed = await withTxRetry(async () =>
-        affectedRows(
-          await db
-            .update(results)
-            .set({ status: 'running', attempts: sql`${results.attempts} + 1`, startedAt: ctx.now() })
-            .where(and(eq(results.id, item.resultId), eq(results.status, 'pending'))),
-        ),
-      );
-      if (claimed !== 1) continue;
-      item.attempts++;
-      const providerId = item.provider.id;
-      perProvider.set(providerId, (perProvider.get(providerId) ?? 0) + 1);
-      const task: Promise<void> = work(item).finally(() => {
-        perProvider.set(providerId, perProvider.get(providerId)! - 1);
-        inFlight.delete(task);
-      });
-      inFlight.add(task);
+    } catch (err) {
+      unexpected ??= err;
+      stopLaunching = true;
     }
     // 6. Plus de lancement : les appels en cours se terminent.
     await Promise.all(inFlight);

@@ -9,6 +9,11 @@ export type GenerateRequest = {
   maxTokens: number;
 };
 
+/**
+ * Usage : `outputTokens` = sortie visible, **hors raisonnement** ; `reasoningTokens` = raisonnement, compté à part
+ * (le coût calculé facture sortie + raisonnement au prix de sortie). Un fournisseur qui ne détaille pas le raisonnement
+ * (Anthropic) le laisse dans `outputTokens` sans `reasoningTokens`.
+ */
 export type GenerateEvent =
   | { type: 'text'; delta: string }
   | { type: 'reasoning'; delta: string }

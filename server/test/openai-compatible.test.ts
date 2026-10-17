@@ -115,7 +115,15 @@ describe('generate', () => {
     const reasoning = events.flatMap((e) => (e.type === 'reasoning' ? [e.delta] : [])).join('');
     expect(reasoning).toBe('Je réfléchis à la question.');
     expect(textOf(events)).toBe('Voici la réponse.');
-    expect(events.find((e) => e.type === 'usage')).toMatchObject({ inputTokens: 20, outputTokens: 30, reasoningTokens: 18 });
+    // completion_tokens (30) inclut le raisonnement (18) : la sortie l'exclut.
+    expect(events.find((e) => e.type === 'usage')).toMatchObject({ inputTokens: 20, outputTokens: 12, reasoningTokens: 18 });
+  });
+
+  test('usage : raisonnement supérieur à completion_tokens → sortie 0, jamais négative', async () => {
+    const sse =
+      'data: {"choices":[{"index":0,"delta":{"content":"Oui"},"finish_reason":"stop"}],"usage":{"prompt_tokens":5,"completion_tokens":3,"completion_tokens_details":{"reasoning_tokens":9}}}\n\ndata: [DONE]\n\n';
+    const events = await collect(make(fakeFetch({ [URL_CHAT]: () => new Response(sse) })));
+    expect(events.find((e) => e.type === 'usage')).toMatchObject({ inputTokens: 5, outputTokens: 0, reasoningTokens: 9 });
   });
 
   test('OpenRouter : usage.include demandé, coût réel lu dans usage.cost', async () => {

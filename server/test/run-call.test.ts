@@ -2,6 +2,7 @@ import { afterEach, expect, test, vi } from 'vitest';
 import { ProviderError } from '../src/modules/providers/errors.js';
 import type { GenerateEvent, GenerateRequest, ProviderAdapter } from '../src/modules/providers/types.js';
 import { CALL_TIMEOUT_MS, MAX_RESPONSE_CHARS, buildRequest, measureCall } from '../src/modules/runs/call.js';
+import { estimateInputTokens } from '../src/modules/runs/estimate.js';
 import type { TestSnapshot } from '../src/modules/runs/snapshot.js';
 
 type Step = { at: number; ev?: GenerateEvent; error?: unknown };
@@ -119,6 +120,45 @@ test('coût du fournisseur prioritaire (provider), sinon calculé (computed) ave
   // (1 000 × 2 + (500 + 200) × 8) ÷ 1 000 000
   expect(computed.costUsd).toBeCloseTo(0.0076, 12);
   expect(computed.costSource).toBe('computed');
+});
+
+test('modèle à raisonnement : coût = (sortie + raisonnement) × prix de sortie sans double compte, débit sur la sortie seule', async () => {
+  const out = await measure([
+    { at: 100, ev: { type: 'reasoning', delta: 'je réfléchis longuement' } },
+    { at: 400, ev: text('Réponse') },
+    { at: 1400, ev: usage({ inputTokens: 100, outputTokens: 50, reasoningTokens: 200 }) },
+    { at: 1400, ev: finish },
+  ]);
+  expect(out).toMatchObject({ outputTokens: 50, reasoningTokens: 200, tokensEstimated: false, costSource: 'computed' });
+  // (100 × 2 + (50 + 200) × 8) ÷ 1 000 000
+  expect(out.costUsd).toBeCloseTo(0.0022, 12);
+  expect(out.tokensPerS).toBe(50); // 50 tokens de sortie ÷ 1 s, raisonnement exclu
+});
+
+test('usage absent : entrée estimée d’après l’instantané, 800 tokens par page de PDF', async () => {
+  const snapshot: TestSnapshot = {
+    testId: 't',
+    name: 'Test',
+    category: 'Cat',
+    tags: [],
+    systemPrompt: null,
+    userPrompt: 'Résume ce document',
+    temperature: 0.2,
+    maxTokens: 100,
+    scoringMethod: 'manual',
+    scoringConfig: {},
+    attachments: [
+      { id: 'a', originalName: 'doc.pdf', mime: 'application/pdf', size: 3, sha256: 'x'.repeat(64), pages: 3, storagePath: 'attachments/t/a' },
+    ],
+  };
+  const request = await buildRequest(snapshot, 'm', async () => Buffer.from('%PDF'));
+  const clock = { t: 0 };
+  const out = await measureCall(scripted([{ at: 400, ev: text('Résumé') }], clock), request, prices, {
+    now: () => clock.t,
+    estimatedInputTokens: estimateInputTokens(snapshot),
+  });
+  expect(out.tokensEstimated).toBe(true);
+  expect(out.inputTokens).toBe(5 + 3 * 800); // 18 caractères ÷ 4 + 3 pages
 });
 
 test('réponse tronquée à 200 000 caractères', async () => {

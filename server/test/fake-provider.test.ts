@@ -106,6 +106,11 @@ describe('faux fournisseur', () => {
     const firstReasoning = events.findIndex((e) => e.type === 'reasoning');
     expect(firstReasoning).toBeGreaterThanOrEqual(0);
     expect(firstReasoning).toBeLessThan(firstText);
+    // Sortie hors raisonnement : autant de tokens que de texte émis (4 caractères par token).
+    const text = events.flatMap((e) => (e.type === 'text' ? [e.delta] : [])).join('');
+    const usage = events.find((e) => e.type === 'usage') as Extract<GenerateEvent, { type: 'usage' }>;
+    expect(usage.reasoningTokens).toBe(24);
+    expect(usage.outputTokens! * 4).toBe(text.length);
   });
 
   test('modèle inconnu → profil fake-equilibre, pas model_not_found', async () => {

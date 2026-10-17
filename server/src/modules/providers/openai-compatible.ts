@@ -111,11 +111,15 @@ export function createOpenAiCompatibleAdapter(cfg: ProviderConfig): ProviderAdap
 
         if (isRecord(packet.usage)) {
           const details = isRecord(packet.usage.completion_tokens_details) ? packet.usage.completion_tokens_details : {};
+          const completion = num(packet.usage.completion_tokens);
+          const reasoningTokens = num(details.reasoning_tokens);
           usage = {
             type: 'usage',
             inputTokens: num(packet.usage.prompt_tokens),
-            outputTokens: num(packet.usage.completion_tokens),
-            reasoningTokens: num(details.reasoning_tokens),
+            // `completion_tokens` inclut le raisonnement : la sortie de l'événement l'exclut (jamais négative).
+            outputTokens:
+              completion !== undefined && reasoningTokens !== undefined ? Math.max(0, completion - reasoningTokens) : completion,
+            reasoningTokens,
             costUsd: num(packet.usage.cost),
           };
         }
