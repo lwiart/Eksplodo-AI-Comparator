@@ -67,6 +67,11 @@ test('logo et titre présents, entrée Tableau de bord', () => {
   expect(screen.getByText('Contenu')).toBeInTheDocument();
 });
 
+test('EXPLORER : entrée Séries pour tous les rôles', () => {
+  renderShell('user');
+  expect(screen.getByRole('link', { name: 'Séries' })).toHaveAttribute('href', '/series');
+});
+
 test('menu du compte : Mon compte, Animations, Déconnexion', async () => {
   const { logout } = renderShell('user');
   const user = userEvent.setup();

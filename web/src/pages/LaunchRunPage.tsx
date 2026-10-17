@@ -24,10 +24,10 @@ const logoFor = (name: string) => {
   return LOGOS.get(key) ?? LOGOS.get(LOGO_ALIASES[key] ?? '');
 };
 
-const plural = (n: number, one: string, many: string) => `${n} ${n > 1 ? many : one}`;
-const usd = (n: number) => `${n.toLocaleString('fr-FR', n > 0 && n < 0.01 ? { minimumFractionDigits: 4, maximumFractionDigits: 4 } : { minimumFractionDigits: 2, maximumFractionDigits: 2 })} $`;
+export const plural = (n: number, one: string, many: string) => `${n} ${n > 1 ? many : one}`;
+export const usd = (n: number) => `${n.toLocaleString('fr-FR', n > 0 && n < 0.01 ? { minimumFractionDigits: 4, maximumFractionDigits: 4 } : { minimumFractionDigits: 2, maximumFractionDigits: 2 })} $`;
 
-function duration(seconds: number): string {
+export function duration(seconds: number): string {
   const s = Math.max(1, Math.round(seconds));
   if (s < 60) return `${s} s`;
   const m = Math.floor(s / 60);
@@ -36,7 +36,7 @@ function duration(seconds: number): string {
 }
 
 /** Plafond saisi (virgule ou point) : `null` = sans plafond, `undefined` = saisie invalide. */
-function parseBudget(raw: string): number | null | undefined {
+export function parseBudget(raw: string): number | null | undefined {
   const text = raw.trim().replace(',', '.');
   if (text === '') return null;
   const n = Number(text);

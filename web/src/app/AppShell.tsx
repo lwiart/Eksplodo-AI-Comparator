@@ -10,9 +10,10 @@ import { applyAnimationsPreference, getAnimationsPreference, setAnimationsPrefer
 
 type NavItem = { to: string; label: string; icon: string; end?: boolean; badge?: number };
 
-// Les entrées Séries et À noter sont ajoutées par les plans 3 et 4.
+// L'entrée À noter est ajoutée par le plan 4.
 const EXPLORE: NavItem[] = [
   { to: '/', label: 'Tableau de bord', icon: '◎', end: true },
+  { to: '/series', label: 'Séries', icon: '▶' },
   { to: '/modeles', label: 'Modèles', icon: '✦' },
 ];
 const ADMIN: NavItem[] = [

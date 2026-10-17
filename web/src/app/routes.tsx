@@ -15,6 +15,8 @@ import { TestsPage } from '../pages/admin/TestsPage';
 import { SuitesPage } from '../pages/admin/SuitesPage';
 import { UsersPage } from '../pages/admin/UsersPage';
 import { ResetPasswordPage } from '../pages/ResetPasswordPage';
+import { RunPage } from '../pages/RunPage';
+import { RunsPage } from '../pages/RunsPage';
 import { AppShell } from './AppShell';
 
 function Splash() {
@@ -62,6 +64,8 @@ export function AppRoutes() {
           <Route index element={<DashboardPage />} />
           <Route path="/modeles" element={<ModelsPage />} />
           <Route path="/modeles/:id" element={<ModelPage />} />
+          <Route path="/series" element={<RunsPage />} />
+          <Route path="/series/:id" element={<RunPage />} />
           <Route path="/compte" element={<AccountPage />} />
           <Route element={<RequireRole roles={['admin']} />}>
             <Route path="/admin/utilisateurs" element={<UsersPage />} />
