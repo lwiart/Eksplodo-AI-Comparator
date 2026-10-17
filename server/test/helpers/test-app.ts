@@ -22,6 +22,7 @@ export function testConfig(): AppConfig {
     appBaseUrl: 'http://localhost:3000',
     databaseUrl: 'mysql://u:p@127.0.0.1:3307/x',
     dataDir: '/tmp/aic',
+    encryptionKey: Buffer.alloc(32, 7),
     cronSecret: 'x'.repeat(32),
     smtp: null,
     bootstrapAdmin: null,

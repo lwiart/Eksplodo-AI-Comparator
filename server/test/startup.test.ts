@@ -21,6 +21,7 @@ const config = loadConfig({
   DATABASE_URL: 'mysql://u:p@127.0.0.1:3307/x',
   DATA_DIR: '/tmp/aic',
   CRON_SECRET: 'x'.repeat(32),
+  APP_ENCRYPTION_KEY: Buffer.alloc(32, 1).toString('base64'),
 });
 const LOCK_SQL = "SELECT GET_LOCK(LEFT(CONCAT('aic:startup:', DATABASE()), 64), 0) AS l";
 

@@ -11,6 +11,7 @@ const config = loadConfig({
   DATABASE_URL: 'mysql://u:p@127.0.0.1:3307/x',
   DATA_DIR: '/tmp/aic',
   CRON_SECRET: 'x'.repeat(32),
+  APP_ENCRYPTION_KEY: Buffer.alloc(32, 1).toString('base64'),
 });
 
 let testDb: Awaited<ReturnType<typeof createTestDb>>;

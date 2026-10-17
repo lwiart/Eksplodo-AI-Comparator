@@ -7,6 +7,7 @@ const base = {
   DATABASE_URL: 'mysql://u:p@127.0.0.1:3307/x',
   DATA_DIR: '/tmp/aic',
   CRON_SECRET: 'x'.repeat(32),
+  APP_ENCRYPTION_KEY: Buffer.alloc(32, 1).toString('base64'),
 };
 
 test('valeurs par défaut', () => {
@@ -37,9 +38,11 @@ test('amorçage : e-mail normalisé', () => {
   const c = loadConfig({ ...base, BOOTSTRAP_ADMIN_EMAIL: ' Laurent@Eksplodo.FR ', BOOTSTRAP_ADMIN_PASSWORD: 'p'.repeat(12) });
   expect(c.bootstrapAdmin).toEqual({ email: 'laurent@eksplodo.fr', password: 'p'.repeat(12) });
 });
-test('APP_ENCRYPTION_KEY n’est plus exigée', () => {
-  expect(() => loadConfig(base)).not.toThrow();
+test('APP_ENCRYPTION_KEY obligatoire', () => { const { APP_ENCRYPTION_KEY: _, ...env } = base; expect(() => loadConfig(env)).toThrow(/APP_ENCRYPTION_KEY/); });
+test('APP_ENCRYPTION_KEY de mauvaise longueur refusée', () => {
+  expect(() => loadConfig({ ...base, APP_ENCRYPTION_KEY: Buffer.alloc(16).toString('base64') })).toThrow(/32 octets/);
 });
+test('APP_ENCRYPTION_KEY décodée en 32 octets', () => { expect(loadConfig(base).encryptionKey).toHaveLength(32); });
 test('AIC_FAKE_LLM=1 active le faux fournisseur hors production', () => { expect(loadConfig({ ...base, AIC_FAKE_LLM: '1' }).fakeLlm).toBe(true); });
 test('AIC_FAKE_LLM absente : faux fournisseur inactif', () => {
   const c = loadConfig(base);

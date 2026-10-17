@@ -6,6 +6,8 @@ export type AppConfig = {
   appBaseUrl: string;
   databaseUrl: string;
   dataDir: string;
+  /** Clé maîtresse AES-256 (32 octets) qui chiffre les clés des fournisseurs ; ne jamais journaliser. */
+  encryptionKey: Buffer;
   cronSecret: string;
   smtp: { host: string; port: number; user: string; pass: string; from: string } | null;
   /** Premier administrateur créé au démarrage (e-mail normalisé) ; ne jamais journaliser le mot de passe. */
@@ -24,6 +26,7 @@ const schema = z.object({
   APP_BASE_URL: z.string().min(1, 'APP_BASE_URL est obligatoire').url('APP_BASE_URL doit être une URL valide'),
   DATABASE_URL: z.string().min(1, 'DATABASE_URL est obligatoire'),
   DATA_DIR: z.string().min(1, 'DATA_DIR est obligatoire'),
+  APP_ENCRYPTION_KEY: z.string().min(1, 'APP_ENCRYPTION_KEY est obligatoire'),
   CRON_SECRET: z.string().min(32, 'CRON_SECRET doit contenir au moins 32 caractères'),
   SMTP_HOST: z.string().optional(),
   SMTP_PORT: z.coerce.number().int().min(1).max(65535).optional(),
@@ -52,6 +55,11 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
     throw new Error(`Configuration invalide — ${details}`);
   }
   const e = parsed.data;
+
+  const encryptionKey = Buffer.from(e.APP_ENCRYPTION_KEY, 'base64');
+  if (encryptionKey.length !== 32) {
+    throw new Error('Configuration invalide — APP_ENCRYPTION_KEY doit être une clé de 32 octets encodée en base64');
+  }
 
   const smtpSet = SMTP_KEYS.filter((k) => e[k] !== undefined);
   let smtp: AppConfig['smtp'] = null;
@@ -90,6 +98,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
     appBaseUrl: e.APP_BASE_URL.replace(/\/+$/, ''),
     databaseUrl: e.DATABASE_URL,
     dataDir: e.DATA_DIR,
+    encryptionKey,
     cronSecret: e.CRON_SECRET,
     smtp,
     bootstrapAdmin,
