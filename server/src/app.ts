@@ -9,6 +9,8 @@ import type { Db } from './db/client.js';
 import { AppError } from './errors.js';
 import type { Clock } from './lib/clock.js';
 import { describeError, loggableError } from './modules/errors/capture.js';
+import { registerDashboardRoutes } from './modules/dashboard/dashboard.routes.js';
+import { createDashboardService } from './modules/dashboard/dashboard.service.js';
 import { registerErrorRoutes } from './modules/errors/errors.routes.js';
 import { deferError, flushPendingErrors, reportError, reportedReference } from './modules/errors/report.js';
 import type { ScheduleEntry } from './modules/jobs/scheduler.js';
@@ -198,6 +200,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   registerPublicShareRoutes(app, deps);
   registerManualScoringRoutes(app, createManualScoringService(deps));
   registerResultsRoutes(app, createResultsService(deps));
+  registerDashboardRoutes(app, createDashboardService(deps));
   registerTickRoutes(app, deps);
   registerErrorRoutes(app, deps);
 
