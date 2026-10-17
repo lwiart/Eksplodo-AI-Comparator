@@ -85,6 +85,7 @@ export function registerTestsRoutes(app: FastifyInstance, service: TestsService,
     const part = await req.file();
     if (!part) throw new AppError('validation', 400, 'Fichier manquant (champ « file »)');
     try {
+      if (part.fieldname !== 'file') throw new AppError('validation', 400, 'Fichier manquant (champ « file »)');
       const attachment = await addAttachment(attachments, req.actor!, id, { filename: part.filename, stream: part.file });
       return reply.status(201).send({ attachment });
     } catch (err) {

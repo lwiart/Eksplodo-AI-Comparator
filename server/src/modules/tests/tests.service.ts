@@ -7,6 +7,7 @@ import { NotFoundError } from '../../errors.js';
 import type { Clock } from '../../lib/clock.js';
 import { audit } from '../audit/audit.js';
 import type { Actor } from '../auth/actor.js';
+import { publicAttachment, resolveAttachmentPath } from './attachments.js';
 import { parseScoringConfig, type ScoringConfig, type ScoringMethod } from './scoring-config.js';
 import { createTestsRepo, type AttachmentRow, type TestFilters, type TestRow } from './tests.repo.js';
 
@@ -49,10 +50,6 @@ export type TestsServiceDeps = {
 };
 
 const testNotFound = () => new NotFoundError('Test introuvable');
-
-function publicAttachment(a: AttachmentRow): PublicAttachment {
-  return { id: a.id, originalName: a.originalName, mime: a.mime, size: a.size, pages: a.pages, sha256: a.sha256 };
-}
 
 function publicTest(row: TestRow, attachments: AttachmentRow[], usedInRuns: number): PublicTest {
   return {
@@ -102,16 +99,16 @@ export function createTestsService(deps: TestsServiceDeps) {
 
   /** Efface les fichiers d'un test (au mieux : un fichier déjà absent n'est pas une erreur). */
   async function removeFiles(testId: string, rows: AttachmentRow[]): Promise<void> {
-    const root = path.resolve(deps.config.dataDir);
-    const inside = (p: string) => p.startsWith(root + path.sep);
+    const targets = [...rows.map((a) => a.storagePath), path.posix.join('attachments', testId)];
     await Promise.all(
-      rows.map(async (a) => {
-        const file = path.resolve(root, a.storagePath);
-        if (inside(file)) await rm(file, { force: true }).catch(() => undefined);
+      targets.map(async (relative) => {
+        try {
+          await rm(resolveAttachmentPath(deps.config.dataDir, relative), { recursive: true, force: true });
+        } catch {
+          // chemin hors de DATA_DIR (refusé) ou fichier non effaçable : au mieux
+        }
       }),
     );
-    const dir = path.resolve(root, 'attachments', testId);
-    if (inside(dir)) await rm(dir, { recursive: true, force: true }).catch(() => undefined);
   }
 
   return {

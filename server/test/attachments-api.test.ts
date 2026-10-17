@@ -198,3 +198,36 @@ test('Utilisateur : 403 sur dépôt, retrait et téléchargement', async () => {
   expect((await t.del(`/api/tests/${t.testId}/attachments/${att.id}`, t.user)).statusCode).toBe(403);
   expect((await t.get(`/api/tests/${t.testId}/attachments/${att.id}/download`, t.user)).statusCode).toBe(403);
 });
+
+test('trois dépôts parallèles avec neuf pièces déjà là : un seul 201, deux 409, dix lignes, aucun reste', async () => {
+  const t = await setup();
+  for (let i = 0; i < 9; i += 1) expect((await t.upload(PNG, `a${i}.png`)).statusCode).toBe(201);
+  const codes = (await Promise.all([1, 2, 3].map((i) => t.upload(PNG, `p${i}.png`)))).map((r) => r.statusCode).sort();
+  expect(codes).toEqual([201, 409, 409]);
+  expect(await t.db.select().from(testAttachments).where(eq(testAttachments.testId, t.testId))).toHaveLength(10);
+  expect(await readdir(path.join(t.dataDir, 'attachments', t.testId))).toHaveLength(10);
+});
+
+test('corps de 2 octets → 415', async () => {
+  const t = await setup();
+  expect((await t.upload(Buffer.from([0xff, 0xd8]), 'x.jpg')).statusCode).toBe(415);
+});
+
+test('requête sans fichier ou mauvais champ → 400', async () => {
+  const t = await setup();
+  const send = (body: string) => {
+    const boundary = 'bnd';
+    return t.app.inject({
+      method: 'POST',
+      url: `/api/tests/${t.testId}/attachments`,
+      headers: { cookie: t.admin.cookie, 'x-csrf-token': t.admin.csrf, 'content-type': `multipart/form-data; boundary=${boundary}` },
+      payload: body.replaceAll('BND', boundary),
+    });
+  };
+  expect((await send('--BND\r\nContent-Disposition: form-data; name="note"\r\n\r\nx\r\n--BND--\r\n')).statusCode).toBe(400);
+  const wrong = await send(
+    '--BND\r\nContent-Disposition: form-data; name="autre"; filename="a.png"\r\nContent-Type: image/png\r\n\r\nabc\r\n--BND--\r\n',
+  );
+  expect(wrong.statusCode).toBe(400);
+  expect(wrong.json().error.code).toBe('validation');
+});

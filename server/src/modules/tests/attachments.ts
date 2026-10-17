@@ -42,11 +42,11 @@ export function resolveAttachmentPath(dataDir: string, relative: string): string
 /** Nom d'origine affichable : sans dossier, sans caractère de contrôle, 255 caractères au plus. */
 function cleanName(name: string): string {
   const base = name.split(/[\\/]/).pop() ?? '';
-  const cleaned = base.replace(/\p{Cc}/gu, '').trim().slice(0, MAX_NAME_CHARS);
+  const cleaned = base.replace(/[\p{Cc}\p{Cf}]/gu, '').trim().slice(0, MAX_NAME_CHARS);
   return cleaned === '' ? 'fichier' : cleaned;
 }
 
-function toPublic(a: typeof testAttachments.$inferSelect): PublicAttachment {
+export function publicAttachment(a: typeof testAttachments.$inferSelect): PublicAttachment {
   return { id: a.id, originalName: a.originalName, mime: a.mime, size: a.size, pages: a.pages, sha256: a.sha256 };
 }
 
@@ -117,31 +117,42 @@ export async function addAttachment(
     const mime = detectFileType(await readHead(tmp));
     if (mime === null) throw unsupported();
     const pages = mime === 'application/pdf' ? countPdfPages(await readFile(tmp)) : null;
-    await rename(tmp, dest);
     try {
-      await deps.db.insert(testAttachments).values({
-        id,
-        testId,
-        originalName: cleanName(file.filename),
-        mime,
-        size: written.size,
-        storagePath: relative,
-        sha256: written.sha256,
-        pages,
+      // Contrôle faisant foi du plafond : sous verrou de la ligne du test, pour que des dépôts parallèles se sérialisent.
+      await deps.db.transaction(async (tx) => {
+        await tx.select({ id: tests.id }).from(tests).where(eq(tests.id, testId)).for('update');
+        const [now] = await tx
+          .select({ n: count() })
+          .from(testAttachments)
+          .where(and(eq(testAttachments.testId, testId), isNull(testAttachments.deletedAt)));
+        if (Number(now!.n) >= MAX_ATTACHMENTS_PER_TEST) {
+          throw new ConflictError('too_many_attachments', 'Dix pièces jointes au plus par test');
+        }
+        await rename(tmp, dest);
+        await tx.insert(testAttachments).values({
+          id,
+          testId,
+          originalName: cleanName(file.filename),
+          mime,
+          size: written.size,
+          storagePath: relative,
+          sha256: written.sha256,
+          pages,
+        });
+        await audit(tx, {
+          actorUserId: actor.userId,
+          action: 'test_attachment_added',
+          targetType: 'test',
+          targetId: testId,
+          details: { attachmentId: id, mime, size: written.size },
+        });
       });
     } catch (err) {
-      await rm(dest, { force: true }).catch(() => undefined);
+      await rm(dest, { force: true }).catch(() => undefined); // rien ne reste si l'insertion ou la validation échoue
       throw err;
     }
-    await audit(deps.db, {
-      actorUserId: actor.userId,
-      action: 'test_attachment_added',
-      targetType: 'test',
-      targetId: testId,
-      details: { attachmentId: id, mime, size: written.size },
-    });
     const [row] = await deps.db.select().from(testAttachments).where(eq(testAttachments.id, id));
-    return toPublic(row!);
+    return publicAttachment(row!);
   } finally {
     await rm(tmp, { force: true }).catch(() => undefined);
   }
@@ -164,26 +175,46 @@ export async function removeAttachment(
   testId: string,
   attachmentId: string,
 ): Promise<'deleted' | 'detached'> {
-  const row = await findAttachment(deps, testId, attachmentId);
-  const [refs] = await deps.db
-    .select({ n: count() })
-    .from(runTests)
-    .where(sql`JSON_SEARCH(${runTests.snapshot}, 'one', ${attachmentId}, NULL, '$.attachments[*].id') IS NOT NULL`);
-  const referenced = Number(refs!.n) > 0;
-  if (referenced) {
-    await deps.db.update(testAttachments).set({ deletedAt: deps.clock() }).where(eq(testAttachments.id, attachmentId));
-  } else {
-    await deps.db.delete(testAttachments).where(eq(testAttachments.id, attachmentId));
-    await rm(resolveAttachmentPath(deps.config.dataDir, row.storagePath), { force: true }).catch(() => undefined);
-  }
-  await audit(deps.db, {
-    actorUserId: actor.userId,
-    action: 'test_attachment_removed',
-    targetType: 'test',
-    targetId: testId,
-    details: { attachmentId, kept: referenced },
+  // Verrou de la ligne du test : la création d'une série (qui prend le même verrou pour figer l'instantané) ne peut pas
+  // s'intercaler entre la vérification des références et le retrait.
+  const { outcome, storagePath } = await deps.db.transaction(async (tx) => {
+    await tx.select({ id: tests.id }).from(tests).where(eq(tests.id, testId)).for('update');
+    const [row] = await tx
+      .select()
+      .from(testAttachments)
+      .where(and(eq(testAttachments.id, attachmentId), eq(testAttachments.testId, testId), isNull(testAttachments.deletedAt)));
+    if (!row) throw new NotFoundError('Pièce jointe introuvable');
+    const [refs] = await tx
+      .select({ n: count() })
+      .from(runTests)
+      .where(
+        and(
+          eq(runTests.testId, testId),
+          sql`JSON_SEARCH(${runTests.snapshot}, 'one', ${attachmentId}, NULL, '$.attachments[*].id') IS NOT NULL`,
+        ),
+      );
+    const referenced = Number(refs!.n) > 0;
+    if (referenced) {
+      await tx.update(testAttachments).set({ deletedAt: deps.clock() }).where(eq(testAttachments.id, attachmentId));
+    } else {
+      await tx.delete(testAttachments).where(eq(testAttachments.id, attachmentId));
+    }
+    await audit(tx, {
+      actorUserId: actor.userId,
+      action: 'test_attachment_removed',
+      targetType: 'test',
+      targetId: testId,
+      details: { attachmentId, kept: referenced },
+    });
+    return { outcome: referenced ? ('detached' as const) : ('deleted' as const), storagePath: row.storagePath };
   });
-  return referenced ? 'detached' : 'deleted';
+  if (outcome === 'deleted') {
+    // Après validation de la transaction : un échec laisse un fichier orphelin, jamais une ligne sans fichier.
+    await rm(resolveAttachmentPath(deps.config.dataDir, storagePath), { force: true }).catch((err: unknown) => {
+      console.warn(`Pièce jointe : fichier non effacé (${err instanceof Error ? err.name : 'erreur'})`);
+    });
+  }
+  return outcome;
 }
 
 /** Contenu du fichier d'une pièce jointe ; le chemin est résolu sous `DATA_DIR` uniquement. */
