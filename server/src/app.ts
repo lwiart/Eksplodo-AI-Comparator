@@ -21,6 +21,8 @@ import { createResultsService } from './modules/scoring/results.service.js';
 import { createManualScoringService } from './modules/scoring/manual.service.js';
 import { registerScoringRoutes } from './modules/scoring/scoring.routes.js';
 import { registerRunsRoutes } from './modules/runs/runs.routes.js';
+import { registerShareLinksRoutes } from './modules/sharing/share-links.routes.js';
+import { createShareLinksService } from './modules/sharing/share-links.service.js';
 import { createRunsService } from './modules/runs/runs.service.js';
 import { MAX_ATTACHMENT_BYTES } from './modules/tests/attachments.js';
 import { registerSuitesRoutes } from './modules/tests/suites.routes.js';
@@ -191,6 +193,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   registerSuitesRoutes(app, createSuitesService(deps));
   registerRunsRoutes(app, createRunsService(deps));
   registerScoringRoutes(app, deps);
+  registerShareLinksRoutes(app, createShareLinksService(deps), deps);
   registerManualScoringRoutes(app, createManualScoringService(deps));
   registerResultsRoutes(app, createResultsService(deps));
   registerTickRoutes(app, deps);

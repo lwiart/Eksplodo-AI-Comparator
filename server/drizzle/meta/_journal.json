@@ -43,6 +43,13 @@
       "when": 1792259890506,
       "tag": "0005_confused_dexter_bennett",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "5",
+      "when": 1792273166175,
+      "tag": "0006_next_night_thrasher",
+      "breakpoints": true
     }
   ]
 }
