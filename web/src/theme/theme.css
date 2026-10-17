@@ -142,14 +142,61 @@ html[data-animations="off"] .ticker-track {
 }
 html[data-animations="off"] .reveal-in { animation: none; }
 
-/* Version imprimable (PDF du navigateur) : conserve le fond « Nuit » ; la 3D et les boutons sont masqués par `print:hidden`. */
+/* Version imprimable (PDF du navigateur) : fond blanc, texte sombre ; la 3D, les boutons et le sélecteur sont masqués. */
+.print-only {
+  display: none;
+}
 @media print {
+  .no-print {
+    display: none !important;
+  }
+  .print-only {
+    display: block;
+  }
   html,
   body {
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
+    background: #fff !important;
   }
-  .card-surface {
+  body::before {
+    display: none;
+  }
+  .share-page {
+    min-height: 0 !important;
+    overflow: visible !important;
+    background: #fff;
+  }
+  .share-page,
+  .share-page * {
+    color: #111 !important;
+    border-color: #c8d3da !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+    backdrop-filter: none !important;
+    animation: none !important;
+    transition: none !important;
+  }
+  .share-page .card-surface,
+  .share-page blockquote,
+  .share-page article {
+    background: #fff !important;
+  }
+  /* Logo blanc : inversé pour rester visible sur le papier. */
+  .share-page .logo-glow {
+    filter: invert(1);
+  }
+  .share-page svg text {
+    fill: #333 !important;
+  }
+  .share-page .card-surface,
+  .share-page table,
+  .share-page tr,
+  .share-page article,
+  .share-page [data-testid$="chart"] {
     break-inside: avoid;
+  }
+  .share-page h1,
+  .share-page h2,
+  .share-page h3 {
+    break-after: avoid;
   }
 }

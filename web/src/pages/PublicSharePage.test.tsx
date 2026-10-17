@@ -49,7 +49,7 @@ function mockFetch(share: PublicShare | { status: number }) {
 }
 
 function renderPage() {
-  render(
+  return render(
     <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
       <MemoryRouter initialEntries={['/p/jeton123']}>
         <RootRoutes />
@@ -86,15 +86,54 @@ test('page publique : titre, verdicts, podium, graphes et classement ; seule GET
   for (const a of screen.getAllByRole('link')) expect(a.getAttribute('href')).toMatch(/^https:\/\//);
 });
 
-test('showCosts faux : pas de colonne coût ni de montant affiché', async () => {
-  mockFetch({ ...SHARE, showCosts: false, run: { ...SHARE.run, totalCostUsd: null }, models: models.map((m) => ({ ...m, cost: null, raw: { ...m.raw, meanCostUsd: null } })) });
+test('showCosts faux : pas de colonne coût ni de montant affiché, même si la réponse contient des coûts', async () => {
+  // Défense en profondeur : les coûts sont présents (non nuls) dans les données, la page ne doit rien en montrer.
+  mockFetch({ ...SHARE, showCosts: false, run: { ...SHARE.run, totalCostUsd: 9.87 } });
   renderPage();
   await screen.findByRole('heading', { level: 1, name: SHARE.title });
   expect(screen.queryByRole('columnheader', { name: 'Coût moyen' })).not.toBeInTheDocument();
   expect(screen.queryByText(/\$/)).not.toBeInTheDocument();
+  expect(screen.queryByText(/coût total/i)).not.toBeInTheDocument();
 });
 
-test('réponses affichées seulement si responses est non nul ; Markdown sans HTML', async () => {
+test('showCosts vrai : coût total affiché', async () => {
+  mockFetch(SHARE);
+  renderPage();
+  expect(await screen.findByText(/coût total de la série/)).toBeInTheDocument();
+});
+
+test('auditUrl non https : aucun bouton « Audit gratuit »', async () => {
+  mockFetch({ ...SHARE, auditUrl: 'javascript:alert(1)' });
+  renderPage();
+  await screen.findByRole('heading', { level: 1, name: SHARE.title });
+  expect(screen.queryByRole('link', { name: 'Audit gratuit' })).not.toBeInTheDocument();
+  expect(document.querySelector('a[href^="javascript:"]')).toBeNull();
+});
+
+test('« Version imprimable » appelle window.print ; la gerbe porte no-print et le podium statique print-only', async () => {
+  mockFetch(SHARE);
+  const print = vi.fn();
+  vi.stubGlobal('print', print);
+  renderPage();
+  await screen.findByRole('heading', { level: 1, name: SHARE.title });
+  await userEvent.setup().click(screen.getByRole('button', { name: 'Version imprimable' }));
+  expect(print).toHaveBeenCalledTimes(1);
+  expect(screen.getByRole('button', { name: 'Version imprimable' }).closest('.no-print')).not.toBeNull();
+  expect(screen.getByTestId('fanout-fallback').closest('.no-print')).not.toBeNull();
+  expect(screen.getByRole('list', { name: 'Podium', hidden: true }).closest('.no-print')).not.toBeNull();
+  expect(screen.getByRole('list', { name: 'Podium imprimable', hidden: true }).closest('.print-only')).not.toBeNull();
+});
+
+test('le titre du document est restauré au démontage', async () => {
+  mockFetch(SHARE);
+  document.title = 'Avant';
+  const { unmount } = renderPage();
+  await waitFor(() => expect(document.title).toContain(SHARE.title));
+  unmount();
+  expect(document.title).toBe('Avant');
+});
+
+test('réponses affichées seulement si responses est non nul', async () => {
   mockFetch(SHARE);
   renderPage();
   await screen.findByRole('heading', { level: 1, name: SHARE.title });

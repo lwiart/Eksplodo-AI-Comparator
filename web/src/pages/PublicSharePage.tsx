@@ -10,6 +10,7 @@ import { Podium } from '../components/results/Podium';
 import { QualitySpeedChart } from '../components/results/QualitySpeedChart';
 import { RankingTable } from '../components/results/RankingTable';
 import { PublicResponses } from '../components/sharing/PublicResponses';
+import { StaticPodium } from '../components/sharing/StaticPodium';
 import { VerdictCards } from '../components/sharing/VerdictCards';
 import type { RankedRow } from '../lib/ranking';
 import { FanoutFallback } from '../three/FanoutFallback';
@@ -34,13 +35,17 @@ function Brand() {
   );
 }
 
+/** Garde côté client : seul un lien `https://` est injecté dans un `href` (jamais `javascript:` ou autre schéma). */
+const isHttps = (url: string): boolean => url.startsWith('https://');
+
 function AuditButton({ url }: { url: string }) {
+  if (!isHttps(url)) return null;
   return (
     <a
       href={url}
       target="_blank"
       rel="noopener noreferrer"
-      className="inline-flex items-center justify-center rounded-full bg-gradient-to-r from-orange to-orange-soft px-5 py-2.5 text-[13px] font-semibold text-white no-underline shadow-[0_8px_24px_-8px_rgba(240,99,31,0.7)] hover:brightness-110 print:hidden"
+      className="inline-flex items-center justify-center rounded-full bg-gradient-to-r from-orange to-orange-soft px-5 py-2.5 text-[13px] font-semibold text-white no-underline shadow-[0_8px_24px_-8px_rgba(240,99,31,0.7)] hover:brightness-110 no-print"
     >
       Audit gratuit
     </a>
@@ -48,12 +53,23 @@ function AuditButton({ url }: { url: string }) {
 }
 
 /** Cadre commun (en-tête, bouton) des états chargement, erreur et page complète. */
-function Frame({ children, auditUrl }: { children: ReactNode; auditUrl?: string }) {
+function Frame({ children, auditUrl, printable = false }: { children: ReactNode; auditUrl?: string; printable?: boolean }) {
   return (
-    <div className="min-h-screen overflow-x-hidden">
+    <div className="share-page min-h-screen overflow-x-hidden">
       <header className="flex items-center justify-between gap-3 border-b border-line px-4 py-4 sm:px-8">
         <Brand />
-        {auditUrl ? <AuditButton url={auditUrl} /> : null}
+        <div className="no-print flex items-center gap-2">
+          {printable ? (
+            <button
+              type="button"
+              onClick={() => window.print()}
+              className="inline-flex cursor-pointer items-center justify-center rounded-full border border-line-strong bg-night-2/70 px-4 py-2.5 text-[13px] font-semibold text-white hover:bg-night-2"
+            >
+              Version imprimable
+            </button>
+          ) : null}
+          {auditUrl ? <AuditButton url={auditUrl} /> : null}
+        </div>
       </header>
       {children}
     </div>
@@ -83,9 +99,9 @@ function ShareContent({ share }: { share: PublicShare }) {
   ].filter((f): f is string => f !== null);
 
   return (
-    <Frame auditUrl={share.auditUrl}>
-      <section className="relative border-b border-line print:border-0">
-        <div className="print:hidden">
+    <Frame auditUrl={share.auditUrl} printable>
+      <section className="relative border-b border-line">
+        <div className="no-print">
           <ThreeStage factory={fanoutScene} className="opacity-50 lg:opacity-100" fallback={<FanoutFallback className="h-full w-full lg:translate-x-[18%]" />} />
         </div>
         <div className="relative z-10 mx-auto max-w-[1100px] px-4 py-14 sm:px-8 sm:py-20">
@@ -106,7 +122,10 @@ function ShareContent({ share }: { share: PublicShare }) {
           <h2 className="m-0 font-display text-base font-bold text-white">
             Podium <span className="ml-1 font-mono text-[11px] font-medium text-mute">score global pondéré</span>
           </h2>
-          <Podium rows={rows} />
+          <div className="no-print">
+            <Podium rows={rows} />
+          </div>
+          <StaticPodium rows={rows} />
         </Card>
         {rows.length > CHART_MODELS ? (
           <p className="m-0 text-xs text-mute">
@@ -129,10 +148,12 @@ function ShareContent({ share }: { share: PublicShare }) {
         </div>
         <RankingTable rows={rows} judgeName={run.judgeName} hideCosts={!share.showCosts} />
         {share.responses ? <PublicResponses responses={share.responses} models={share.models} /> : null}
-        <div className="flex flex-col items-center gap-3 pt-6 text-center print:hidden">
-          <p className="m-0 max-w-md text-sm text-ink">Quel modèle pour vos propres usages ? Nous faisons passer ce banc d'essai à vos cas réels.</p>
-          <AuditButton url={share.auditUrl} />
-        </div>
+        {isHttps(share.auditUrl) ? (
+          <div className="no-print flex flex-col items-center gap-3 pt-6 text-center">
+            <p className="m-0 max-w-md text-sm text-ink">Quel modèle pour vos propres usages ? Nous faisons passer ce banc d'essai à vos cas réels.</p>
+            <AuditButton url={share.auditUrl} />
+          </div>
+        ) : null}
       </main>
     </Frame>
   );
@@ -157,15 +178,20 @@ export default function PublicSharePage() {
     return () => meta.remove();
   }, []);
   useEffect(() => {
-    if (data) document.title = `${data.title} · Eksplodo`;
+    if (!data) return;
+    const previous = document.title;
+    document.title = `${data.title} · Eksplodo`;
+    return () => {
+      document.title = previous;
+    };
   }, [data]);
 
   if (isPending) {
     return (
       <Frame>
-        <div role="status" className="py-24 text-center text-sm text-mute">
+        <main role="status" className="py-24 text-center text-sm text-mute">
           Chargement des résultats…
-        </div>
+        </main>
       </Frame>
     );
   }

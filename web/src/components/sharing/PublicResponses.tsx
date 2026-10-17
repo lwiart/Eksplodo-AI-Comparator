@@ -14,7 +14,7 @@ export function PublicResponses({ responses, models }: { responses: PublicRespon
     <section aria-label="Réponses des modèles" className="card-surface p-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="m-0 font-display text-base font-bold text-white">Les réponses</h2>
-        <div className="flex min-w-0 items-center gap-2">
+        <div className="no-print flex min-w-0 items-center gap-2">
           <label htmlFor={selectId} className="text-xs text-mute">Test</label>
           <select
             id={selectId}
