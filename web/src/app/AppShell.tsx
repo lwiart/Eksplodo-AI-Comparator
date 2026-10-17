@@ -1,21 +1,23 @@
 import * as Dialog from '@radix-ui/react-dialog';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import * as Switch from '@radix-ui/react-switch';
+import { useQuery } from '@tanstack/react-query';
 import { useState, type ReactNode } from 'react';
 import { Link, NavLink, Outlet } from 'react-router-dom';
 import { useErrorSummary } from '../api/errors';
 import { messageForError } from '../api/messages';
+import { TODO_KEY, countToScore, getTodo } from '../api/scoring';
 import { ROLE_LABELS, useAuth, type PublicUser } from '../auth/AuthProvider';
 import { applyAnimationsPreference, getAnimationsPreference, setAnimationsPreference } from './preferences';
 
-type NavItem = { to: string; label: string; icon: string; end?: boolean; badge?: number };
+type NavItem = { to: string; label: string; icon: string; end?: boolean; badge?: number; badgeLabel?: string };
 
-// L'entrée À noter est ajoutée par le plan 4.
 const EXPLORE: NavItem[] = [
   { to: '/', label: 'Tableau de bord', icon: '◎', end: true },
   { to: '/series', label: 'Séries', icon: '▶' },
   { to: '/modeles', label: 'Modèles', icon: '✦' },
 ];
+const TO_SCORE: NavItem = { to: '/a-noter', label: 'À noter', icon: '✎' };
 const ADMIN: NavItem[] = [
   { to: '/admin/utilisateurs', label: 'Utilisateurs', icon: '☻' },
   { to: '/admin/fournisseurs', label: 'Fournisseurs', icon: '⌁' },
@@ -61,7 +63,7 @@ function NavSection({ title, items, onNavigate }: { title: string; items: NavIte
           {item.badge ? (
             <span
               className="ml-auto rounded-full bg-bad/20 px-2 py-0.5 font-mono text-[11px] font-semibold text-bad"
-              aria-label={`${item.badge} erreurs graves non traitées`}
+              aria-label={`${item.badge} ${item.badgeLabel ?? ''}`.trim()}
             >
               {item.badge}
             </span>
@@ -163,12 +165,20 @@ function AdminSection({ onNavigate }: { onNavigate?: () => void }) {
   return <NavSection title="ADMIN" items={items} onNavigate={onNavigate} />;
 }
 
+/** Entrées EXPLORER, avec le nombre de questions que le compte doit encore noter (rafraîchi toutes les 60 s). */
+function ExploreSection({ onNavigate }: { onNavigate?: () => void }) {
+  const todo = useQuery({ queryKey: TODO_KEY, queryFn: getTodo, refetchInterval: 60_000 });
+  const pending = countToScore(todo.data ?? []);
+  const items = [...EXPLORE, pending > 0 ? { ...TO_SCORE, badge: pending, badgeLabel: 'questions à noter' } : TO_SCORE];
+  return <NavSection title="EXPLORER" items={items} onNavigate={onNavigate} />;
+}
+
 function SidebarBody({ user, onNavigate }: { user: PublicUser; onNavigate?: () => void }) {
   return (
     <>
       <Brand />
       <nav aria-label="Navigation principale" className="flex-1 overflow-y-auto">
-        <NavSection title="EXPLORER" items={EXPLORE} onNavigate={onNavigate} />
+        <ExploreSection onNavigate={onNavigate} />
         {user.role === 'admin' ? <AdminSection onNavigate={onNavigate} /> : null}
       </nav>
       <AccountMenu user={user} onNavigate={onNavigate} />

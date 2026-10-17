@@ -22,7 +22,9 @@ const summary = (unresolvedGrave: number) => ({
 
 beforeEach(() => {
   apiFetch.mockReset();
-  apiFetch.mockResolvedValue(summary(0));
+  apiFetch.mockImplementation((path: string) =>
+    Promise.resolve(path === '/api/scoring/todo' ? { items: [], count: 0 } : summary(0)),
+  );
 });
 afterEach(() => localStorage.clear());
 
@@ -124,5 +126,32 @@ test('Admin : aucun compteur quand il n’y a pas d’erreur grave non traitée'
 
 test('Utilisateur : aucun appel au résumé des erreurs', () => {
   renderShell('user');
-  expect(apiFetch).not.toHaveBeenCalled();
+  expect(apiFetch).not.toHaveBeenCalledWith('/api/admin/errors/summary');
+});
+
+test('EXPLORER : « À noter » avec compteur des questions non terminées', async () => {
+  apiFetch.mockImplementation((path: string) =>
+    Promise.resolve(
+      path === '/api/scoring/todo'
+        ? {
+            items: [
+              { runTestId: 'q1', runId: 'r1', runName: 'S', testName: 'T1', answers: 3, scoredByMe: 1 },
+              { runTestId: 'q2', runId: 'r1', runName: 'S', testName: 'T2', answers: 3, scoredByMe: 0 },
+              { runTestId: 'q3', runId: 'r1', runName: 'S', testName: 'T3', answers: 2, scoredByMe: 2 },
+            ],
+            count: 3,
+          }
+        : summary(0),
+    ),
+  );
+  renderShell('user');
+  const link = await screen.findByRole('link', { name: /À noter/ });
+  expect(link).toHaveAttribute('href', '/a-noter');
+  expect(await within(link).findByLabelText('2 questions à noter')).toHaveTextContent('2');
+});
+
+test('EXPLORER : pas de badge « À noter » quand il n’y a rien à noter', async () => {
+  renderShell('user');
+  const link = await screen.findByRole('link', { name: 'À noter' });
+  expect(within(link).queryByLabelText(/questions à noter/)).toBeNull();
 });

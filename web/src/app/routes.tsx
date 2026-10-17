@@ -1,6 +1,7 @@
 import { Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
 import { useAuth, type Role } from '../auth/AuthProvider';
 import { AccessDeniedPage } from '../pages/AccessDeniedPage';
+import { BlindScoringPage } from '../pages/BlindScoringPage';
 import { AccountPage } from '../pages/AccountPage';
 import { DashboardPage } from '../pages/DashboardPage';
 import { InvitationPage } from '../pages/InvitationPage';
@@ -14,6 +15,7 @@ import { TestEditorPage } from '../pages/admin/TestEditorPage';
 import { TestsPage } from '../pages/admin/TestsPage';
 import { SuitesPage } from '../pages/admin/SuitesPage';
 import { UsersPage } from '../pages/admin/UsersPage';
+import { ToScorePage } from '../pages/ToScorePage';
 import { ResetPasswordPage } from '../pages/ResetPasswordPage';
 import { RunPage } from '../pages/RunPage';
 import { RunsPage } from '../pages/RunsPage';
@@ -66,6 +68,8 @@ export function AppRoutes() {
           <Route path="/modeles/:id" element={<ModelPage />} />
           <Route path="/series" element={<RunsPage />} />
           <Route path="/series/:id" element={<RunPage />} />
+          <Route path="/a-noter" element={<ToScorePage />} />
+          <Route path="/a-noter/:runTestId" element={<BlindScoringPage />} />
           <Route path="/compte" element={<AccountPage />} />
           <Route element={<RequireRole roles={['admin']} />}>
             <Route path="/admin/utilisateurs" element={<UsersPage />} />
