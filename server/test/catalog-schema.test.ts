@@ -90,7 +90,7 @@ describe('schÃ©ma du catalogue', () => {
     expect(back!.outputPricePerM).toBe(0.5);
     expect(back!.priceSource).toBe('manual');
     expect(back!.supportsVision).toBe(false);
-    // Drizzle enveloppe l'erreur MariaDB : le détail « Duplicate entry » est dans `cause`.
+    // Drizzle enveloppe l'erreur MariaDB : le dÃ©tail Â« Duplicate entry Â» est dans `cause`.
     const dup = await db.insert(models).values({ id: randomUUID(), ...row }).then(() => null, (e: unknown) => e);
     expect(String((dup as { cause?: Error }).cause?.message)).toMatch(/Duplicate/);
   });
