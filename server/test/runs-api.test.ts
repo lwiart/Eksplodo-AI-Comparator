@@ -516,11 +516,13 @@ test('Utilisateur : lit séries, progression et résultats ; 403 sur estimate et
     testName: 'A',
     repetition: 1,
     status: 'pending',
-    attempts: 0,
+    // Test manuel non noté par cet Utilisateur : texte et métriques masqués.
+    attempts: null,
     responseText: null,
     tokensEstimated: false,
     scoreStatus: 'awaiting_manual',
     completedAt: null,
+    hiddenUntilScored: true,
   });
   expect((await t.get(`/api/runs/${randomUUID()}`, t.user)).statusCode).toBe(404);
 

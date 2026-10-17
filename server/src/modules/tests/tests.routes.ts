@@ -2,19 +2,13 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { createReadStream } from 'node:fs';
 import { AppError } from '../../errors.js';
+import { contentDisposition } from '../../lib/http.js';
 import { addAttachment, findAttachment, removeAttachment, resolveAttachmentPath, type AttachmentsDeps } from './attachments.js';
 import type { QuickTryService } from './quick-try.js';
 import type { TestsService } from './tests.service.js';
 
 const idParams = z.object({ id: z.string().uuid() });
 const attachmentParams = z.object({ id: z.string().uuid(), attachmentId: z.string().uuid() });
-
-/** `Content-Disposition` en pièce jointe : repli ASCII + `filename*` (RFC 5987) pour le nom d'origine. */
-export function contentDisposition(name: string): string {
-  const ascii = name.replace(/[^\x20-\x7e]|["\\]/g, '_');
-  const encoded = encodeURIComponent(name).replace(/['()*]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
-  return `attachment; filename="${ascii}"; filename*=UTF-8''${encoded}`;
-}
 
 const listQuery = z
   .object({

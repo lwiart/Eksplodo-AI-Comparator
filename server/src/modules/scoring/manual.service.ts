@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { createHmac, randomUUID } from 'node:crypto';
 import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
 import type { AppConfig } from '../../config/config.js';
 import type { Db } from '../../db/client.js';
@@ -44,17 +44,25 @@ export type SpreadItem = {
   scores: { userName: string; score: number; comment: string | null }[];
 };
 
-export type ManualScoringDeps = { db: Db; config: Pick<AppConfig, 'dataDir'> };
+export type ManualScoringDeps = { db: Db; config: Pick<AppConfig, 'dataDir' | 'encryptionKey'> };
 
 const isManualTest = sql`JSON_VALUE(${runTests.snapshot}, '$.scoringMethod') = 'manual'`;
 const snapshotName = sql<string>`JSON_UNQUOTE(JSON_EXTRACT(${runTests.snapshot}, '$.name'))`;
 
 const questionNotFound = () => new NotFoundError('Question introuvable');
 
-/** Ordre des réponses propre au compte : tri par `sha256(userId + resultId)` (identifiant en départage). */
-export function blindOrder(userId: string, resultIds: string[]): string[] {
+/**
+ * Clé secrète de l'ordre à l'aveugle, dérivée de la clé maîtresse : sans elle, un compte ne peut pas recalculer l'ordre
+ * de ses lettres à partir de son identifiant et des identifiants de résultats visibles ailleurs.
+ */
+export function blindOrderKey(encryptionKey: Buffer): Buffer {
+  return createHmac('sha256', encryptionKey).update('aic:blind-order:v1').digest();
+}
+
+/** Ordre des réponses propre au compte : tri par `HMAC-SHA256(clé, userId:resultId)` (identifiant en départage). */
+export function blindOrder(key: Buffer, userId: string, resultIds: string[]): string[] {
   return resultIds
-    .map((id) => ({ id, key: createHash('sha256').update(userId + id).digest('hex') }))
+    .map((id) => ({ id, key: createHmac('sha256', key).update(`${userId}:${id}`).digest('hex') }))
     .sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
     .map((x) => x.id);
 }
@@ -103,12 +111,13 @@ export async function incompleteManualQuestions(conn: DbOrTx, userId: string, ru
 type AnswerRow = { id: string; responseText: string | null; modelName: string; color: string; myScore: number | null; myComment: string | null };
 
 function blindQuestion(
+  key: Buffer,
   userId: string,
   rt: { id: string; runName: string; snapshot: TestSnapshot },
   rows: AnswerRow[],
 ): BlindQuestion {
   const byId = new Map(rows.map((r) => [r.id, r]));
-  const ordered = blindOrder(userId, rows.map((r) => r.id)).map((id, i) => ({ letter: letterOf(i), row: byId.get(id)! }));
+  const ordered = blindOrder(key, userId, rows.map((r) => r.id)).map((id, i) => ({ letter: letterOf(i), row: byId.get(id)! }));
   const complete = rows.length > 0 && rows.every((r) => r.myScore !== null);
   return {
     runTestId: rt.id,
@@ -130,6 +139,7 @@ function blindQuestion(
 
 export function createManualScoringService(deps: ManualScoringDeps) {
   const { db } = deps;
+  const orderKey = blindOrderKey(deps.config.encryptionKey);
 
   /** Instantané d'un test manuel de série, ou 404. */
   async function manualRunTest(conn: DbOrTx, runTestId: string) {
@@ -157,7 +167,7 @@ export function createManualScoringService(deps: ManualScoringDeps) {
       .innerJoin(models, eq(models.id, results.modelId))
       .leftJoin(manualScores, and(eq(manualScores.resultId, results.id), eq(manualScores.userId, actor.userId)))
       .where(and(eq(results.runTestId, runTestId), eq(results.status, 'done')));
-    return blindQuestion(actor.userId, rt, rows);
+    return blindQuestion(orderKey, actor.userId, rt, rows);
   }
 
   return {
@@ -196,7 +206,7 @@ export function createManualScoringService(deps: ManualScoringDeps) {
             .from(results)
             .where(and(eq(results.runTestId, runTestId), eq(results.status, 'done')))
             .for('update');
-          const idOf = new Map(blindOrder(actor.userId, done.map((r) => r.id)).map((id, i) => [letterOf(i), id]));
+          const idOf = new Map(blindOrder(orderKey, actor.userId, done.map((r) => r.id)).map((id, i) => [letterOf(i), id]));
           const unknown = scores.find((s) => !idOf.has(s.letter));
           if (unknown) throw new ValidationError('validation', `Lettre inconnue : ${unknown.letter}`);
           if (scores.length !== idOf.size) throw new ValidationError('validation', 'Notez toutes les réponses de la question');
@@ -250,9 +260,16 @@ export function createManualScoringService(deps: ManualScoringDeps) {
           .from(results)
           .innerJoin(runTests, eq(runTests.id, results.runTestId))
           .innerJoin(models, eq(models.id, results.modelId))
-          .innerJoin(runModels, and(eq(runModels.runId, results.runId), eq(runModels.modelId, results.modelId)))
+          .leftJoin(runModels, and(eq(runModels.runId, results.runId), eq(runModels.modelId, results.modelId)))
           .where(and(eq(results.runId, runId), eq(results.status, 'done'), isManualTest))
-          .orderBy(asc(runTests.position), asc(runModels.addedAt), asc(models.displayName), asc(results.repetition), asc(results.id)),
+          .orderBy(
+            asc(runTests.position),
+            asc(sql`${runModels.addedAt} IS NULL`), // modèle sans lien `run_models` : en dernier
+            asc(runModels.addedAt),
+            asc(models.displayName),
+            asc(results.repetition),
+            asc(results.id),
+          ),
         db
           .select({ resultId: manualScores.resultId, userName: users.name, score: manualScores.score, comment: manualScores.comment })
           .from(manualScores)

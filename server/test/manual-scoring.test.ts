@@ -1,15 +1,25 @@
+import { createHash } from 'node:crypto';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { asc, eq } from 'drizzle-orm';
 import { afterEach, expect, test } from 'vitest';
 import { manualScores, results, runTests } from '../src/db/schema/runs.js';
-import { blindOrder, letterOf } from '../src/modules/scoring/manual.service.js';
-import { buildTestApp, loginAs, seedModel, seedProvider, seedUser, type TestApp } from './helpers/test-app.js';
+import { blindOrder, blindOrderKey, letterOf } from '../src/modules/scoring/manual.service.js';
+import { buildTestApp, loginAs, seedModel, seedProvider, seedUser, testConfig, type TestApp } from './helpers/test-app.js';
 
 const PW = 'motdepasse-solide';
 const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-/;
 const created: TestApp[] = [];
+/** Clé de l'ordre à l'aveugle de l'application de test (dérivée de la clé maîtresse de `testConfig`). */
+const KEY = blindOrderKey(testConfig().encryptionKey);
+
+/** Ordres non secrets qu'un compte pourrait recalculer : `sha256(userId + resultId)` et `sha256(userId:resultId)`. */
+const unkeyedOrder = (userId: string, ids: string[], sep = '') =>
+  ids
+    .map((id) => ({ id, h: createHash('sha256').update(userId + sep + id).digest('hex') }))
+    .sort((a, b) => (a.h < b.h ? -1 : 1))
+    .map((x) => x.id);
 const dirs: string[] = [];
 
 afterEach(async () => {
@@ -21,23 +31,27 @@ test('letterOf : A…Z puis AA, AB…', () => {
   expect([0, 1, 25, 26, 27, 51, 52, 701, 702].map(letterOf)).toEqual(['A', 'B', 'Z', 'AA', 'AB', 'AZ', 'BA', 'ZZ', 'AAA']);
 });
 
-test('ordre stable pour un compte, différent pour un autre compte', () => {
+test('ordre stable pour un compte, différent pour un autre compte, non recalculable sans la clé du serveur', () => {
   const ids = Array.from({ length: 12 }, (_, i) => `00000000-0000-4000-8000-${String(i).padStart(12, '0')}`);
-  const a = blindOrder('compte-a', ids);
+  const a = blindOrder(KEY, 'compte-a', ids);
   expect(a).toHaveLength(ids.length);
   expect([...a].sort()).toEqual([...ids].sort());
   // Stable : même compte, même ordre, quel que soit l'ordre d'entrée.
-  expect(blindOrder('compte-a', [...ids].reverse())).toEqual(a);
+  expect(blindOrder(KEY, 'compte-a', [...ids].reverse())).toEqual(a);
   // Ni l'ordre de création ni l'ordre d'un autre compte.
   expect(a).not.toEqual(ids);
-  expect(blindOrder('compte-b', ids)).not.toEqual(a);
+  expect(blindOrder(KEY, 'compte-b', ids)).not.toEqual(a);
+  // Ni les formules sans clé, ni la même formule avec une autre clé.
+  expect(a).not.toEqual(unkeyedOrder('compte-a', ids));
+  expect(a).not.toEqual(unkeyedOrder('compte-a', ids, ':'));
+  expect(blindOrder(blindOrderKey(Buffer.alloc(32, 8)), 'compte-a', ids)).not.toEqual(a);
 });
 
 /**
  * Série : un test manuel (avec une pièce jointe dans l'instantané) et un test à réponse attendue, deux modèles,
  * deux répétitions ; les quatre résultats du test manuel sont terminés avec texte et métriques.
  */
-async function setup() {
+async function setup(opts: { repetitions?: number } = {}) {
   const dataDir = await mkdtemp(path.join(os.tmpdir(), 'aic-manual-'));
   dirs.push(dataDir);
   const t = await buildTestApp({ fakeLlm: true, dataDir });
@@ -81,7 +95,7 @@ async function setup() {
     name: 'Série aveugle',
     testIds: [manualTest.json().test.id, expectedTest.json().test.id],
     modelIds: [m1.id, m2.id],
-    repetitions: 2,
+    repetitions: opts.repetitions ?? 2,
   });
   expect(run.statusCode).toBe(201);
   const runId = run.json().run.id as string;
@@ -109,7 +123,19 @@ async function setup() {
   for (const [i, r] of manualResults.entries()) {
     await t.db
       .update(results)
-      .set({ status: 'done', responseText: `Texte numéro ${i}`, ttftMs: 100 + i, outputTokens: 50 + i, costUsd: 0.001 * (i + 1), totalMs: 900 })
+      .set({
+        status: 'done',
+        attempts: 1,
+        responseText: `Texte numéro ${i}`,
+        finishReason: 'stop',
+        ttftMs: 100 + i,
+        inputTokens: 10,
+        outputTokens: 50 + i,
+        tokensPerS: 40 + i,
+        costUsd: 0.001 * (i + 1),
+        totalMs: 900 + i,
+        completedAt: new Date('2026-01-15T10:00:00.000Z'),
+      })
       .where(eq(results.id, r.id));
   }
   await t.db.update(results).set({ status: 'done', responseText: 'Paris' }).where(eq(results.runTestId, expectedRt));
@@ -160,7 +186,7 @@ test('question anonymisée : ni identifiant de résultat ni nom de modèle tant 
   for (const a of answers) expect(Object.keys(a).sort()).toEqual(['letter', 'myComment', 'myScore', 'responseText']);
   // L'ordre suit le hachage du compte, pas l'ordre de création.
   const byText = new Map(s.manualResults.map((r, i) => [`Texte numéro ${i}`, r.id]));
-  expect(answers.map((a) => byText.get(a.responseText))).toEqual(blindOrder(s.userRow.id, s.manualResults.map((r) => r.id)));
+  expect(answers.map((a) => byText.get(a.responseText))).toEqual(blindOrder(KEY, s.userRow.id, s.manualResults.map((r) => r.id)));
 
   // Pièce jointe de l'instantané : mêmes en-têtes que le téléchargement du plan 3.
   const file = await s.get(`/api/scoring/questions/${s.rt}/attachments/0`, s.user);
@@ -277,14 +303,31 @@ test('À noter : compte et liste par compte, question complète retirée', async
 
 test('résultats d’une série : réponses d’un test manuel masquées à l’Utilisateur qui n’a pas noté, visibles après', async () => {
   const s = await setup();
-  type Row = { runTestId: string; responseText: string | null; hiddenUntilScored: boolean; ttftMs: number | null };
+  type Row = { id: string; runTestId: string; responseText: string | null; hiddenUntilScored: boolean; ttftMs: number | null };
   const rowsFor = async (session: Setup['admin']) => (await s.get(`/api/runs/${s.runId}/results`, session)).json().results as Row[];
 
   let rows = await rowsFor(s.user);
   expect(rows).toHaveLength(8);
   for (const r of rows.filter((x) => x.runTestId === s.rt)) {
-    expect(r).toMatchObject({ responseText: null, hiddenUntilScored: true });
-    expect(r.ttftMs).not.toBeNull(); // métriques visibles
+    // Ni texte ni métrique (la longueur ou la durée rapprocheraient une lettre de son modèle) ; identité et statut gardés.
+    expect(r).toMatchObject({
+      modelName: expect.stringMatching(/^Faux /),
+      status: 'done',
+      repetition: expect.any(Number),
+      scoreStatus: 'awaiting_manual',
+      responseText: null,
+      finishReason: null,
+      inputTokens: null,
+      outputTokens: null,
+      reasoningTokens: null,
+      ttftMs: null,
+      totalMs: null,
+      tokensPerS: null,
+      costUsd: null,
+      attempts: null,
+      completedAt: null,
+      hiddenUntilScored: true,
+    });
   }
   for (const r of rows.filter((x) => x.runTestId === s.expectedRt)) expect(r).toMatchObject({ responseText: 'Paris', hiddenUntilScored: false });
 
@@ -296,6 +339,7 @@ test('résultats d’une série : réponses d’un test manuel masquées à l’
 
   expect((await scoreAll(s, s.user, () => 6)).statusCode).toBe(200);
   rows = await rowsFor(s.user);
+  for (const r of rows.filter((x) => x.runTestId === s.rt)) expect(r.ttftMs).not.toBeNull();
   for (const r of rows) {
     expect(r.hiddenUntilScored).toBe(false);
     expect(r.responseText).not.toBeNull();
@@ -338,4 +382,25 @@ test('écarts entre évaluateurs : réservé à l’Admin (403), écart-type exa
   expect(items.find((i) => i.resultId === target.id)).toMatchObject({ raters: 3, mean: 5, stdDev: 2.16 });
 
   expect((await s.get('/api/scoring/runs/00000000-0000-4000-8000-000000000000/spread')).statusCode).toBe(404);
+});
+
+test('ordre servi non recalculable à partir des identifiants visibles dans les résultats', async () => {
+  const s = await setup({ repetitions: 5 }); // dix réponses : une coïncidence d'ordre est exclue en pratique
+  const me = (await s.get('/api/auth/me', s.user)).json();
+  const myId = me.user.id as string;
+  expect(myId).toBe(s.userRow.id);
+  const visibleIds = ((await s.get(`/api/runs/${s.runId}/results`, s.user)).json().results as { id: string; runTestId: string }[])
+    .filter((r) => r.runTestId === s.rt)
+    .map((r) => r.id);
+  expect(visibleIds).toHaveLength(10);
+  // Ordre réellement servi, traduit en identifiants grâce aux textes connus du banc d'essai.
+  const byText = new Map(s.manualResults.map((r, i) => [`Texte numéro ${i}`, r.id]));
+  const answers = (await s.get(`/api/scoring/questions/${s.rt}`, s.user)).json().answers as Answer[];
+  const served = answers.map((a) => byText.get(a.responseText));
+  expect(served).toEqual(blindOrder(KEY, myId, visibleIds));
+  expect(served).not.toEqual(unkeyedOrder(myId, visibleIds));
+  expect(served).not.toEqual(unkeyedOrder(myId, visibleIds, ':'));
+  // Un autre compte reçoit un autre ordre.
+  const otherAnswers = (await s.get(`/api/scoring/questions/${s.rt}`, s.other)).json().answers as Answer[];
+  expect(otherAnswers.map((a) => byText.get(a.responseText))).not.toEqual(served);
 });

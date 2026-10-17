@@ -82,7 +82,7 @@ export type ResultRow = {
   color: string;
   repetition: number;
   status: ResultStatus;
-  attempts: number;
+  attempts: number | null;
   responseText: string | null;
   finishReason: string | null;
   inputTokens: number | null;
@@ -101,6 +101,28 @@ export type ResultRow = {
   /** Réponse masquée (`responseText` nul) : test manuel dont l'Utilisateur n'a pas encore noté la question. */
   hiddenUntilScored: boolean;
 };
+
+/**
+ * Ligne masquée à un Utilisateur qui n'a pas noté la question manuelle : ni texte ni métrique (longueur, durées, coût
+ * permettraient de rapprocher une réponse à l'aveugle de son modèle) ; restent l'identité, le statut et la notation.
+ */
+export function maskHiddenRow(row: ResultRow): ResultRow {
+  return {
+    ...row,
+    responseText: null,
+    finishReason: null,
+    inputTokens: null,
+    outputTokens: null,
+    reasoningTokens: null,
+    ttftMs: null,
+    totalMs: null,
+    tokensPerS: null,
+    costUsd: null,
+    attempts: null,
+    completedAt: null,
+    hiddenUntilScored: true,
+  };
+}
 
 export type RunsServiceDeps = {
   db: Db;
@@ -577,34 +599,37 @@ export function createRunsService(deps: RunsServiceDeps) {
         repo.resultsOf(id),
         actor.role === 'admin' ? new Set<string>() : incompleteManualQuestions(db, actor.userId, id),
       ]);
-      return rows.map(({ result: r, testName, category, modelName, color }) => ({
-        id: r.id,
-        runTestId: r.runTestId,
-        testName,
-        category,
-        modelId: r.modelId,
-        modelName,
-        color,
-        repetition: r.repetition,
-        status: r.status,
-        attempts: r.attempts,
-        responseText: hidden.has(r.runTestId) ? null : r.responseText,
-        finishReason: r.finishReason,
-        inputTokens: r.inputTokens,
-        outputTokens: r.outputTokens,
-        reasoningTokens: r.reasoningTokens,
-        tokensEstimated: r.tokensEstimated,
-        ttftMs: r.ttftMs,
-        totalMs: r.totalMs,
-        tokensPerS: r.tokensPerS,
-        costUsd: r.costUsd,
-        costSource: r.costSource,
-        errorCode: r.errorCode,
-        errorMessage: r.errorMessage,
-        scoreStatus: r.scoreStatus,
-        completedAt: r.completedAt?.toISOString() ?? null,
-        hiddenUntilScored: hidden.has(r.runTestId),
-      }));
+      return rows.map(({ result: r, testName, category, modelName, color }) => {
+        const row: ResultRow = {
+          id: r.id,
+          runTestId: r.runTestId,
+          testName,
+          category,
+          modelId: r.modelId,
+          modelName,
+          color,
+          repetition: r.repetition,
+          status: r.status,
+          attempts: r.attempts,
+          responseText: r.responseText,
+          finishReason: r.finishReason,
+          inputTokens: r.inputTokens,
+          outputTokens: r.outputTokens,
+          reasoningTokens: r.reasoningTokens,
+          tokensEstimated: r.tokensEstimated,
+          ttftMs: r.ttftMs,
+          totalMs: r.totalMs,
+          tokensPerS: r.tokensPerS,
+          costUsd: r.costUsd,
+          costSource: r.costSource,
+          errorCode: r.errorCode,
+          errorMessage: r.errorMessage,
+          scoreStatus: r.scoreStatus,
+          completedAt: r.completedAt?.toISOString() ?? null,
+          hiddenUntilScored: false,
+        };
+        return hidden.has(r.runTestId) ? maskHiddenRow(row) : row;
+      });
     },
   };
 }

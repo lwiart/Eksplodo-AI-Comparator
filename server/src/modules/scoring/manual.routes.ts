@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { contentDisposition } from '../tests/tests.routes.js';
+import { contentDisposition } from '../../lib/http.js';
 import type { ManualScoringService } from './manual.service.js';
 
 const questionParams = z.object({ runTestId: z.string().uuid() });
