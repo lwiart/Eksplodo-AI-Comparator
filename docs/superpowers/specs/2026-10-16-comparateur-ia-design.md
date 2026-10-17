@@ -274,7 +274,7 @@ Les erreurs sont levées sous forme de `ProviderError` normalisée (§12.1).
 
 - Éditeur (maquette « Éditeur de test ») : nom, catégorie, tags, prompts, pièces jointes par glisser-déposer, température (défaut 0,2), max tokens (défaut 1 000, maximum 16 000), méthode et configuration de notation.
 - Les pièces jointes sont stockées dans `DATA_DIR`, ne sont jamais servies directement (téléchargement par l'API pour l'Admin) et sont envoyées aux modèles en base64.
-- **Essai rapide** : l'Admin choisit un modèle disponible. Le serveur fait l'appel en direct et renvoie la réponse, les métriques et, si la méthode le permet, la note automatique (réponse attendue ou juge). Durée limite : 90 s. Le coût est enregistré dans `ai_usage` avec l'origine `quick_try`, mais aucun résultat n'est créé.
+- **Essai rapide** : l'Admin choisit un modèle disponible. Le serveur crée une tâche `quick_try` dans la file ; l'interface suit son avancement par interrogation (toutes les 2 s) et affiche la réponse, les métriques et, si la méthode le permet, la note automatique (réponse attendue ou juge). Timeout de l'appel : 120 s, comme dans une série. (Le proxy Hostinger coupe toute requête HTTP au-delà de 60 s, d'où le passage par la file.) Le coût est enregistré dans `ai_usage` avec l'origine `quick_try` ; la réponse est conservée avec la tâche le temps de l'affichage, sans créer de résultat de série.
 - Un test utilisé dans une série est **archivé** au lieu d'être supprimé. Les séries gardent leur instantané (§5.4).
 - Suites : liste ordonnée de tests, glisser-déposer pour l'ordre, duplication.
 
@@ -395,7 +395,7 @@ Toutes les routes `/api/*` exigent une session, sauf l'authentification. Les rou
 - Authentification : `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/me`, `POST /api/auth/invitations/:token/accept`, `POST /api/auth/password`.
 - Utilisateurs **A** : `GET/POST /api/users/invitations`, `PATCH /api/users/:id` (rôle, statut).
 - Catalogue : `GET /api/providers` (avec `keyPresent`), **A** `POST/PATCH /api/providers`, `GET /api/providers/:id/remote-models` **A**, `GET /api/models`, `GET /api/models/:id`, **A** `POST/PATCH /api/models`, `GET /api/catalog/new` **A**, `POST /api/catalog/:id/dismiss` **A**.
-- Tests **A** : CRUD `/api/tests`, `POST /api/tests/:id/attachments`, `POST /api/tests/try` (essai rapide), CRUD `/api/suites`.
+- Tests **A** : CRUD `/api/tests`, `POST /api/tests/:id/attachments`, `POST /api/tests/try` (crée la tâche d'essai rapide, renvoie son identifiant) et `GET /api/tests/try/:jobId` (état et résultat), CRUD `/api/suites`.
 - Séries : `GET /api/runs`, `GET /api/runs/:id`, `GET /api/runs/:id/progress`, `GET /api/runs/:id/results`, `GET /api/runs/:id/export.csv` ; **A** `POST /api/runs/estimate`, `POST /api/runs`, `POST /api/runs/:id/{pause,resume,retry-errors,rescore}`, `POST /api/runs/:id/models`, `PATCH /api/runs/:id` (plafond, pondération).
 - Notation : `GET /api/scoring/todo`, `GET /api/scoring/questions/:runTestId` (version anonymisée), `PUT /api/scoring/results/:id/manual` ; **A** `PUT /api/scoring/results/:id/override`.
 - Partage : **A** CRUD `/api/share-links` ; public `GET /share/:token`.
@@ -542,13 +542,13 @@ Chaque plan est rédigé, relu puis exécuté l'un après l'autre.
 
 | # | Risque / inconnue | Vérification |
 |---|---|---|
-| 1 | LiteSpeed coupe les requêtes longues de l'essai rapide (jusqu'à 90 s) | Plan 1 : route de test qui attend 90 s sur Hostinger. Si elle est coupée, l'essai rapide passera par une tâche et un suivi par interrogation |
+| 1 | LiteSpeed coupe les requêtes longues de l'essai rapide (jusqu'à 90 s) | **Vérifié le 2026-10-17 : coupure à 60 s** (307 du proxy Hostinger). Décision validée par Laurent : l'essai rapide (§7) passe par une tâche de la file et un suivi par interrogation ; aucune requête HTTP ne doit dépasser 60 s |
 | 2 | Nombre de connexions sortantes simultanées et mémoire sur l'hébergement mutualisé | Plan 3 : série de démonstration à 4 appels simultanés sur Hostinger, avec mesure de la mémoire résidente |
 | 3 | Différences de format entre fournisseurs : usage absent du flux, tokens de raisonnement, PDF acceptés ou non | Plan 2 : flux réels enregistrés en fixtures pour chaque fournisseur configuré |
 | 4 | Limites de taille des pièces jointes en base64 selon les fournisseurs | Plan 2 : vérification à l'ajout (10 Mo par fichier) et message clair en cas de refus |
 | 5 | Coût réel OpenRouter (`usage.cost`) disponible en streaming | Plan 2 : vérification sur un appel réel ; sinon calcul avec les prix importés |
 | 6 | Biais du juge (préférence pour les réponses longues ou pour son propre fournisseur) | Avertissement à l'écran, choix du juge par série, recalcul possible, notation manuelle en complément |
-| 7 | Performance de la 3D sur des portables modestes en démonstration | Plan 1 : mesure sur la scène de connexion ; réglage du nombre de particules et repli 2D |
+| 7 | Performance de la 3D sur des portables modestes en démonstration | Plan 1 : scène de connexion livrée (fragment Three.js chargé à la demande, pause hors écran, repli 2D, 60 rayons sur mobile). Temps d'image restant à mesurer par Laurent sur le portable de démonstration |
 
 ---
 

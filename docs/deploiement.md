@@ -61,28 +61,21 @@ curl -s -X POST -H "x-cron-secret: <CRON_SECRET>" https://ia.eksplodo.fr/interna
 
 Réponse attendue : `{"recovered":0,"failedStale":0,"scheduled":0}` (`scheduled` : nombre de tâches planifiées lancées). Le cron réveille l'application et déclenche les tâches planifiées ; tant qu'elle tourne, un planificateur interne fait de même toutes les 60 s (fuseau `Europe/Paris`).
 
-## Diagnostic temporaire (`GET /internal/diag`)
+## Vérifications de la mise en production (2026-10-17)
 
-Route provisoire, protégée par l'en-tête `x-cron-secret`, utilisée pour les vérifications de la spec §16 ; elle est retirée du code à la fin de la recette (ensuite : 404).
+Faites avec une route de diagnostic provisoire, retirée ensuite du code (`/internal/diag` renvoie 404) :
 
-```
-curl -s -m 130 -H "x-cron-secret: <CRON_SECRET>" "https://ia.eksplodo.fr/internal/diag?waitSeconds=90"
-```
-
-Réponse : `{ nodeVersion, uptimeSeconds, memory, mariadbVersion, ip, xForwardedFor, xRealIp }`, après `waitSeconds` secondes (0 à 120). Elle sert à vérifier que LiteSpeed ne coupe pas les requêtes longues et à relever `memory.rss` au repos.
-
-Vérification de l'adresse IP du client : appeler la route une fois normalement, puis une fois avec des en-têtes falsifiés.
-
-```
-curl -s -H "x-cron-secret: <CRON_SECRET>" "https://ia.eksplodo.fr/internal/diag"
-curl -s -H "x-cron-secret: <CRON_SECRET>" -H "X-Forwarded-For: 1.2.3.4" -H "X-Real-IP: 5.6.7.8" "https://ia.eksplodo.fr/internal/diag"
-```
-
-Dans les deux cas, `ip` doit être la vraie adresse IP du client (jamais `1.2.3.4` ni `5.6.7.8`) ; sinon la limitation par IP peut être contournée.
+| Vérification | Résultat |
+|---|---|
+| Versions | Node.js v24.21.0, MariaDB 11.8.9 |
+| Mémoire au démarrage | RSS ≈ 230 Mo |
+| Requête longue (90 s) | **Coupée à 60 s** par le proxy Hostinger (réponse 307 au lieu de la réponse de l'app) |
+| Adresse IP du client | Fiable : LiteSpeed ajoute la vraie adresse en dernier dans `X-Forwarded-For` et écrase `X-Real-IP` ; des en-têtes falsifiés ne changent pas l'IP vue par l'app |
 
 ## Contraintes Hostinger à respecter dans le code
 
 - LiteSpeed charge le point d'entrée avec `require()` : **aucun `await` de premier niveau** dans le serveur (vérifié par `server/test/entry.test.ts`).
+- **Une requête HTTP ne peut pas durer plus de 60 s** (coupure du proxy Hostinger) : tout traitement potentiellement plus long (appels aux modèles d'IA, essai rapide compris) passe par la file de tâches, avec un suivi par interrogation depuis l'interface.
 - LiteSpeed remplace l'écoute TCP par un socket Unix qu'il gère : rien à configurer ; `PORT` reste numérique (défaut 3000) et sert en local. L'adresse IP du client vient de l'en-tête transmis par LiteSpeed (un seul proxy de confiance).
 - `.npmrc` contient `include=dev` : sans cela, `NODE_ENV=production` empêcherait l'installation de TypeScript et Vite au moment du build.
 - Plusieurs processus peuvent démarrer en même temps (un par nom d'hôte, y compris l'alias `*.hostingersite.com`) : migrations et amorçage sont protégés par un verrou nommé.
