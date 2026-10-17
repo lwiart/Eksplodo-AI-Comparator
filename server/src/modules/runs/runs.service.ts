@@ -3,19 +3,20 @@ import { and, asc, eq, inArray, isNull } from 'drizzle-orm';
 import type { AppConfig } from '../../config/config.js';
 import type { Db } from '../../db/client.js';
 import { models, providers } from '../../db/schema/catalog.js';
-import type { RunWeights } from '../../db/schema/runs.js';
+import { results, runModels, runTests, runs, type RunWeights } from '../../db/schema/runs.js';
 import { suiteTests, suites, testAttachments, tests } from '../../db/schema/tests.js';
 import { ConflictError, NotFoundError, ValidationError } from '../../errors.js';
 import type { Clock } from '../../lib/clock.js';
 import { audit } from '../audit/audit.js';
 import type { Actor } from '../auth/actor.js';
-import type { DbOrTx } from '../jobs/queue.js';
+import { affectedRows, type DbOrTx } from '../jobs/queue.js';
 import type { Registry } from '../providers/registry.js';
 import type { PublicTest } from '../tests/tests.service.js';
 import type { TestRow } from '../tests/tests.repo.js';
+import { roundUsd } from './engine.js';
 import { estimateRun, isSupported, type ModelForEstimate, type RunEstimate } from './estimate.js';
 import { ACTIVITY_LIMIT, buildProgress, countsOf, type RunProgress, type StatusCounts } from './progress.js';
-import { enqueueRunJob } from './run-job.js';
+import { enqueueRunJob, withTxRetry } from './run-job.js';
 import { createRunsRepo, type ResultStatus, type RunRow } from './runs.repo.js';
 import { snapshotOf, type TestSnapshot } from './snapshot.js';
 
@@ -55,6 +56,9 @@ export type RunSummary = {
   completedAt: string | null;
   counts: StatusCounts;
 };
+
+/** Modification d'une série : plafond (`null` : sans plafond) et pondération par défaut. */
+export type RunPatch = { budgetUsd?: number | null; weights?: Weights };
 
 export type ResultRow = {
   id: string;
@@ -99,6 +103,41 @@ const suiteNotFound = () => new ValidationError('suite_not_found', 'Suite introu
 const modelUnavailable = () =>
   new ConflictError('model_unavailable', 'Un des modèles demandés est indisponible (inactif, ou fournisseur sans clé utilisable)');
 const judgeRequired = () => new ValidationError('judge_required', 'Un modèle juge est requis : la sélection contient des tests notés par le juge');
+const runNotActive = () => new ConflictError('run_not_active', 'La série n\'est pas en cours : rien à mettre en pause');
+const runNotPaused = () => new ConflictError('run_not_paused', 'La série n\'est ni en pause ni interrompue');
+const budgetExceeded = () =>
+  new ConflictError('budget_exceeded', 'Plafond de dépense atteint : relevez-le au-dessus de la dépense avant de reprendre');
+
+/**
+ * Résultats d'une série pour ces modèles : par répétition, test puis modèle ; les combinaisons non supportées directement
+ * en `unsupported`.
+ */
+function resultRowsFor(
+  runId: string,
+  repetitions: number,
+  runTestRows: { id: string; snapshot: TestSnapshot }[],
+  chosen: CandidateModel[],
+): (typeof results.$inferInsert)[] {
+  const rows: (typeof results.$inferInsert)[] = [];
+  for (let repetition = 1; repetition <= repetitions; repetition++) {
+    for (const rt of runTestRows) {
+      for (const m of chosen) {
+        const supported = isSupported(rt.snapshot, m);
+        rows.push({
+          id: randomUUID(),
+          runId,
+          runTestId: rt.id,
+          modelId: m.id,
+          repetition,
+          status: supported ? 'pending' : 'unsupported',
+          // Un résultat non supporté garde `pending` : la notation l'ignore.
+          scoreStatus: supported && rt.snapshot.scoringMethod === 'manual' ? 'awaiting_manual' : 'pending',
+        });
+      }
+    }
+  }
+  return rows;
+}
 
 /** Vue minimale d'une ligne de test attendue par `snapshotOf` (seuls les champs du test sont repris). */
 function testView(row: TestRow): Omit<PublicTest, 'attachments'> {
@@ -234,6 +273,37 @@ export function createRunsService(deps: RunsServiceDeps) {
     return row.run;
   }
 
+  async function summaryOf(id: string): Promise<RunSummary> {
+    const [summary] = await summaries(id);
+    if (!summary) throw runNotFound();
+    return summary;
+  }
+
+  /**
+   * Écriture courte sous verrou de la ligne `runs` (comme la transaction finale du moteur, qui compte alors les résultats
+   * restants de façon cohérente), rejouée sur conflit d'instantané ou interblocage.
+   */
+  function withLockedRun<T>(id: string, fn: (tx: DbOrTx, run: RunRow) => Promise<T>): Promise<T> {
+    return withTxRetry(() =>
+      db.transaction(async (tx) => {
+        const [run] = await tx.select().from(runs).where(eq(runs.id, id)).for('update');
+        if (!run) throw runNotFound();
+        return fn(tx, run);
+      }),
+    );
+  }
+
+  /** Remet la série en file : `queued` si elle était arrêtée (pause, fin, interruption), puis sa tâche unique. */
+  async function requeue(tx: DbOrTx, run: RunRow, now: Date): Promise<void> {
+    if (run.status !== 'queued' && run.status !== 'running') {
+      await tx.update(runs).set({ status: 'queued', pauseReason: null, completedAt: null }).where(eq(runs.id, run.id));
+    }
+    await enqueueRunJob(tx, run.id, now);
+  }
+
+  const auditRun = (tx: DbOrTx, actor: Actor, action: string, runId: string, details?: unknown) =>
+    audit(tx, { actorUserId: actor.userId, action, targetType: 'run', targetId: runId, ...(details === undefined ? {} : { details }) });
+
   return {
     /** Estimation du coût maximal et de la durée, sans rien créer. */
     async estimate(input: RunInput): Promise<RunEstimate> {
@@ -286,25 +356,7 @@ export function createRunsService(deps: RunsServiceDeps) {
           snapshot,
         }));
         await repo.insertRunTests(tx, runTestRows);
-        const resultRows = [];
-        for (let repetition = 1; repetition <= input.repetitions; repetition++) {
-          for (const rt of runTestRows) {
-            for (const m of chosen) {
-              const supported = isSupported(rt.snapshot, m);
-              resultRows.push({
-                id: randomUUID(),
-                runId,
-                runTestId: rt.id,
-                modelId: m.id,
-                repetition,
-                status: supported ? ('pending' as const) : ('unsupported' as const),
-                // Un résultat non supporté garde `pending` : la notation l'ignore.
-                scoreStatus: supported && rt.snapshot.scoringMethod === 'manual' ? ('awaiting_manual' as const) : ('pending' as const),
-              });
-            }
-          }
-        }
-        await repo.insertResults(tx, resultRows);
+        await repo.insertResults(tx, resultRowsFor(runId, input.repetitions, runTestRows, chosen));
         await enqueueRunJob(tx, runId, now);
         await audit(tx, {
           actorUserId: actor.userId,
@@ -325,10 +377,89 @@ export function createRunsService(deps: RunsServiceDeps) {
 
     list: () => summaries(),
 
-    async get(id: string): Promise<RunSummary> {
-      const [summary] = await summaries(id);
-      if (!summary) throw runNotFound();
-      return summary;
+    get: summaryOf,
+
+    /** Pause demandée : la tâche ne lance plus d'appel, laisse finir ceux en cours puis se retire. */
+    async pause(actor: Actor, id: string): Promise<RunSummary> {
+      await withLockedRun(id, async (tx, run) => {
+        if (run.status !== 'queued' && run.status !== 'running') throw runNotActive();
+        await tx.update(runs).set({ status: 'paused', pauseReason: 'user' }).where(eq(runs.id, id));
+        await auditRun(tx, actor, 'run_paused', id);
+      });
+      return summaryOf(id);
+    },
+
+    /** Reprise d'une série en pause ou interrompue ; après une pause `budget`, le plafond doit dépasser la dépense. */
+    async resume(actor: Actor, id: string): Promise<RunSummary> {
+      await withLockedRun(id, async (tx, run) => {
+        if (run.status !== 'paused' && run.status !== 'interrupted') throw runNotPaused();
+        const spentUsd = roundUsd(run.modelsCostUsd + run.judgeCostUsd);
+        if (run.status === 'paused' && run.pauseReason === 'budget' && run.budgetUsd !== null && run.budgetUsd <= spentUsd) {
+          throw budgetExceeded();
+        }
+        await requeue(tx, run, deps.clock());
+        await auditRun(tx, actor, 'run_resumed', id, { from: run.status, pauseReason: run.pauseReason });
+      });
+      return summaryOf(id);
+    },
+
+    /** Résultats `error` et `timeout` remis en attente (tentatives remises à zéro), puis reprise de la série. */
+    async retryErrors(actor: Actor, id: string): Promise<RunSummary> {
+      await withLockedRun(id, async (tx, run) => {
+        const res = await tx
+          .update(results)
+          .set({ status: 'pending', attempts: 0, errorCode: null, errorMessage: null, completedAt: null })
+          .where(and(eq(results.runId, id), inArray(results.status, ['error', 'timeout'])));
+        const count = affectedRows(res);
+        if (count === 0) return;
+        await requeue(tx, run, deps.clock());
+        await auditRun(tx, actor, 'run_errors_retried', id, { count });
+      });
+      return summaryOf(id);
+    },
+
+    /**
+     * Ajoute des modèles à la série : `run_models` et résultats manquants (non supportés en `unsupported`), puis reprise.
+     * Les modèles déjà présents sont ignorés ; un nouveau modèle indisponible refuse tout l'ajout.
+     */
+    async addModels(actor: Actor, id: string, modelIds: string[]): Promise<RunSummary> {
+      const now = deps.clock();
+      await withLockedRun(id, async (tx, run) => {
+        const present = await tx.select({ modelId: runModels.modelId }).from(runModels).where(eq(runModels.runId, id));
+        const known = new Set(present.map((r) => r.modelId));
+        const newIds = modelIds.filter((m) => !known.has(m));
+        if (newIds.length === 0) return;
+        const found = await candidateModels(tx, newIds);
+        const chosen = newIds.map((m) => found.get(m));
+        if (chosen.some((m) => !m?.available)) throw modelUnavailable();
+        await repo.insertRunModels(
+          tx,
+          newIds.map((modelId) => ({ runId: id, modelId, addedAt: now })),
+        );
+        const runTestRows = await tx
+          .select({ id: runTests.id, snapshot: runTests.snapshot })
+          .from(runTests)
+          .where(eq(runTests.runId, id))
+          .orderBy(asc(runTests.position));
+        await repo.insertResults(tx, resultRowsFor(id, run.repetitions, runTestRows, chosen as CandidateModel[]));
+        await requeue(tx, run, now);
+        await auditRun(tx, actor, 'run_models_added', id, { modelIds: newIds });
+      });
+      return summaryOf(id);
+    },
+
+    /** Plafond et pondération par défaut ; relever le plafond ne reprend pas une série en pause. */
+    async update(actor: Actor, id: string, patch: RunPatch): Promise<RunSummary> {
+      await withLockedRun(id, async (tx) => {
+        const values = {
+          ...(patch.budgetUsd === undefined ? {} : { budgetUsd: patch.budgetUsd }),
+          ...(patch.weights === undefined ? {} : { weights: patch.weights }),
+        };
+        if (Object.keys(values).length === 0) return;
+        await tx.update(runs).set(values).where(eq(runs.id, id));
+        await auditRun(tx, actor, 'run_updated', id, patch);
+      });
+      return summaryOf(id);
     },
 
     async progress(id: string): Promise<RunProgress> {

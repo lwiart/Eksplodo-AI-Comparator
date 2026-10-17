@@ -44,11 +44,13 @@ export function isSupported(s: TestSnapshot, m: Pick<ModelForEstimate, 'supports
   return s.attachments.every((a) => (a.mime === 'application/pdf' ? m.supportsPdf : m.supportsVision));
 }
 
-const costUsd = (inputTokens: number, outputTokens: number, m: ModelForEstimate) =>
+type Prices = Pick<ModelForEstimate, 'inputPricePerM' | 'outputPricePerM'>;
+
+const costUsd = (inputTokens: number, outputTokens: number, m: Prices) =>
   (inputTokens * m.inputPricePerM + outputTokens * m.outputPricePerM) / 1_000_000;
 
 /** Coût maximal d'un appel : entrée estimée + `max_tokens` de sortie. */
-export function maxCallCostUsd(s: TestSnapshot, m: ModelForEstimate): number {
+export function maxCallCostUsd(s: TestSnapshot, m: Prices): number {
   return costUsd(estimateInputTokens(s), s.maxTokens, m);
 }
 

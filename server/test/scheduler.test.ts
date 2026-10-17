@@ -98,9 +98,9 @@ describe('/internal/tick', () => {
     expect(short.statusCode).toBe(401);
     const ok = await t.app.inject({ method: 'POST', url: '/internal/tick', headers: { 'x-cron-secret': 'x'.repeat(32) } });
     expect(ok.statusCode).toBe(200);
-    expect(ok.json()).toEqual({ recovered: 0, failedStale: 0, scheduled: 1 });
+    expect(ok.json()).toEqual({ recovered: 0, failedStale: 0, scheduled: 1, runsEnqueued: 0 });
     const again = await t.app.inject({ method: 'POST', url: '/internal/tick', headers: { 'x-cron-secret': 'x'.repeat(32) } });
-    expect(again.json()).toEqual({ recovered: 0, failedStale: 0, scheduled: 0 });
+    expect(again.json()).toEqual({ recovered: 0, failedStale: 0, scheduled: 0, runsEnqueued: 0 });
   });
 });
 

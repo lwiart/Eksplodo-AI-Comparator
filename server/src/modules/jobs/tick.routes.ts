@@ -4,6 +4,7 @@ import type { AppDeps } from '../../app.js';
 import { UnauthorizedError } from '../../errors.js';
 import { reportStaleJobs } from '../errors/capture.js';
 import { flushPendingErrors } from '../errors/report.js';
+import { recoverRuns } from '../runs/run-job.js';
 import { recoverStaleJobs } from './queue.js';
 import { scheduleDueJobs } from './scheduler.js';
 
@@ -21,7 +22,8 @@ export function registerTickRoutes(app: FastifyInstance, deps: AppDeps): void {
     await flushPendingErrors(deps.db);
     const { requeued, failed, failedJobs } = await recoverStaleJobs(deps.db, now);
     await reportStaleJobs(deps.db, failedJobs, now);
+    const runs = await recoverRuns(deps.db, now);
     const scheduled = await scheduleDueJobs(deps.db, deps.schedules, now);
-    return { recovered: requeued, failedStale: failed, scheduled };
+    return { recovered: requeued, failedStale: failed, scheduled, runsEnqueued: runs.enqueued };
   });
 }

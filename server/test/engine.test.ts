@@ -215,7 +215,8 @@ test('concurrence globale et par fournisseur jamais dépassées', async () => {
       maxActive = Math.max(maxActive, active);
       pp.max = Math.max(pp.max, pp.active);
       try {
-        await new Promise((r) => setTimeout(r, 5));
+        // Appels assez longs pour se chevaucher même quand la base répond lentement (suite complète en parallèle).
+        await new Promise((r) => setTimeout(r, 50));
         yield { type: 'text', delta: 'ok' };
         yield { type: 'usage', inputTokens: 3, outputTokens: 1 };
         yield { type: 'finish', reason: 'stop' };

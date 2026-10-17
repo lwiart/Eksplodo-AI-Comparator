@@ -2,6 +2,7 @@ import type { Db } from '../../db/client.js';
 import type { Clock } from '../../lib/clock.js';
 import { reportStaleJobs } from '../errors/capture.js';
 import { flushPendingErrors } from '../errors/report.js';
+import { recoverRuns } from '../runs/run-job.js';
 import { recoverStaleJobs } from './queue.js';
 import { scheduleDueJobs, validateScheduleEntry, type ScheduleEntry } from './scheduler.js';
 
@@ -9,7 +10,7 @@ type LogFn = (obj: object, msg: string) => void;
 
 /**
  * Planificateur interne : un passage immédiat puis toutes les `intervalMs` (60 s en production) : reprise des
- * tâches abandonnées puis création des tâches planifiées échues (idempotent grâce aux clés de dédoublonnage ;
+ * tâches abandonnées, reprise des séries sans tâche active, puis création des tâches planifiées échues (idempotent grâce aux clés de dédoublonnage ;
  * le cron `/internal/tick` fait de même et réveille l'application). Les entrées sont validées au démarrage :
  * une entrée invalide lève immédiatement.
  */
@@ -28,8 +29,14 @@ export function startSchedulerLoop(
       await flushPendingErrors(deps.db);
       const { requeued, failed, failedJobs } = await recoverStaleJobs(deps.db, now);
       await reportStaleJobs(deps.db, failedJobs, now);
+      const runs = await recoverRuns(deps.db, now);
       const scheduled = await scheduleDueJobs(deps.db, deps.schedules, now);
-      if (requeued + failed + scheduled > 0) deps.logger.info({ requeued, failed, scheduled }, 'planificateur');
+      if (requeued + failed + scheduled + runs.enqueued + runs.interrupted > 0) {
+        deps.logger.info(
+          { requeued, failed, scheduled, runsEnqueued: runs.enqueued, runsInterrupted: runs.interrupted },
+          'planificateur',
+        );
+      }
     } catch (err) {
       deps.logger.error({ err }, 'planificateur : passage en échec');
     }

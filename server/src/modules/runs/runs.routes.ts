@@ -9,29 +9,39 @@ const weight = z.number().int().min(0).max(100);
 /** Plafond stocké en `DECIMAL(10,4)` : précision au dix-millième, jamais arrondi à zéro. */
 const BUDGET_STEP = 0.0001;
 
+const budgetUsd = z
+  .number()
+  .min(BUDGET_STEP)
+  .max(999_999)
+  .refine((v) => Math.abs(v / BUDGET_STEP - Math.round(v / BUDGET_STEP)) < 1e-6, 'Plafond : 4 décimales au plus')
+  .nullable()
+  .optional();
+const weights = z
+  .object({ quality: weight, speed: weight, cost: weight, reliability: weight })
+  .strict()
+  .refine((w) => w.quality + w.speed + w.cost + w.reliability === 100, 'La somme des pondérations doit valoir 100')
+  .optional();
+const modelIds = z.array(z.string().uuid()).min(1).max(50).refine(unique, 'Un modèle ne peut figurer qu\'une fois dans la série');
+
 const runBody = z
   .object({
     name: z.string().trim().min(1).max(200),
     suiteId: z.string().uuid().optional(),
     testIds: z.array(z.string().uuid()).min(1).max(500).refine(unique, 'Un test ne peut figurer qu\'une fois dans la série'),
-    modelIds: z.array(z.string().uuid()).min(1).max(50).refine(unique, 'Un modèle ne peut figurer qu\'une fois dans la série'),
+    modelIds,
     repetitions: z.number().int().min(1).max(5).default(1),
     concurrency: z.number().int().min(1).max(8).default(4),
     judgeModelId: z.string().uuid().nullable().optional(),
-    budgetUsd: z
-      .number()
-      .min(BUDGET_STEP)
-      .max(999_999)
-      .refine((v) => Math.abs(v / BUDGET_STEP - Math.round(v / BUDGET_STEP)) < 1e-6, 'Plafond : 4 décimales au plus')
-      .nullable()
-      .optional(),
-    weights: z
-      .object({ quality: weight, speed: weight, cost: weight, reliability: weight })
-      .strict()
-      .refine((w) => w.quality + w.speed + w.cost + w.reliability === 100, 'La somme des pondérations doit valoir 100')
-      .optional(),
+    budgetUsd,
+    weights,
   })
   .strict();
+
+const addModelsBody = z.object({ modelIds }).strict();
+const patchBody = z
+  .object({ budgetUsd, weights })
+  .strict()
+  .refine((b) => b.budgetUsd !== undefined || b.weights !== undefined, 'Aucune modification demandée');
 
 export function registerRunsRoutes(app: FastifyInstance, service: RunsService): void {
   const admin = { preHandler: app.requireAdmin };
@@ -49,6 +59,31 @@ export function registerRunsRoutes(app: FastifyInstance, service: RunsService): 
   app.get('/api/runs/:id', connected, async (req) => {
     const { id } = idParams.parse(req.params);
     return { run: await service.get(id) };
+  });
+
+  app.patch('/api/runs/:id', admin, async (req) => {
+    const { id } = idParams.parse(req.params);
+    return { run: await service.update(req.actor!, id, patchBody.parse(req.body)) };
+  });
+
+  app.post('/api/runs/:id/pause', admin, async (req) => {
+    const { id } = idParams.parse(req.params);
+    return { run: await service.pause(req.actor!, id) };
+  });
+
+  app.post('/api/runs/:id/resume', admin, async (req) => {
+    const { id } = idParams.parse(req.params);
+    return { run: await service.resume(req.actor!, id) };
+  });
+
+  app.post('/api/runs/:id/retry-errors', admin, async (req) => {
+    const { id } = idParams.parse(req.params);
+    return { run: await service.retryErrors(req.actor!, id) };
+  });
+
+  app.post('/api/runs/:id/models', admin, async (req) => {
+    const { id } = idParams.parse(req.params);
+    return { run: await service.addModels(req.actor!, id, addModelsBody.parse(req.body).modelIds) };
   });
 
   app.get('/api/runs/:id/progress', connected, async (req) => {

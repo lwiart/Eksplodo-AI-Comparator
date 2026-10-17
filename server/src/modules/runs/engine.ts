@@ -14,8 +14,8 @@ import type { ProviderLike, Registry } from '../providers/registry.js';
 import { readAttachment } from '../tests/attachments.js';
 import { recordUsage } from '../usage/usage.js';
 import { buildRequest, measureCall, type CallOutcome, type ModelPrices } from './call.js';
-import { estimateInputTokens } from './estimate.js';
-import { RUN_EXECUTE, enqueueRunJob } from './run-job.js';
+import { estimateInputTokens, maxCallCostUsd } from './estimate.js';
+import { RUN_EXECUTE, enqueueRunJob, withTxRetry } from './run-job.js';
 import type { TestSnapshot } from './snapshot.js';
 
 /** Durée d'une tranche : ni lancement ni nouvelle tentative au-delà (les appels en cours se terminent, ≤ 120 s). */
@@ -47,32 +47,11 @@ type WorkItem = {
   maxConcurrency: number;
   snapshot: TestSnapshot;
   attempts: number;
+  /** Coût maximal estimé d'un appel, réservé sur le plafond tant que le résultat est en vol. */
+  maxCostUsd: number;
 };
 
 const FINISHED_STATUSES = ['done', 'error', 'timeout', 'unsupported'] as const;
-// Conflit d'instantané (innodb_snapshot_isolation) et interblocage : la transaction courte est rejouée.
-const RETRIABLE_ERRNOS = new Set([1020, 1213]);
-const TX_ATTEMPTS = 3;
-
-function errnoOf(err: unknown): number | undefined {
-  for (let e: unknown = err, depth = 0; e && typeof e === 'object' && depth < 4; depth++) {
-    const { errno, cause } = e as { errno?: unknown; cause?: unknown };
-    if (typeof errno === 'number') return errno;
-    e = cause;
-  }
-  return undefined;
-}
-
-async function withTxRetry<T>(fn: () => Promise<T>): Promise<T> {
-  for (let attempt = 1; ; attempt++) {
-    try {
-      return await fn();
-    } catch (err) {
-      const errno = errnoOf(err);
-      if (attempt >= TX_ATTEMPTS || errno === undefined || !RETRIABLE_ERRNOS.has(errno)) throw err;
-    }
-  }
-}
 
 /** Attente annulable : rejette avec la raison du signal. */
 function abortableSleep(ms: number, signal: AbortSignal): Promise<void> {
@@ -91,7 +70,7 @@ function abortableSleep(ms: number, signal: AbortSignal): Promise<void> {
 }
 
 /** Montant arrondi au micro-dollar (précision de `DECIMAL(12,6)`) : résultat, série et `ai_usage` concordent. */
-const roundUsd = (usd: number) => Math.round(usd * 1_000_000) / 1_000_000;
+export const roundUsd = (usd: number) => Math.round(usd * 1_000_000) / 1_000_000;
 
 /** Échec survenu avant l'appel (clé, pièce jointe…) : définitif. */
 function failedBeforeCall(code: string, message: string): CallOutcome {
@@ -127,14 +106,6 @@ function retryDelayMs(outcome: CallOutcome, attempts: number): number {
   return RETRY_DELAYS_MS[Math.min(attempts, RETRY_DELAYS_MS.length) - 1]!;
 }
 
-/**
- * Contrôle propre à chaque lancement, après la relecture du statut de la série. Point d'extension du plafond de dépense
- * (Task 9) ; `false` arrête les lancements de la tranche.
- */
-async function beforeLaunch(_item: WorkItem): Promise<boolean> {
-  return true;
-}
-
 function runIdOf(job: Job): string {
   const runId = (job.payload as { runId?: unknown } | null)?.runId;
   if (typeof runId !== 'string') throw new Error('Tâche run_execute sans runId');
@@ -164,15 +135,18 @@ async function loadQueue(db: Db, runId: string): Promise<WorkItem[]> {
   const modelOf = new Map(modelRows.map((r) => [r.model.id, r]));
   return pending.map((r) => {
     const { model, provider } = modelOf.get(r.modelId)!;
+    const prices = { inputPricePerM: model.inputPricePerM, outputPricePerM: model.outputPricePerM };
+    const snapshot = snapshotOf.get(r.runTestId)!;
     return {
       resultId: r.id,
       modelId: r.modelId,
       apiModelId: model.apiModelId,
-      prices: { inputPricePerM: model.inputPricePerM, outputPricePerM: model.outputPricePerM },
+      prices,
       provider,
       maxConcurrency: Math.max(1, provider.maxConcurrency),
-      snapshot: snapshotOf.get(r.runTestId)!,
+      snapshot,
       attempts: r.attempts,
+      maxCostUsd: maxCallCostUsd(snapshot, prices),
     };
   });
 }
@@ -227,16 +201,55 @@ export async function executeRunSlice(deps: EngineDeps, job: Job, ctx: JobContex
   const concurrency = Math.max(1, run.concurrency);
   const perProvider = new Map<string, number>();
   const inFlight = new Set<Promise<void>>();
+  /** Réservations sur le plafond : coût maximal des appels lancés et non terminés, par résultat. */
+  const reservations = new Map<string, number>();
   let stopLaunching = false;
   let interrupted = false;
   let unexpected: unknown = null;
 
-  /** Relit le statut de la série (pause, tâche remplacée) puis applique `beforeLaunch`. */
-  async function mayLaunch(item: WorkItem): Promise<boolean> {
-    const [row] = await db.select({ status: runs.status, activeJobId: runs.activeJobId }).from(runs).where(eq(runs.id, runId));
-    if (!row || row.status !== 'running' || row.activeJobId !== job.id || !(await beforeLaunch(item))) {
+  /** Pause pour plafond atteint, sous verrou, seulement si la série tourne encore sous cette tâche. */
+  async function pauseForBudget(): Promise<void> {
+    await withTxRetry(() =>
+      db.transaction(async (tx) => {
+        const [row] = await tx
+          .select({ status: runs.status, activeJobId: runs.activeJobId })
+          .from(runs)
+          .where(eq(runs.id, runId))
+          .for('update');
+        if (row?.status !== 'running' || row.activeJobId !== job.id) return;
+        await tx.update(runs).set({ status: 'paused', pauseReason: 'budget' }).where(eq(runs.id, runId));
+      }),
+    );
+  }
+
+  /**
+   * Avant chaque lancement (nouvelle tentative comprise) : relit la série (pause, tâche remplacée, plafond éventuellement
+   * relevé), puis vérifie que dépense + réservations en vol + coût maximal de l'appel ne dépassent pas le plafond. Une
+   * nouvelle tentative garde la réservation de son résultat (`reserved`) : seul un nouvel appel en ajoute une.
+   */
+  async function mayLaunch(item: WorkItem, reserved = false): Promise<boolean> {
+    const [row] = await db
+      .select({
+        status: runs.status,
+        activeJobId: runs.activeJobId,
+        budgetUsd: runs.budgetUsd,
+        modelsCostUsd: runs.modelsCostUsd,
+        judgeCostUsd: runs.judgeCostUsd,
+      })
+      .from(runs)
+      .where(eq(runs.id, runId));
+    if (!row || row.status !== 'running' || row.activeJobId !== job.id) {
       stopLaunching = true;
       return false;
+    }
+    if (row.budgetUsd !== null) {
+      const inFlightUsd = [...reservations.values()].reduce((s, usd) => s + usd, 0);
+      const next = reserved ? 0 : item.maxCostUsd;
+      if (roundUsd(row.modelsCostUsd + row.judgeCostUsd + inFlightUsd + next) > row.budgetUsd) {
+        stopLaunching = true;
+        await pauseForBudget();
+        return false;
+      }
     }
     return true;
   }
@@ -396,7 +409,7 @@ export async function executeRunSlice(deps: EngineDeps, job: Job, ctx: JobContex
           await backToPending(item, false); // l'appel a eu lieu : la tentative reste comptée
           return;
         }
-        if (expired() || !(await mayLaunch(item))) return void (await backToPending(item, false));
+        if (expired() || !(await mayLaunch(item, true))) return void (await backToPending(item, false));
         if (!(await updateRunning(item.resultId, { attempts: sql`${results.attempts} + 1`, startedAt: ctx.now() }))) return;
         item.attempts++;
       }
@@ -421,6 +434,8 @@ export async function executeRunSlice(deps: EngineDeps, job: Job, ctx: JobContex
         const item = queue[index]!;
         if (!(await mayLaunch(item))) break;
         queue.splice(index, 1);
+        // Réservation prise avant la prise du résultat, rendue à la fin de l'appel (coût alors compté dans la série).
+        reservations.set(item.resultId, item.maxCostUsd);
         const claimed = await withTxRetry(async () =>
           affectedRows(
             await db
@@ -429,11 +444,15 @@ export async function executeRunSlice(deps: EngineDeps, job: Job, ctx: JobContex
               .where(and(eq(results.id, item.resultId), eq(results.status, 'pending'))),
           ),
         );
-        if (claimed !== 1) continue;
+        if (claimed !== 1) {
+          reservations.delete(item.resultId);
+          continue;
+        }
         item.attempts++;
         const providerId = item.provider.id;
         perProvider.set(providerId, (perProvider.get(providerId) ?? 0) + 1);
         const task: Promise<void> = work(item).finally(() => {
+          reservations.delete(item.resultId);
           perProvider.set(providerId, perProvider.get(providerId)! - 1);
           inFlight.delete(task);
         });
