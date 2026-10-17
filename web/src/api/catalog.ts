@@ -51,7 +51,7 @@ export type RemoteModelView = {
 
 export type ConnectionTest =
   | { ok: true; modelCount: number; latencyMs: number }
-  | { ok: false; code: string; message: string };
+  | { ok: false; code: string; message: string; detail?: string };
 
 export type NewModel = {
   id: string;

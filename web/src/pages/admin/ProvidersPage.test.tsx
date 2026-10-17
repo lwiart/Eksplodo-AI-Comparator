@@ -68,6 +68,7 @@ test('Tester la connexion : « Connexion réussie · 42 modèles » ou le messag
   const results = [
     { ok: true, modelCount: 42, latencyMs: 120 },
     { ok: false, code: 'auth_invalid', message: 'Clé refusée par le fournisseur' },
+    { ok: false, code: 'bad_request', message: 'Requête refusée par le fournisseur', detail: 'Your credit balance is too low' },
   ];
   apiFetch.mockImplementation((path: string) => {
     if (path === '/api/providers') return Promise.resolve({ providers });
@@ -80,6 +81,9 @@ test('Tester la connexion : « Connexion réussie · 42 modèles » ou le messag
   expect(await card('Anthropic').findByText('Connexion réussie · 42 modèles')).toBeInTheDocument();
   await user.click(card('Anthropic').getByRole('button', { name: 'Tester la connexion' }));
   expect(await card('Anthropic').findByText('Clé refusée par le fournisseur')).toBeInTheDocument();
+  expect(card('Anthropic').queryByText(/Message du fournisseur/)).toBeNull();
+  await user.click(card('Anthropic').getByRole('button', { name: 'Tester la connexion' }));
+  expect(await card('Anthropic').findByText('Message du fournisseur : Your credit balance is too low')).toBeInTheDocument();
 });
 
 test('un échec de l’API est signalé', async () => {

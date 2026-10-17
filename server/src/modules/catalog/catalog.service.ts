@@ -8,7 +8,7 @@ import type { Clock } from '../../lib/clock.js';
 import { audit } from '../audit/audit.js';
 import type { Actor } from '../auth/actor.js';
 import { isOpenRouter } from '../providers/openrouter.js';
-import { ProviderError } from '../providers/errors.js';
+import { ProviderError, readableDetail } from '../providers/errors.js';
 import { KeyMissingError, KeyUnreadableError, sealApiKey, type KeyState, type Registry } from '../providers/registry.js';
 import type { RemoteModel } from '../providers/types.js';
 import { KNOWN_PRICES } from './known-prices.js';
@@ -69,7 +69,7 @@ export type RemoteModelView = RemoteModel & { alreadyAdded: boolean };
 
 export type ConnectionTest =
   | { ok: true; modelCount: number; latencyMs: number }
-  | { ok: false; code: string; message: string };
+  | { ok: false; code: string; message: string; detail?: string };
 
 export type ProviderInput = {
   name: string;
@@ -278,7 +278,11 @@ export function createCatalogService(deps: CatalogServiceDeps) {
         const list = await registry.adapterFor(p).listModels(AbortSignal.timeout(LIST_MODELS_TIMEOUT_MS));
         return { ok: true, modelCount: list.length, latencyMs: Date.now() - started };
       } catch (err) {
-        if (err instanceof ProviderError) return { ok: false, code: err.code, message: err.message };
+        if (err instanceof ProviderError) {
+          // Message du fournisseur (déjà masqué) : indispensable pour comprendre un refus, ex. crédit épuisé.
+          const detail = readableDetail(err.detail);
+          return detail ? { ok: false, code: err.code, message: err.message, detail } : { ok: false, code: err.code, message: err.message };
+        }
         if (err instanceof KeyMissingError || err instanceof KeyUnreadableError) {
           return { ok: false, code: err.code, message: err.message };
         }

@@ -58,6 +58,30 @@ export function maskSecrets(text: string, secrets: (string | null)[]): string {
   return out;
 }
 
+const READABLE_MAX = 300;
+
+/**
+ * Message lisible tiré du détail d'une erreur (déjà masqué) : `error.message` ou `message` d'un corps JSON
+ * (formats Anthropic, OpenAI, Google), sinon le texte brut. Tronqué à 300 caractères ; chaîne vide si rien.
+ */
+export function readableDetail(detail: string): string {
+  let text = detail.trim();
+  try {
+    const body: unknown = JSON.parse(text);
+    if (typeof body === 'string') {
+      text = body.trim();
+    } else if (typeof body === 'object' && body !== null) {
+      const { error, message } = body as { error?: unknown; message?: unknown };
+      const inner = typeof error === 'object' && error !== null ? (error as { message?: unknown }).message : undefined;
+      if (typeof inner === 'string' && inner.trim()) text = inner.trim();
+      else if (typeof message === 'string' && message.trim()) text = message.trim();
+    }
+  } catch {
+    // Pas du JSON : texte brut.
+  }
+  return text.slice(0, READABLE_MAX);
+}
+
 function safeDetail(text: string, secrets: (string | null)[]): string {
   return maskSecrets(text, secrets).slice(0, DETAIL_MAX);
 }
