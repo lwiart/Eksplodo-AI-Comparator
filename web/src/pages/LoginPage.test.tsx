@@ -50,6 +50,21 @@ test('trop de tentatives → message dédié', async () => {
 test('formulaire utilisable sans WebGL', () => {
   setup(vi.fn());
   expect(screen.getByLabelText('E-mail')).toBeEnabled();
-  expect(screen.getByTestId('burst-fallback')).toBeInTheDocument();
+  expect(screen.getByTestId('fanout-fallback')).toBeInTheDocument();
   expect(screen.getByText('ACCÈS SUR INVITATION UNIQUEMENT')).toBeInTheDocument();
+});
+
+test('affiche le texte de présentation et la légende du bandeau', () => {
+  setup(vi.fn());
+  expect(screen.getByText(/Le banc d'essai des IA/)).toHaveTextContent(/qualité, leur vitesse, leur coût et leur fiabilité/);
+  expect(screen.getByText('TOUT MODÈLE ACCESSIBLE PAR API')).toBeInTheDocument();
+  expect(screen.getByText('Testé · chronométré · noté')).toBeInTheDocument();
+});
+
+test('le bandeau défilant ne charge rien d externe', () => {
+  setup(vi.fn());
+  const imgs = Array.from(screen.getByTestId('provider-ticker').querySelectorAll('img'));
+  expect(imgs.length).toBe(48); // 24 fournisseurs, liste doublée pour la boucle
+  imgs.forEach((img) => expect(img.getAttribute('src')).not.toMatch(/^(https?:)?\/\//));
+  expect(screen.getByTestId('provider-ticker').innerHTML).not.toMatch(/(src|href)="(https?:)?\/\//);
 });

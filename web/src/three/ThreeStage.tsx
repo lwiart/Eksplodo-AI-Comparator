@@ -6,7 +6,7 @@ function StageCanvas({ factory, fallback }: { factory: SceneFactory; fallback: R
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const { status } = useThreeScene(factory, canvasRef);
   if (status === 'fallback') return <>{fallback}</>;
-  return <canvas ref={canvasRef} className="absolute inset-0 block h-full w-full" />;
+  return <canvas ref={canvasRef} className="pointer-events-auto absolute inset-0 block h-full w-full" />;
 }
 
 /** Scène Three.js plein cadre ; repli statique sans WebGL. Décorative, donc masquée aux lecteurs d'écran. */

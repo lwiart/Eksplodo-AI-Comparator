@@ -94,3 +94,28 @@ html[data-animations="off"] *::after {
   border-radius: var(--radius-card);
   backdrop-filter: blur(6px);
 }
+
+/* Bandeau défilant des fournisseurs (pages publiques) : la piste contient deux fois la liste, d'où -50 %. */
+.ticker-window {
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
+}
+.ticker-track {
+  animation: ticker-scroll 48s linear infinite;
+}
+.ticker-window:hover .ticker-track {
+  animation-play-state: paused;
+}
+@keyframes ticker-scroll {
+  to {
+    transform: translateX(-50%);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ticker-track {
+    animation: none;
+  }
+}
+html[data-animations="off"] .ticker-track {
+  animation: none;
+}
