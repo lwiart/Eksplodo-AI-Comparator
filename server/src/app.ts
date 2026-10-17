@@ -1,5 +1,6 @@
 import cookie from '@fastify/cookie';
 import helmet from '@fastify/helmet';
+import multipart from '@fastify/multipart';
 import { sql } from 'drizzle-orm';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { ZodError } from 'zod';
@@ -14,6 +15,7 @@ import type { ScheduleEntry } from './modules/jobs/scheduler.js';
 import { registerTickRoutes } from './modules/jobs/tick.routes.js';
 import { registerCatalogRoutes } from './modules/catalog/catalog.routes.js';
 import { createCatalogService } from './modules/catalog/catalog.service.js';
+import { MAX_ATTACHMENT_BYTES } from './modules/tests/attachments.js';
 import { registerTestsRoutes } from './modules/tests/tests.routes.js';
 import { createTestsService } from './modules/tests/tests.service.js';
 import type { Mailer } from './modules/mail/mailer.js';
@@ -97,6 +99,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   });
 
   await app.register(cookie);
+  await app.register(multipart, { limits: { fileSize: MAX_ATTACHMENT_BYTES, files: 1, fields: 5, fieldSize: 1024, parts: 7 } });
   await registerRateLimit(app);
   registerCsrf(app, deps.config);
   registerAuth(app, deps);
@@ -174,7 +177,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   registerAuthRoutes(app, deps);
   registerUserRoutes(app, createUsersService(deps));
   registerCatalogRoutes(app, catalog);
-  registerTestsRoutes(app, createTestsService(deps));
+  registerTestsRoutes(app, createTestsService(deps), deps);
   registerTickRoutes(app, deps);
   registerErrorRoutes(app, deps);
 

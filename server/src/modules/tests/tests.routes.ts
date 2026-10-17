@@ -1,8 +1,19 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
+import { createReadStream } from 'node:fs';
+import { AppError } from '../../errors.js';
+import { addAttachment, findAttachment, removeAttachment, resolveAttachmentPath, type AttachmentsDeps } from './attachments.js';
 import type { TestsService } from './tests.service.js';
 
 const idParams = z.object({ id: z.string().uuid() });
+const attachmentParams = z.object({ id: z.string().uuid(), attachmentId: z.string().uuid() });
+
+/** `Content-Disposition` en pièce jointe : repli ASCII + `filename*` (RFC 5987) pour le nom d'origine. */
+function contentDisposition(name: string): string {
+  const ascii = name.replace(/[^\x20-\x7e]|["\\]/g, '_');
+  const encoded = encodeURIComponent(name).replace(/['()*]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
+  return `attachment; filename="${ascii}"; filename*=UTF-8''${encoded}`;
+}
 
 const listQuery = z
   .object({
@@ -28,7 +39,7 @@ const testBody = z
   })
   .strict();
 
-export function registerTestsRoutes(app: FastifyInstance, service: TestsService): void {
+export function registerTestsRoutes(app: FastifyInstance, service: TestsService, attachments: AttachmentsDeps): void {
   const admin = { preHandler: app.requireAdmin };
 
   app.get('/api/tests', admin, async (req) => {
@@ -67,5 +78,35 @@ export function registerTestsRoutes(app: FastifyInstance, service: TestsService)
   app.post('/api/tests/:id/restore', admin, async (req) => {
     const { id } = idParams.parse(req.params);
     return { test: await service.restore(req.actor!, id) };
+  });
+
+  app.post('/api/tests/:id/attachments', admin, async (req, reply) => {
+    const { id } = idParams.parse(req.params);
+    const part = await req.file();
+    if (!part) throw new AppError('validation', 400, 'Fichier manquant (champ « file »)');
+    try {
+      const attachment = await addAttachment(attachments, req.actor!, id, { filename: part.filename, stream: part.file });
+      return reply.status(201).send({ attachment });
+    } catch (err) {
+      part.file.resume(); // le reste du corps est lu et jeté pour que la réponse arrive sur une connexion intacte
+      throw err;
+    }
+  });
+
+  app.delete('/api/tests/:id/attachments/:attachmentId', admin, async (req) => {
+    const { id, attachmentId } = attachmentParams.parse(req.params);
+    return { outcome: await removeAttachment(attachments, req.actor!, id, attachmentId) };
+  });
+
+  app.get('/api/tests/:id/attachments/:attachmentId/download', admin, async (req, reply) => {
+    const { id, attachmentId } = attachmentParams.parse(req.params);
+    const row = await findAttachment(attachments, id, attachmentId);
+    return reply
+      .header('content-type', row.mime)
+      .header('content-length', row.size)
+      .header('content-disposition', contentDisposition(row.originalName))
+      .header('x-content-type-options', 'nosniff')
+      .header('cache-control', 'private, no-store')
+      .send(createReadStream(resolveAttachmentPath(attachments.config.dataDir, row.storagePath)));
   });
 }

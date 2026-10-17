@@ -55,13 +55,13 @@ export type TestApp = {
 };
 
 /** L'application renvoyée n'est pas encore `ready()` : un test peut y ajouter des routes avant le premier `inject`. */
-export async function buildTestApp(opts: { now?: Date; schedules?: ScheduleEntry[]; fakeLlm?: boolean; fetch?: typeof fetch } = {}): Promise<TestApp> {
+export async function buildTestApp(opts: { now?: Date; schedules?: ScheduleEntry[]; fakeLlm?: boolean; fetch?: typeof fetch; dataDir?: string } = {}): Promise<TestApp> {
   const testDb = await createTestDb();
   const clock = createTestClock(opts.now ?? new Date('2026-01-15T10:00:00.000Z'));
   const mailer = createFakeMailer();
   try {
     const app = await buildApp({
-      config: testConfig(),
+      config: { ...testConfig(), ...(opts.dataDir === undefined ? {} : { dataDir: opts.dataDir }) },
       clock: () => clock.now(),
       db: testDb.db,
       mailer,
