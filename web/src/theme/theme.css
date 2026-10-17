@@ -153,39 +153,75 @@ html[data-animations="off"] .reveal-in { animation: none; }
   .print-only {
     display: block;
   }
-  html,
-  body {
+  /* Limité à la page publique : le reste de l'application garde son thème. */
+  body:has(.share-page) {
     background: #fff !important;
   }
-  body::before {
+  body:has(.share-page)::before {
     display: none;
   }
   .share-page {
     min-height: 0 !important;
     overflow: visible !important;
     background: #fff;
+    color: #111;
+    /* Pastilles, barres et couleurs des modèles s'impriment même sans l'option « Graphiques d'arrière-plan ». */
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
   }
-  .share-page,
   .share-page * {
-    color: #111 !important;
-    border-color: #c8d3da !important;
     box-shadow: none !important;
     text-shadow: none !important;
     backdrop-filter: none !important;
     animation: none !important;
     transition: none !important;
   }
+  /* Textes clairs du thème → sombres ; les couleurs en ligne des modèles ne sont pas touchées. */
+  .share-page .text-white,
+  .share-page .text-ink,
+  .share-page .text-\[\#b9d4e1\] {
+    color: #111;
+  }
+  .share-page .text-mute {
+    color: #4a5f6b;
+  }
+  .share-page .text-peach {
+    color: #b3430c;
+  }
+  .share-page .text-sky,
+  .share-page .markdown a {
+    color: #0c659d;
+  }
   .share-page .card-surface,
   .share-page blockquote,
-  .share-page article {
-    background: #fff !important;
+  .share-page article,
+  .share-page li {
+    background: #fff;
+    border-color: #c8d3da;
+  }
+  .share-page header,
+  .share-page section,
+  .share-page th,
+  .share-page td,
+  .share-page tr {
+    border-color: #c8d3da;
   }
   /* Logo blanc : inversé pour rester visible sur le papier. */
   .share-page .logo-glow {
     filter: invert(1);
   }
+  /* Graphes : textes, grilles et axes lisibles sur fond blanc. */
   .share-page svg text {
     fill: #333 !important;
+  }
+  .share-page .recharts-cartesian-grid line,
+  .share-page .recharts-cartesian-axis-line,
+  .share-page .recharts-cartesian-axis-tick-line {
+    stroke: #aebbc4 !important;
+  }
+  .share-page .markdown pre,
+  .share-page .markdown code {
+    background: #eef2f5;
   }
   .share-page .card-surface,
   .share-page table,
