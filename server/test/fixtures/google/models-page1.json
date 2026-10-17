@@ -1,0 +1,7 @@
+{
+  "models": [
+    { "name": "models/gemini-a", "displayName": "Gemini A", "inputTokenLimit": 1048576, "outputTokenLimit": 8192, "supportedGenerationMethods": ["generateContent", "countTokens"] },
+    { "name": "models/embedding-x", "displayName": "Embedding X", "inputTokenLimit": 2048, "supportedGenerationMethods": ["embedContent"] }
+  ],
+  "nextPageToken": "page 2/&"
+}

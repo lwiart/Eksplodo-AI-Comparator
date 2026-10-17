@@ -1,0 +1,4 @@
+data: {"candidates":[{"content":{"role":"model","parts":[{"text":"Début"}]}}]}
+
+data: ceci n'est pas du JSON
+

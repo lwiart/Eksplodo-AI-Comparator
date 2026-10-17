@@ -1,0 +1,5 @@
+{
+  "models": [
+    { "name": "models/gemini-b", "displayName": "Gemini B", "inputTokenLimit": 32768, "supportedGenerationMethods": ["generateContent"] }
+  ]
+}

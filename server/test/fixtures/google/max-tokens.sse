@@ -1,0 +1,2 @@
+data: {"candidates":[{"content":{"role":"model","parts":[{"text":"Texte tronqué"}]},"finishReason":"MAX_TOKENS"}],"usageMetadata":{"promptTokenCount":8,"candidatesTokenCount":100}}
+

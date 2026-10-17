@@ -1,0 +1,4 @@
+data: {"candidates":[{"content":{"role":"model","parts":[{"text":"Début"}]}}]}
+
+data: {"candidates":[{"finishReason":"SAFETY"}],"usageMetadata":{"promptTokenCount":8,"candidatesTokenCount":1}}
+

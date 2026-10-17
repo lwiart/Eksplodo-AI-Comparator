@@ -1,0 +1,4 @@
+data: {"candidates":[{"content":{"role":"model","parts":[{"text":"Je réfléchis.","thought":true}]}}],"usageMetadata":{"promptTokenCount":10}}
+
+data: {"candidates":[{"content":{"role":"model","parts":[{"text":"Voici la réponse."}]},"finishReason":"STOP"}],"usageMetadata":{"promptTokenCount":10,"candidatesTokenCount":20,"thoughtsTokenCount":35}}
+
