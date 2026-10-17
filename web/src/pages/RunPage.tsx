@@ -1,7 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
-import { useMemo } from 'react';
+import { lazy, Suspense, useMemo } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { messageForError } from '../api/messages';
+import { getRanking, rankingKey } from '../api/results';
 import { RUNS_KEY, getRun, getRunProgress, getRunResults, type RunProgress, type RunStatus, type RunSummary } from '../api/runs';
 import { useAuth } from '../auth/AuthProvider';
 import { ActivityFeed } from '../components/runs/ActivityFeed';
@@ -18,6 +19,11 @@ import { liveFlowScene, type LiveFlowData } from '../three/live-flow-scene';
 /** Intervalle d'interrogation : aucune requête HTTP n'attend la fin d'un appel (limite de 60 s du proxy). */
 const POLL_MS = 2000;
 const ACTIVE: readonly RunStatus[] = ['queued', 'running', 'paused'];
+/** Le classement (agrégation en base) est rafraîchi moins souvent que l'avancement pendant la série. */
+const RANKING_POLL_MS = 10_000;
+
+/** Vue résultats chargée à la demande : Recharts reste hors du fragment principal. */
+const ResultsView = lazy(() => import('../components/results/ResultsView'));
 
 /**
  * Interrogation seulement pendant la série. Onglet caché, react-query saute les échéances (`refetchIntervalInBackground`
@@ -124,6 +130,30 @@ function LiveView({ progress }: { progress: RunProgress }) {
   );
 }
 
+/** Podium, pondération, graphes et classement ; la qualité peut être masquée (nulle) pour un Utilisateur qui n'a pas noté. */
+function ResultsSection({ runId, isAdmin, show, active }: { runId: string; isAdmin: boolean; show: boolean; active: boolean }) {
+  const ranking = useQuery({
+    queryKey: rankingKey(runId),
+    queryFn: () => getRanking(runId),
+    refetchInterval: active ? RANKING_POLL_MS : false,
+    refetchOnWindowFocus: 'always',
+  });
+  const hasQuality = ranking.data?.models.some((m) => m.quality !== null) ?? false;
+  if (!show && !hasQuality) return null;
+  if (ranking.isError)
+    return (
+      <p role="alert" className="text-sm text-bad">
+        {messageForError(ranking.error)}
+      </p>
+    );
+  if (!ranking.data) return <p className="text-sm text-mute">Chargement du classement…</p>;
+  return (
+    <Suspense fallback={<p className="text-sm text-mute">Chargement du classement…</p>}>
+      <ResultsView runId={runId} ranking={ranking.data} isAdmin={isAdmin} />
+    </Suspense>
+  );
+}
+
 function CompletedView({ runId }: { runId: string }) {
   const results = useQuery({ queryKey: [...RUNS_KEY, runId, 'results'], queryFn: () => getRunResults(runId) });
   if (results.isError)
@@ -186,7 +216,9 @@ export function RunPage() {
             <div className="flex flex-col gap-4">
               <PauseNotice progress={progress.data} isAdmin={isAdmin} />
               {isAdmin ? <RunControls runId={id} progress={progress.data} /> : null}
-              {progress.data.status === 'completed' ? <CompletedView runId={id} /> : <LiveView progress={progress.data} />}
+              {progress.data.status === 'completed' ? null : <LiveView progress={progress.data} />}
+              <ResultsSection runId={id} isAdmin={isAdmin} show={progress.data.status === 'completed'} active={ACTIVE.includes(progress.data.status)} />
+              {progress.data.status === 'completed' ? <CompletedView runId={id} /> : null}
             </div>
           ) : (
             <p className="text-sm text-mute">Chargement de l’avancement…</p>

@@ -2,8 +2,9 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { afterEach, beforeEach, expect, test, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, expect, test, vi } from 'vitest';
 import { AuthContext, type PublicUser, type Role } from '../auth/AuthProvider';
+import { MODELS as RANKED_MODELS, RANKING } from '../components/results/fixtures';
 import { RunPage } from './RunPage';
 
 const apiFetch = vi.hoisted(() => vi.fn());
@@ -109,6 +110,15 @@ const CATALOG = [
   { id: 'm4', displayName: 'Modèle sans clé', providerName: 'Autre', color: '#FFFFFF', available: false },
 ];
 
+/** Classement renvoyé par défaut : aucune qualité (rien n'est encore noté, ou masqué pour un Utilisateur). */
+const UNSCORED_RANKING = { ...RANKING, models: RANKING.models.map((m) => ({ ...m, quality: null })) };
+
+// Les curseurs Radix et les graphes Recharts observent leur taille ; jsdom n'a pas de ResizeObserver.
+beforeAll(() => {
+  vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
+});
+
+let ranking: unknown;
 let progressQueue: unknown[];
 let summary: Record<string, unknown>;
 /** Si défini, la prochaine réponse de l'avancement attend cette promesse (requête encore en vol). */
@@ -116,6 +126,7 @@ let holdProgress: Promise<void> | null;
 beforeEach(() => {
   progressQueue = [];
   summary = SUMMARY;
+  ranking = UNSCORED_RANKING;
   holdProgress = null;
   apiFetch.mockReset();
   apiFetch.mockImplementation((path: string, init?: { method?: string }) => {
@@ -126,6 +137,7 @@ beforeEach(() => {
       holdProgress = null;
       return hold ? hold.then(() => ({ progress })) : Promise.resolve({ progress });
     }
+    if (path === '/api/runs/r1/ranking') return Promise.resolve(ranking);
     if (path === '/api/runs/r1/results') return Promise.resolve({ results: RESULTS });
     if (path === '/api/models') return Promise.resolve({ models: CATALOG });
     if (init?.method) return Promise.resolve({ run: summary });
@@ -341,6 +353,41 @@ test('série terminée : tableau des métriques par modèle', async () => {
   expect(gpt.getAllByRole('cell').map((c) => c.textContent)).toEqual(['3', '0', '2 s', '20 tokens/s', '0,015 $']);
   expect(screen.queryByRole('progressbar')).toBeNull();
   expect(screen.queryByTestId('live-flow-fallback')).toBeNull();
+});
+
+test('série terminée : vue résultats (podium, pondération, classement) avant les métriques', async () => {
+  summary = { ...SUMMARY, status: 'completed', completedAt: '2026-10-17T12:40:00.000Z' };
+  ranking = RANKING;
+  renderPage('admin', { ...PROGRESS, status: 'completed', etaSeconds: 0, running: [] });
+  expect(await screen.findByRole('list', { name: 'Podium' })).toBeInTheDocument();
+  expect(screen.getByRole('slider', { name: 'Qualité' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Enregistrer comme pondération par défaut' })).toBeInTheDocument();
+  expect(screen.getByRole('table', { name: 'Classement détaillé' })).toBeInTheDocument();
+  expect(await screen.findByRole('table', { name: 'Métriques par modèle' })).toBeInTheDocument();
+});
+
+test('série terminée, qualité masquée (Utilisateur sans notes) : « — » sans planter', async () => {
+  summary = { ...SUMMARY, status: 'completed', completedAt: '2026-10-17T12:40:00.000Z' };
+  renderPage('user', { ...PROGRESS, status: 'completed', etaSeconds: 0, running: [] });
+  const table = within(await screen.findByRole('table', { name: 'Classement détaillé' }));
+  const alpha = [...table.getByRole('rowheader', { name: /Alpha/ }).closest('tr')!.querySelectorAll('td')].map((c) => c.textContent);
+  expect(alpha.slice(0, 3)).toEqual(['—', '—', '—']);
+  expect(screen.getByText(/Aucun modèle noté/)).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: /Enregistrer comme pondération/ })).toBeNull();
+});
+
+test('série en cours : la vue résultats apparaît dès qu’un modèle a une qualité', async () => {
+  ranking = { ...RANKING, models: RANKED_MODELS };
+  renderPage('admin');
+  expect(await screen.findByRole('list', { name: 'Podium' })).toBeInTheDocument();
+  expect(screen.getByRole('progressbar', { name: 'Avancement' })).toBeInTheDocument();
+});
+
+test('série en cours sans qualité : pas de vue résultats', async () => {
+  renderPage('admin');
+  await screen.findByRole('progressbar', { name: 'Avancement' });
+  await waitFor(() => expect(apiFetch).toHaveBeenCalledWith('/api/runs/r1/ranking'));
+  expect(screen.queryByRole('table', { name: 'Classement détaillé' })).toBeNull();
 });
 
 test('sans WebGL : repli SVG de la scène', async () => {

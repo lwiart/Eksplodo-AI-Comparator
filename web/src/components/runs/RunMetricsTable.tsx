@@ -54,7 +54,7 @@ export function modelMetrics(rows: ResultRow[]): ModelMetrics[] {
 
 const dash = '—';
 
-/** Tableau des mesures par modèle d'une série terminée (le classement noté viendra avec la notation). */
+/** Tableau des mesures par modèle d'une série terminée . */
 export function RunMetricsTable({ rows }: { rows: ResultRow[] }) {
   const headingId = useId();
   const metrics = modelMetrics(rows);
@@ -64,7 +64,7 @@ export function RunMetricsTable({ rows }: { rows: ResultRow[] }) {
         <h2 id={headingId} className="m-0 font-display text-base font-bold text-white">
           Métriques par modèle
         </h2>
-        <p className="mt-1 mb-0 text-xs text-mute">Médianes calculées sur les réponses réussies. Les notes et le classement arriveront avec la notation.</p>
+        <p className="mt-1 mb-0 text-xs text-mute">Médianes calculées sur les réponses réussies.</p>
       </div>
       <div className="mt-3 overflow-x-auto">
         <table aria-labelledby={headingId} className="w-full border-collapse text-sm">
