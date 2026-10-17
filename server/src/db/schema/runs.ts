@@ -129,6 +129,28 @@ export const results = mysqlTable(
   ],
 );
 
+/** Note manuelle (entière, 0 à 10) d'un compte sur un résultat ; la note du résultat est la moyenne des évaluateurs. */
+export const manualScores = mysqlTable(
+  'manual_scores',
+  {
+    id: char('id', { length: 36 }).primaryKey(),
+    resultId: char('result_id', { length: 36 })
+      .notNull()
+      .references(() => results.id, { onDelete: 'cascade' }),
+    userId: char('user_id', { length: 36 })
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    score: int('score').notNull(),
+    comment: text('comment'),
+    createdAt: createdAt(),
+    updatedAt: datetime('updated_at', { mode: 'date', fsp: 3 })
+      .notNull()
+      .default(now())
+      .$onUpdate(() => new Date()),
+  },
+  (t) => [uniqueIndex('manual_scores_result_user_uq').on(t.resultId, t.userId), index('manual_scores_result_idx').on(t.resultId)],
+);
+
 export const aiUsage = mysqlTable(
   'ai_usage',
   {
