@@ -334,6 +334,123 @@ test('plafond : un appel qui se termine pendant la lecture de la série n’est 
   expect(run.modelsCostUsd).toBeCloseTo(0.01, 6);
 });
 
+test('plafond : nouvelle tentative rendue à la file pendant un contrôle de lancement → aucun double lancement, plafond tenu', async () => {
+  const t = await setup();
+  // 6 résultats (A … F : 3 tests × 2 modèles), concurrence 8, coût maximal = coût réel = 0,01 $, plafond 0,03 $.
+  const budget = 0.03;
+  const runId = await t.createRun(['Un', 'Deux', 'Trois'], { concurrency: 8, budgetUsd: budget });
+  const gate = deferred();
+  const calls: string[] = [];
+  let first = true;
+  const registry = registryOf(() => ({
+    async *generate(req) {
+      calls.push(`${req.model}|${req.prompt}`);
+      if (first) {
+        first = false;
+        throw httpError(503, 'Indisponible', {}, []); // A : échec à rejouer
+      }
+      await gate.promise;
+      yield { type: 'text', delta: 'ok' };
+      yield { type: 'usage', inputTokens: 5, outputTokens: 1000 };
+      yield { type: 'finish', reason: 'stop' };
+    },
+    listModels: async () => [],
+  }));
+  const resultA = async () => (await t.resultRows(runId)).find((r) => r.attempts === 1 && r.status === 'pending' && r.errorCode === null);
+
+  // Le contrôle de B (2ᵉ lecture du plafond) lit la série ; pendant qu'il attend, la nouvelle tentative de A ne tient plus
+  // (plafond abaissé un instant) et A est rendu en tête de la file, puis le plafond est rétabli.
+  const hookReached = deferred();
+  let budgetReads = 0;
+  const instrumented = new Proxy(t.db, {
+    get(target, prop, receiver) {
+      if (prop === 'select') {
+        return (fields?: Record<string, unknown>) => {
+          const builder = target.select(fields as never);
+          if (!fields || !('budgetUsd' in fields) || ++budgetReads !== 2) return builder;
+          return {
+            from: (table: typeof runs) => ({
+              where: (cond: SQL | undefined) => ({
+                then: (resolve: (rows: unknown) => unknown, reject: (err: unknown) => unknown) =>
+                  (async () => {
+                    const rows = await builder.from(table).where(cond);
+                    hookReached.resolve();
+                    await until(async () => (await resultA()) !== undefined);
+                    await new Promise((r) => setTimeout(r, 50)); // A rendu à la file de la tranche
+                    await t.db.update(runs).set({ budgetUsd: budget }).where(eq(runs.id, runId));
+                    return rows;
+                  })().then(resolve, reject),
+              }),
+            }),
+          };
+        };
+      }
+      const value = Reflect.get(target, prop, receiver) as unknown;
+      return typeof value === 'function' ? (value as (...a: unknown[]) => unknown).bind(target) : value;
+    },
+  }) as Db;
+  const sleep = async () => {
+    await hookReached.promise;
+    await t.db.update(runs).set({ budgetUsd: 0.0001 }).where(eq(runs.id, runId));
+  };
+  const deps: EngineDeps = { db: instrumented, registry, config: { dataDir: tmpdir() }, sleep };
+  const handlers: JobHandlers = { run_execute: (job, ctx) => executeRunSlice(deps, job, ctx) };
+  const worker = runWorkerOnce({ db: t.db, clock: () => t.clock.now(), workerId: 'w1' }, handlers);
+  // Lancements stabilisés (plus aucun nouvel appel), puis réponses.
+  await until(() => budgetReads >= 2);
+  let seen = -1;
+  await until(async () => {
+    const stable = calls.length === seen;
+    seen = calls.length;
+    await new Promise((r) => setTimeout(r, 150));
+    return stable;
+  });
+  gate.resolve();
+  expect(await worker).toBe(true);
+
+  const run = await t.runRow(runId);
+  expect(run.modelsCostUsd).toBeLessThanOrEqual(budget);
+  expect(run).toMatchObject({ status: 'paused', pauseReason: 'budget' });
+  // A : un échec puis sa nouvelle tentative ; aucun autre résultat appelé deux fois.
+  const perResult = new Map<string, number>();
+  for (const c of calls) perResult.set(c, (perResult.get(c) ?? 0) + 1);
+  expect([...perResult.values()].sort()).toEqual([1, 1, 2]);
+  const rows = await t.resultRows(runId);
+  expect(rows.filter((r) => r.status === 'done')).toHaveLength(3);
+  expect(rows.filter((r) => r.status === 'pending')).toHaveLength(3);
+  expect(rows.filter((r) => r.status === 'running')).toHaveLength(0);
+});
+
+test('plafond : la tête de file ne tient plus, un appel moins cher tient → il part avant la pause', async () => {
+  const t = await setup({ models: 1 });
+  // « Long » : 1 000 tokens au plus (0,01 $) ; « Court » : 300 tokens au plus (0,003 $) ; coût réel 100 tokens (0,001 $).
+  const testIds: string[] = [];
+  for (const [name, maxTokens] of [['Long', 1000], ['Court', 300]] as const) {
+    const res = await t.post('/api/tests', { name, category: 'Culture', userPrompt: name, maxTokens, scoringMethod: 'manual', scoringConfig: {} });
+    testIds.push(res.json().test.id as string);
+  }
+  const created = await t.post('/api/runs', { name: 'Série', testIds, modelIds: t.modelIds, concurrency: 1, budgetUsd: 0.005 });
+  const runId = created.json().run.id as string;
+  const calls: string[] = [];
+  const registry = registryOf(() => ({
+    async *generate(req) {
+      calls.push(req.prompt);
+      yield { type: 'text', delta: 'ok' };
+      yield { type: 'usage', inputTokens: 5, outputTokens: 100 };
+      yield { type: 'finish', reason: 'stop' };
+    },
+    listModels: async () => [],
+  }));
+  await t.drain(registry);
+  expect(calls).toEqual(['Court']);
+  const rows = await t.resultRows(runId);
+  expect(rows.find((r) => r.status === 'done')).toBeDefined();
+  expect(rows.filter((r) => r.status === 'pending')).toHaveLength(1);
+  const run = await t.runRow(runId);
+  expect(run).toMatchObject({ status: 'paused', pauseReason: 'budget' });
+  expect(run.modelsCostUsd).toBeCloseTo(0.001, 6);
+});
+
 test('reprendre sans relever le plafond → 409 budget_exceeded', async () => {
   const t = await setup();
   const runId = await t.createRun(['Un', 'Deux'], { budgetUsd: 0.03 });
