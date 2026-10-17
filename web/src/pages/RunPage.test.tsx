@@ -413,7 +413,6 @@ test('série terminée : réponses côte à côte avec les tests de la série', 
 });
 
 test('série en cours avec notes du juge en attente : « Notation en cours »', async () => {
-  ranking = { ...RANKING, models: RANKED_MODELS };
   renderPage('user', { ...PROGRESS, judgePending: 2 });
   expect(await screen.findByText('Notation en cours · 2 en attente')).toBeInTheDocument();
 });

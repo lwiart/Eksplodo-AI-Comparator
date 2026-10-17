@@ -154,7 +154,7 @@ function ResultsSection({
     refetchOnWindowFocus: 'always',
   });
   const hasQuality = ranking.data?.models.some((m) => m.quality !== null) ?? false;
-  if (!show && !hasQuality) return null;
+  if (!show && !hasQuality && judgePending === 0) return null;
   if (ranking.isError)
     return (
       <p role="alert" className="text-sm text-bad">
