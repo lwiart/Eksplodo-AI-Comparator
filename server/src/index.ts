@@ -11,6 +11,7 @@ import { createJobHandlers } from './modules/jobs/handlers.js';
 import { startSchedulerLoop } from './modules/jobs/scheduler-loop.js';
 import { appSchedules } from './modules/jobs/schedules.js';
 import { startWorker } from './modules/jobs/worker.js';
+import { createProviderRegistry } from './modules/providers/registry.js';
 import { createLogMailer, createSmtpMailer } from './modules/mail/mailer.js';
 import { systemClock } from './lib/clock.js';
 import { prepareDatabase } from './startup.js';
@@ -33,6 +34,13 @@ async function main(): Promise<void> {
     warn: (obj: object, msg: string) => console.warn(msg, obj),
     error: (obj: object, msg: string) => console.error(msg, obj),
   };
+
+  if (config.fakeLlm) console.info('Faux fournisseur actif (AIC_FAKE_LLM=1) : aucun appel réel');
+  const registry = createProviderRegistry({
+    encryptionKey: config.encryptionKey,
+    fakeLlm: config.fakeLlm,
+    appBaseUrl: config.appBaseUrl,
+  });
 
   const { db, close: closeDb } = createDb(config.databaseUrl);
   const production = config.nodeEnv === 'production';
@@ -64,6 +72,7 @@ async function main(): Promise<void> {
     clock: systemClock,
     db,
     mailer,
+    registry,
     schedules,
     workerStatus: () => worker?.status() ?? 'stopped',
   });

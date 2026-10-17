@@ -1,4 +1,5 @@
 import { expect, test } from 'vitest';
+import { testRegistry } from './helpers/test-app.js';
 import { buildApp } from '../src/app.js';
 import { loadConfig } from '../src/config/config.js';
 import { createDb } from '../src/db/client.js';
@@ -18,7 +19,7 @@ const config = loadConfig({
 const { db } = createDb(config.databaseUrl);
 
 async function newApp() {
-  return buildApp({ config, clock: () => new Date(), mailer: createFakeMailer(), db, schedules: [] });
+  return buildApp({ config, clock: () => new Date(), mailer: createFakeMailer(), db, schedules: [], registry: testRegistry() });
 }
 
 test('AppError → format d’erreur unique', async () => {

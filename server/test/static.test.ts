@@ -7,7 +7,7 @@ import { buildApp } from '../src/app.js';
 import type { AppConfig } from '../src/config/config.js';
 import { createDb } from '../src/db/client.js';
 import { createFakeMailer } from '../src/modules/mail/mailer.js';
-import { testConfig } from './helpers/test-app.js';
+import { testConfig, testRegistry } from './helpers/test-app.js';
 
 // Base injoignable, jamais sollicitée par ces routes.
 const lazy = createDb('mysql://u:p@127.0.0.1:1/x');
@@ -32,7 +32,7 @@ function newApp(opts: { webRoot?: string; config?: Partial<AppConfig> } = {}): P
     clock: () => new Date(),
     db: lazy.db,
     mailer: createFakeMailer(),
-    schedules: [],
+    schedules: [], registry: testRegistry(),
     logStream: { write: () => undefined }, // journal muet : sortie de test propre
     ...(opts.webRoot !== undefined ? { webRoot: opts.webRoot } : {}),
   });

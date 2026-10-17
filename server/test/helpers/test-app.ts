@@ -1,9 +1,13 @@
+import { eq } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { vi } from 'vitest';
 import { buildApp } from '../../src/app.js';
 import type { AppConfig } from '../../src/config/config.js';
 import type { Db } from '../../src/db/client.js';
+import { providers, models } from '../../src/db/schema/catalog.js';
 import { hashPassword } from '../../src/lib/crypto.js';
+import { createProviderRegistry, sealApiKey, type Registry } from '../../src/modules/providers/registry.js';
+import { randomUUID } from 'node:crypto';
 import type { Role } from '../../src/modules/auth/actor.js';
 import type { ScheduleEntry } from '../../src/modules/jobs/scheduler.js';
 import { createFakeMailer } from '../../src/modules/mail/mailer.js';
@@ -31,6 +35,17 @@ export function testConfig(): AppConfig {
   };
 }
 
+/** Registre des fournisseurs de test (clé maîtresse de `testConfig`). */
+export function testRegistry(opts: { fakeLlm?: boolean; fetch?: typeof fetch } = {}): Registry {
+  const c = testConfig();
+  return createProviderRegistry({
+    encryptionKey: c.encryptionKey,
+    fakeLlm: opts.fakeLlm ?? false,
+    appBaseUrl: c.appBaseUrl,
+    fetch: opts.fetch,
+  });
+}
+
 export type TestApp = {
   app: FastifyInstance;
   db: Db;
@@ -40,7 +55,7 @@ export type TestApp = {
 };
 
 /** L'application renvoyée n'est pas encore `ready()` : un test peut y ajouter des routes avant le premier `inject`. */
-export async function buildTestApp(opts: { now?: Date; schedules?: ScheduleEntry[] } = {}): Promise<TestApp> {
+export async function buildTestApp(opts: { now?: Date; schedules?: ScheduleEntry[]; fakeLlm?: boolean; fetch?: typeof fetch } = {}): Promise<TestApp> {
   const testDb = await createTestDb();
   const clock = createTestClock(opts.now ?? new Date('2026-01-15T10:00:00.000Z'));
   const mailer = createFakeMailer();
@@ -51,6 +66,7 @@ export async function buildTestApp(opts: { now?: Date; schedules?: ScheduleEntry
       db: testDb.db,
       mailer,
       schedules: opts.schedules ?? [],
+      registry: testRegistry({ fakeLlm: opts.fakeLlm, fetch: opts.fetch }),
     });
     return {
       app,
@@ -121,4 +137,40 @@ export async function csrfHeaders(app: FastifyInstance): Promise<{ cookie: strin
   const csrf = cookiesOf(init).aic_csrf;
   if (!csrf) throw new Error('cookie aic_csrf absent');
   return { cookie: `aic_csrf=${csrf}`, 'x-csrf-token': csrf };
+}
+
+type ProviderRow = typeof providers.$inferSelect;
+type ModelRow = typeof models.$inferSelect;
+
+/** Insère un fournisseur ; `apiKey` est chiffrée avec la clé maîtresse de test (ou `encryptionKey`). */
+export async function seedProvider(
+  db: Db,
+  overrides: Partial<ProviderRow> & { apiKey?: string; encryptionKey?: Buffer } = {},
+): Promise<ProviderRow> {
+  const { apiKey, encryptionKey, ...rest } = overrides;
+  const sealed = apiKey === undefined ? {} : sealApiKey(apiKey, encryptionKey ?? testConfig().encryptionKey);
+  const id = rest.id ?? randomUUID();
+  await db.insert(providers).values({
+    id,
+    name: `Fournisseur ${id.slice(0, 8)}`,
+    type: 'openai_compatible',
+    baseUrl: 'https://api.example.test/v1',
+    ...rest,
+    ...sealed,
+  });
+  const [row] = await db.select().from(providers).where(eq(providers.id, id));
+  return row!;
+}
+
+export async function seedModel(db: Db, overrides: Partial<ModelRow> & { providerId: string }): Promise<ModelRow> {
+  const id = overrides.id ?? randomUUID();
+  await db.insert(models).values({
+    id,
+    apiModelId: `modele-${id.slice(0, 8)}`,
+    displayName: 'Modèle test',
+    color: '#4f8ef7',
+    ...overrides,
+  });
+  const [row] = await db.select().from(models).where(eq(models.id, id));
+  return row!;
 }

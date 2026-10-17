@@ -6,7 +6,7 @@ import { jobs } from '../src/db/schema/jobs.js';
 import { reportingMailer } from '../src/modules/errors/mail-reporter.js';
 import { reportedReference, setGraveListener } from '../src/modules/errors/report.js';
 import { createFakeMailer, createLogMailer, type Mailer } from '../src/modules/mail/mailer.js';
-import { loginAs, seedUser, testConfig } from './helpers/test-app.js';
+import { loginAs, seedUser, testConfig, testRegistry } from './helpers/test-app.js';
 import { createTestDb } from './helpers/test-db.js';
 
 let t: Awaited<ReturnType<typeof createTestDb>>;
@@ -71,7 +71,7 @@ describe('reportingMailer', () => {
       clock: () => NOW,
       db: t.db,
       mailer: reportingMailer(failing(), { db: t.db, clock: () => NOW }),
-      schedules: [],
+      schedules: [], registry: testRegistry(),
     });
     try {
       await seedUser(t.db, { email: 'admin@x.fr', password: 'motdepasse-solide', role: 'admin' });

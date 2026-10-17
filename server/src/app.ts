@@ -12,7 +12,10 @@ import { registerErrorRoutes } from './modules/errors/errors.routes.js';
 import { deferError, flushPendingErrors, reportError, reportedReference } from './modules/errors/report.js';
 import type { ScheduleEntry } from './modules/jobs/scheduler.js';
 import { registerTickRoutes } from './modules/jobs/tick.routes.js';
+import { registerCatalogRoutes } from './modules/catalog/catalog.routes.js';
+import { createCatalogService } from './modules/catalog/catalog.service.js';
 import type { Mailer } from './modules/mail/mailer.js';
+import type { Registry } from './modules/providers/registry.js';
 import { registerAuthRoutes } from './modules/auth/auth.routes.js';
 import { createUsersService } from './modules/users/users.service.js';
 import { registerUserRoutes } from './modules/users/users.routes.js';
@@ -27,6 +30,8 @@ export type AppDeps = {
   clock: Clock;
   db: Db;
   mailer: Mailer;
+  /** Registre des fournisseurs : choisit l'adaptateur et déchiffre les clés au moment de l'appel. */
+  registry: Registry;
   /** Planification des tâches récurrentes (`/internal/tick` et boucle interne) ; `[]` en test. */
   schedules: ScheduleEntry[];
   /** État du worker de tâches, lu à chaque appel de `/health` (absent : `stopped`). */
@@ -66,6 +71,7 @@ async function checkDb(db: Db): Promise<boolean> {
 }
 
 export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
+  const catalog = createCatalogService(deps);
   const app = Fastify({
     logger: loggerOptions(deps.config.nodeEnv, deps.logStream),
     // Équivaut à `trustProxy: 1` (le type Fastify n'accepte pas le nombre) ; `true` rendrait l'IP falsifiable via X-Forwarded-For.
@@ -153,11 +159,17 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       return reply.status(503).send({ status: 'degraded', db: 'down' });
     }
     await flushPendingErrors(deps.db); // la base répond : écrit l'événement de panne différé
-    return { status: 'ok', db: 'ok', worker: deps.workerStatus?.() ?? 'stopped' };
+    return {
+      status: 'ok',
+      db: 'ok',
+      worker: deps.workerStatus?.() ?? 'stopped',
+      providers: { configured: await catalog.configuredCount() },
+    };
   });
 
   registerAuthRoutes(app, deps);
   registerUserRoutes(app, createUsersService(deps));
+  registerCatalogRoutes(app, catalog);
   registerTickRoutes(app, deps);
   registerErrorRoutes(app, deps);
 

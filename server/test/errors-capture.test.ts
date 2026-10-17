@@ -12,7 +12,7 @@ import { BACKOFF_MS, InterruptedError, enqueue, getJob, recoverStaleJobs, type J
 import { startSchedulerLoop } from '../src/modules/jobs/scheduler-loop.js';
 import { runWorkerOnce } from '../src/modules/jobs/worker.js';
 import { createFakeMailer } from '../src/modules/mail/mailer.js';
-import { csrfHeaders, loginAs, seedUser, testConfig } from './helpers/test-app.js';
+import { csrfHeaders, loginAs, seedUser, testConfig, testRegistry } from './helpers/test-app.js';
 import { createTestClock } from './helpers/test-clock.js';
 import { createTestDb } from './helpers/test-db.js';
 
@@ -35,7 +35,7 @@ const clock = createTestClock(new Date('2026-10-16T10:00:00.000Z'));
 const all = () => t.db.select().from(errorEvents);
 
 async function appWith(db = t.db) {
-  const app = await buildApp({ config: testConfig(), clock: () => clock.now(), db, mailer: createFakeMailer(), schedules: [] });
+  const app = await buildApp({ config: testConfig(), clock: () => clock.now(), db, mailer: createFakeMailer(), schedules: [], registry: testRegistry() });
   app.get('/api/test/:id', async () => {
     throw new Error('boom');
   });
@@ -146,7 +146,7 @@ describe('/health', () => {
         clock: () => clock.now(),
         db: lazy.db,
         mailer: createFakeMailer(),
-        schedules: [],
+        schedules: [], registry: testRegistry(),
       });
       for (let i = 0; i < 105; i++) expect((await app.inject({ method: 'GET', url: '/health' })).statusCode).toBe(503);
       expect(pendingErrorCount()).toBe(100);
@@ -203,7 +203,7 @@ describe('vidange de la file sans autre erreur (I1)', () => {
     await drain();
     deferError(ev(), clock.now());
     const loop = startSchedulerLoop(
-      { db: t.db, schedules: [], clock: () => clock.now(), logger: { info: vi.fn(), error: vi.fn() } },
+      { db: t.db, schedules: [], registry: testRegistry(), clock: () => clock.now(), logger: { info: vi.fn(), error: vi.fn() } },
       { intervalMs: 60_000 },
     );
     await vi.waitFor(() => expect(pendingErrorCount()).toBe(0), { timeout: 10_000 });

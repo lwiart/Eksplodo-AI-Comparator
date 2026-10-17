@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'vitest';
+import { testRegistry } from './helpers/test-app.js';
 import { buildApp } from '../src/app.js';
 import { createFakeMailer } from '../src/modules/mail/mailer.js';
 import { loadConfig } from '../src/config/config.js';
@@ -39,7 +40,7 @@ describe('journal des requêtes', () => {
       clock: () => new Date(),
       mailer: createFakeMailer(),
       db,
-      schedules: [],
+      schedules: [], registry: testRegistry(),
       logStream: { write: (line: string) => void lines.push(line) },
     });
     for (const [purpose, token] of [
@@ -64,7 +65,7 @@ describe('journal des requêtes', () => {
       clock: () => new Date(),
       mailer: createFakeMailer(),
       db,
-      schedules: [],
+      schedules: [], registry: testRegistry(),
       logStream: { write: (line: string) => void lines.push(line) },
     });
     app.get('/crash', async () => {
