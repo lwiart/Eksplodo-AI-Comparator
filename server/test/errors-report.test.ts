@@ -359,6 +359,13 @@ describe('redact : formes des fournisseurs', () => {
     );
     expect(redact('{"password":"ab\\"cd-secret-123"}')).toBe('{"password":"[clé masquée]"}');
   });
+  test('redact : valeur JSON non terminée, sans retour arrière exponentiel', () => {
+    const text = '{"password":"' + 'a\\'.repeat(5000);
+    const start = performance.now();
+    const out = redact(text);
+    expect(performance.now() - start).toBeLessThan(200);
+    expect(out).toBe(text); // valeur non terminée : aucune règle ne s'applique, et surtout aucun blocage
+  });
   test('redact : pas de double masquage', () => {
     expect(redact('X-Api-Key=abcdefghij0123456789')).toBe('X-Api-Key=[clé masquée]');
     expect(redact('Authorization: Bearer xyz.token')).toBe('Authorization: [clé masquée]');
