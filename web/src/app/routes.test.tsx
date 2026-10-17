@@ -65,3 +65,11 @@ test('Admin sur /admin/utilisateurs → page d’administration', async () => {
   expect(await screen.findByRole('heading', { name: 'Utilisateurs' })).toBeInTheDocument();
   expect(screen.queryByText('Accès refusé')).toBeNull();
 });
+
+test('Utilisateur sur /admin/fournisseurs → « Accès refusé », réglage du juge par défaut jamais lu', async () => {
+  stubMe(USER);
+  renderAt('/admin/fournisseurs');
+  expect(await screen.findByRole('heading', { name: 'Accès refusé' })).toBeInTheDocument();
+  const urls = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.map((c) => String(c[0]));
+  expect(urls.some((u) => u.includes('/api/settings/scoring'))).toBe(false);
+});

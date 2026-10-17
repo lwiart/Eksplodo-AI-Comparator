@@ -91,6 +91,20 @@ export type ModelInput = {
 /** Un changement de prix sans `priceSource` bascule la source sur `manual` côté serveur. */
 export type ModelPatch = Partial<Omit<ModelInput, 'providerId' | 'apiModelId'>>;
 
+// Types miroirs de server/src/modules/catalog/model-stats.ts.
+export type Rank = { rank: number; of: number };
+
+export type ModelStats = {
+  quality: number | null;
+  medianTtftMs: number | null;
+  ttftRank: Rank | null;
+  medianTokensPerS: number | null;
+  tpsRank: Rank | null;
+  reliability: number | null;
+  radar: { category: string; model: number | null; average: number | null }[];
+  history: { runId: string; runName: string; completedAt: string; rank: number | null; of: number; quality: number | null; global: number | null }[];
+};
+
 export const PROVIDERS_KEY = ['providers'] as const;
 export const MODELS_KEY = ['models'] as const;
 export const NEW_MODELS_KEY = ['models', 'new'] as const;
@@ -139,4 +153,10 @@ export function listNewModels(): Promise<{ models: NewModel[]; openRouterProvide
 
 export function dismissNewModel(id: string): Promise<void> {
   return apiFetch(`/api/catalog/${enc(id)}/dismiss`, { method: 'POST' });
+}
+
+export const modelStatsKey = (id: string) => [...MODELS_KEY, id, 'stats'] as const;
+
+export async function getModelStats(id: string): Promise<ModelStats> {
+  return (await apiFetch<{ stats: ModelStats }>(`/api/models/${encodeURIComponent(id)}/stats`)).stats;
 }

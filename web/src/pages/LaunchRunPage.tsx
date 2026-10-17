@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { MODELS_KEY, listModels, type PublicModel } from '../api/catalog';
 import { messageForError } from '../api/messages';
+import { SCORING_SETTINGS_KEY, getScoringSettings } from '../api/scoring';
 import { DEFAULT_WEIGHTS, RUNS_KEY, createRun, estimateRun, type RunInput, type Weights } from '../api/runs';
 import { SUITES_KEY, TESTS_KEY, listSuites, listTests, type PublicSuite, type PublicTest, type ScoringMethod } from '../api/tests';
 import { Button } from '../components/ui/Button';
@@ -220,6 +221,7 @@ export function LaunchRunPage() {
   const [repetitions, setRepetitions] = useState(1);
   const [concurrency, setConcurrency] = useState(4);
   const [judgeId, setJudgeId] = useState('');
+  const [judgeTouched, setJudgeTouched] = useState(false);
   const [budget, setBudget] = useState('');
   const [weights, setWeights] = useState<Record<keyof Weights, string>>({
     quality: String(DEFAULT_WEIGHTS.quality),
@@ -231,6 +233,8 @@ export function LaunchRunPage() {
   const suites = useQuery({ queryKey: SUITES_KEY, queryFn: listSuites });
   const tests = useQuery({ queryKey: [...TESTS_KEY, 'list', 'launch'], queryFn: () => listTests() });
   const models = useQuery({ queryKey: MODELS_KEY, queryFn: listModels });
+  // Page réservée à l'Admin : seul lui peut lire le réglage. Une erreur ici n'empêche pas de lancer une série.
+  const scoringSettings = useQuery({ queryKey: SCORING_SETTINGS_KEY, queryFn: getScoringSettings, retry: false });
 
   const activeTests = useMemo(() => (tests.data ?? []).filter((t) => t.archivedAt === null), [tests.data]);
   const suite = suites.data?.find((s) => s.id === suiteId) ?? null;
@@ -303,6 +307,13 @@ export function LaunchRunPage() {
     4: false,
   };
   const availableModels = (models.data ?? []).filter((m) => m.available);
+  // Juge par défaut présélectionné s'il est proposé comme juge, sans écraser un choix déjà fait.
+  const defaultJudgeId = scoringSettings.data?.defaultJudgeModelId ?? null;
+  const defaultJudgeAvailable = defaultJudgeId !== null && availableModels.some((m) => m.id === defaultJudgeId);
+  useEffect(() => {
+    if (judgeTouched || !defaultJudgeAvailable) return;
+    setJudgeId((current) => (current === '' ? defaultJudgeId! : current));
+  }, [judgeTouched, defaultJudgeAvailable, defaultJudgeId]);
   const loadError = suites.error ?? tests.error ?? models.error;
   const est = estimate.data;
 
@@ -358,7 +369,10 @@ export function LaunchRunPage() {
                 <SelectField
                   label="Modèle juge"
                   value={judgeId}
-                  onChange={(e) => setJudgeId(e.target.value)}
+                  onChange={(e) => {
+                    setJudgeTouched(true);
+                    setJudgeId(e.target.value);
+                  }}
                   options={[{ value: '', label: 'Aucun' }, ...availableModels.map((m) => ({ value: m.id, label: m.displayName }))]}
                 />
                 {judgeRequired && judgeId === '' ? (

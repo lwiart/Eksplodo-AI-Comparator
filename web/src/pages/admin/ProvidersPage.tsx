@@ -18,6 +18,7 @@ import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { Chip } from '../../components/ui/Chip';
 import { logoFor } from '../../lib/providers';
+import { DefaultJudgeCard } from './DefaultJudgeCard';
 
 const TYPE_LABEL: Record<ProviderType, string> = {
   openai_compatible: 'Compatible OpenAI',
@@ -169,6 +170,8 @@ export function ProvidersPage() {
           Ajouter un fournisseur
         </Button>
       </header>
+
+      <DefaultJudgeCard />
 
       {providers.isError ? (
         <p role="alert" className="text-sm text-bad">

@@ -59,3 +59,14 @@ export const attachmentUrl = (runTestId: string, index: number): string =>
 export async function getSpread(runId: string): Promise<SpreadItem[]> {
   return (await apiFetch<{ items: SpreadItem[] }>(`/api/scoring/runs/${enc(runId)}/spread`)).items;
 }
+
+export const SCORING_SETTINGS_KEY = ['scoring', 'settings'] as const;
+
+/** Réglages de notation (Admin seulement). */
+export async function getScoringSettings(): Promise<{ defaultJudgeModelId: string | null }> {
+  return apiFetch<{ defaultJudgeModelId: string | null }>('/api/settings/scoring');
+}
+
+export function setDefaultJudge(defaultJudgeModelId: string | null): Promise<{ defaultJudgeModelId: string | null }> {
+  return apiFetch<{ defaultJudgeModelId: string | null }>('/api/settings/scoring', { method: 'PUT', body: { defaultJudgeModelId } });
+}

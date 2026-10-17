@@ -1,18 +1,22 @@
 import * as Switch from '@radix-ui/react-switch';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState, type ReactNode } from 'react';
+import { lazy, Suspense, useState, type ReactNode } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { MODELS_KEY, getModel, updateModel, type ModelPatch, type PublicModel, type PublicProvider } from '../api/catalog';
+import { MODELS_KEY, getModel, getModelStats, modelStatsKey, type ModelStats, type Rank, updateModel, type ModelPatch, type PublicModel, type PublicProvider } from '../api/catalog';
 import { ApiError } from '../api/client';
 import { messageForError } from '../api/messages';
 import { useAuth } from '../auth/AuthProvider';
 import { formatNumber } from '../components/catalog/format';
+import { reliabilityPercent, rankLabel, score, tokensPerSecond, ttft } from '../components/results/format';
 import { ModelForm, draftFromModel, hasValidPrices, parsePrice, type ModelDraft } from '../components/catalog/ModelForm';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { Chip } from '../components/ui/Chip';
 
 type Model = PublicModel & { provider: PublicProvider };
+
+// Recharts n'est chargé qu'à l'affichage du radar.
+const ModelRadar = lazy(() => import('../components/catalog/ModelRadar'));
 
 const EMPTY_SERIES = 'Aucune série pour l’instant';
 
@@ -36,6 +40,96 @@ function Stat({ label, children }: { label: string; children: ReactNode }) {
       <dt className="text-xs text-mute">{label}</dt>
       <dd className="m-0 mt-0.5 font-mono text-lg font-semibold text-white">{children}</dd>
     </div>
+  );
+}
+
+function Figure({ label, value, rank }: { label: string; value: string; rank?: Rank | null }) {
+  return (
+    <div>
+      <dt className="text-xs text-mute">{label}</dt>
+      <dd className="m-0 mt-0.5 font-mono text-2xl font-semibold text-white">{value}</dd>
+      {rank !== undefined ? <dd className="m-0 mt-0.5 text-xs text-peach">{rank ? rankLabel(rank) : 'Pas de rang'}</dd> : null}
+    </div>
+  );
+}
+
+function StatsSections({ model }: { model: Model }) {
+  const stats = useQuery({ queryKey: modelStatsKey(model.id), queryFn: () => getModelStats(model.id), retry: false });
+  if (stats.isError) {
+    return (
+      <p role="alert" className="m-0 text-sm text-bad min-[800px]:col-span-2">
+        {messageForError(stats.error)}
+      </p>
+    );
+  }
+  if (stats.isPending) return <p className="m-0 text-sm text-mute min-[800px]:col-span-2">Chargement des mesures…</p>;
+  const s: ModelStats = stats.data;
+  if (s.history.length === 0) {
+    return (
+      <>
+        <EmptySection title="Chiffres clés" />
+        <EmptySection title="Radar par catégorie" />
+        <div className="min-[800px]:col-span-2">
+          <EmptySection title="Historique des séries" />
+        </div>
+      </>
+    );
+  }
+  return (
+    <>
+      <Card>
+        <h2 className="m-0 mb-3 font-display text-lg font-bold text-white">Chiffres clés</h2>
+        <dl className="m-0 grid grid-cols-2 gap-x-4 gap-y-5">
+          <Figure label="Qualité moyenne" value={s.quality === null ? '—' : `${score(s.quality)} / 10`} />
+          <Figure label="Fiabilité" value={reliabilityPercent(s.reliability)} />
+          <Figure label="Premier token médian" value={ttft(s.medianTtftMs)} rank={s.ttftRank} />
+          <Figure label="Débit médian" value={tokensPerSecond(s.medianTokensPerS)} rank={s.tpsRank} />
+        </dl>
+      </Card>
+      <Card>
+        <h2 className="m-0 mb-1 font-display text-lg font-bold text-white">
+          Radar par catégorie <small className="font-sans text-xs font-normal text-mute">contre la moyenne des modèles</small>
+        </h2>
+        {s.radar.length === 0 ? (
+          <p className="mt-3 mb-0 text-sm text-mute">Pas encore de note par catégorie.</p>
+        ) : (
+          <Suspense fallback={<p className="text-sm text-mute">Chargement du radar…</p>}>
+            <ModelRadar radar={s.radar} color={model.color} modelName={model.displayName} />
+          </Suspense>
+        )}
+      </Card>
+      <Card className="min-[800px]:col-span-2">
+        <h2 className="m-0 mb-3 font-display text-lg font-bold text-white">Historique des séries</h2>
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse text-sm">
+            <thead>
+              <tr className="text-left text-xs text-mute">
+                <th className="py-1.5 pr-3 font-medium">Série</th>
+                <th className="py-1.5 pr-3 font-medium">Terminée le</th>
+                <th className="py-1.5 pr-3 text-right font-medium">Rang</th>
+                <th className="py-1.5 pr-3 text-right font-medium">Qualité</th>
+                <th className="py-1.5 text-right font-medium">Score global</th>
+              </tr>
+            </thead>
+            <tbody>
+              {s.history.map((h) => (
+                <tr key={h.runId} className="border-t border-line">
+                  <td className="py-2 pr-3">
+                    <Link to={`/series/${h.runId}`} className="text-sky no-underline hover:underline">
+                      {h.runName}
+                    </Link>
+                  </td>
+                  <td className="py-2 pr-3 text-mute">{new Date(h.completedAt).toLocaleDateString('fr-FR')}</td>
+                  <td className="py-2 pr-3 text-right font-mono font-semibold text-peach">{h.rank === null ? '—' : `${h.rank} / ${h.of}`}</td>
+                  <td className="py-2 pr-3 text-right font-mono text-white">{score(h.quality)}</td>
+                  <td className="py-2 text-right font-mono text-white">{score(h.global)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+    </>
   );
 }
 
@@ -178,11 +272,7 @@ function ModelDetail({ model, isAdmin }: { model: Model; isAdmin: boolean }) {
       </div>
 
       <div className="grid gap-4 min-[800px]:grid-cols-2">
-        <EmptySection title="Chiffres clés" />
-        <EmptySection title="Radar par catégorie" />
-        <div className="min-[800px]:col-span-2">
-          <EmptySection title="Historique des séries" />
-        </div>
+        <StatsSections model={model} />
       </div>
     </>
   );

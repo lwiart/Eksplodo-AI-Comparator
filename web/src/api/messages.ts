@@ -31,6 +31,7 @@ const MESSAGES: Record<string, string> = {
   test_archived: 'Ce test est archivé : aucune pièce jointe ne peut y être ajoutée.',
   suite_name_taken: 'Une suite porte déjà ce nom.',
   test_not_found: 'Un des tests choisis n’existe plus. Rechargez la page.',
+  model_not_found: 'Ce modèle est introuvable ou désactivé : choisissez-en un autre.',
   not_found: "Cet élément n'existe plus. Rechargez la page.",
   csrf: 'Votre session a expiré, rechargez la page.',
   internal: "Une erreur inattendue s'est produite. Réessayez dans quelques instants.",

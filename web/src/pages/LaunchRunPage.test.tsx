@@ -70,12 +70,15 @@ const ESTIMATE = {
   warnings: ['Le modèle juge fait partie des modèles évalués'],
 };
 
+let defaultJudge: string | null = null;
 beforeEach(() => {
+  defaultJudge = null;
   apiFetch.mockReset();
   apiFetch.mockImplementation((path: string, init?: { method?: string }) => {
     if (path === '/api/suites') return Promise.resolve({ suites: [SUITE] });
     if (path.startsWith('/api/tests')) return Promise.resolve({ tests: TESTS });
     if (path === '/api/models') return Promise.resolve({ models: MODELS });
+    if (path === '/api/settings/scoring') return Promise.resolve({ defaultJudgeModelId: defaultJudge });
     if (path === '/api/runs/estimate') return Promise.resolve({ estimate: ESTIMATE });
     if (path === '/api/runs' && init?.method === 'POST') return Promise.resolve({ run: { id: 'r42' } });
     return Promise.reject(new Error(`appel inattendu ${path}`));
@@ -246,4 +249,24 @@ test('estimation périmée : « Lancer » reste désactivé jusqu’à l’estim
   expect(screen.getByRole('button', { name: 'Lancer la série' })).toBeDisabled();
   resolve({ estimate: ESTIMATE });
   await waitFor(() => expect(screen.getByRole('button', { name: 'Lancer la série' })).toBeEnabled());
+});
+
+test('juge par défaut présélectionné s’il est disponible, sans écraser un choix', async () => {
+  defaultJudge = 'm2';
+  const user = userEvent.setup();
+  await toParams(user);
+  const judge = screen.getByLabelText('Modèle juge') as HTMLSelectElement;
+  await waitFor(() => expect(judge.value).toBe('m2'));
+  await user.selectOptions(judge, 'm1');
+  expect(judge.value).toBe('m1');
+  await user.selectOptions(judge, '');
+  expect(judge.value).toBe('');
+});
+
+test('juge par défaut indisponible ou absent : aucun juge présélectionné', async () => {
+  defaultJudge = 'm3';
+  const user = userEvent.setup();
+  await toParams(user);
+  await waitFor(() => expect(apiFetch).toHaveBeenCalledWith('/api/settings/scoring'));
+  expect((screen.getByLabelText('Modèle juge') as HTMLSelectElement).value).toBe('');
 });
