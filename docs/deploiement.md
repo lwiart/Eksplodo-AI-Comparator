@@ -58,6 +58,13 @@ Tant que le dépôt GitHub n'est pas branché dans hPanel, le déploiement se fa
 
 Plus tard (recommandé) : brancher GitHub dans hPanel (Sites web → Gérer → Avancé → Git) pour un déploiement automatique.
 
+## Notation et résultats (plan 4)
+
+- **Aucune nouvelle variable d'environnement.** L'ordre à l'aveugle de la notation manuelle utilise une clé dérivée de `APP_ENCRYPTION_KEY` (`HMAC(APP_ENCRYPTION_KEY, 'aic:blind-order:v1')`) : changer cette clé change donc aussi l'ordre des lettres déjà vues par les comptes, sans effet sur les notes enregistrées.
+- **Migrations** : `0004` (table `manual_scores`) et `0005` (colonne `results.judge_claimed_by`) s'appliquent au démarrage comme les précédentes (`migrate` de `server/src/db/migrate.ts`, sous le verrou nommé). Rien à lancer à la main.
+- **Coût du juge** : les appels du juge sont des appels facturés comme les autres. Leur coût entre dans la dépense du mois et dans le plafond de dépense de la série (réservation avant chaque appel), mais il est suivi à part (origine `judge`) et jamais imputé au modèle évalué.
+- Le juge par défaut se règle dans Admin → Fournisseurs ; il n'a besoin d'aucune configuration serveur.
+
 ## Tâche cron (hPanel → Avancé → Tâches cron)
 
 Toutes les 15 minutes (`*/15 * * * *`) :

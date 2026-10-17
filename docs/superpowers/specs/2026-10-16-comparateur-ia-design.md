@@ -333,7 +333,7 @@ La note finale d'un résultat vaut `override_score` si l'Admin en a imposé une,
 - **Recalculer** : l'Admin peut relancer le juge sur un résultat, sur un test ou sur toute la série, éventuellement avec un autre juge (tâche `run_rescore`).
 
 **Manuelle** :
-- Chaque utilisateur et chaque Admin note les réponses **à l'aveugle** : lettres A, B, C… dans un ordre mélangé de façon déterministe par utilisateur et par test (graine = utilisateur + résultat). Les noms ne sont révélés qu'après l'enregistrement des notes de la question.
+- Chaque utilisateur et chaque Admin note les réponses **à l'aveugle** : lettres A, B, C… dans un ordre mélangé de façon déterministe par utilisateur et par test : tri par HMAC-SHA256 de `utilisateur:résultat` avec une clé serveur dérivée de la clé de chiffrement (`HMAC(APP_ENCRYPTION_KEY, 'aic:blind-order:v1')`), pour qu'un compte ne puisse pas recalculer l'ordre. Les noms ne sont révélés qu'après l'enregistrement des notes de la question.
 - Note manuelle d'un résultat = **moyenne** des évaluateurs. L'écart-type est affiché dans l'onglet « Écarts entre évaluateurs », réservé à l'Admin.
 - La page « À noter » affiche à chaque compte les questions qu'il n'a pas encore notées, avec un compteur dans le menu.
 - Tant qu'aucune note n'existe, le résultat est `awaiting_manual` et n'entre pas dans la moyenne de qualité.

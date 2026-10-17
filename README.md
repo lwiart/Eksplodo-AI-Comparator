@@ -51,6 +51,41 @@ Avec `AIC_FAKE_LLM=1` dans `.env`, un faux fournisseur répond à la place des v
 
 Parcours rapide : `npm run dev`, créer un test dont le prompt contient par exemple `[[fake:500]]`, le lancer en essai rapide ou en série, puis utiliser « Relancer les erreurs » pour constater la reprise.
 
+## Notation et résultats (plan 4)
+
+Chaque test se note selon l'une de ses trois méthodes. Toutes les notes vont de 0 à 10 ; la note finale d'un résultat est la note imposée par un Admin s'il y en a une, sinon la note de sa méthode.
+
+- **Réponse attendue** (`server/src/modules/scoring/expected.ts`) : `exact` (espaces de début et de fin retirés, espaces multiples réduits, options de casse et d'accents) vaut 10 ou 0 ; `contains` vaut 10 × éléments trouvés ÷ total, arrondi au dixième ; `regex` vaut 10 ou 0, testée sur les 50 000 premiers caractères de la réponse, en moins d'une seconde (au-delà : 0, « Expression trop lente »).
+- **Juge** (`judge-prompt.ts`, `judge-parse.ts`, `judge-items.ts`) : le modèle juge reçoit le prompt du test, les critères, la référence éventuelle, les pièces jointes qu'il sait lire et la réponse évaluée entre balises `<reponse_a_evaluer>`, sans le nom du modèle évalué (température 0, 800 tokens au plus). Il répond en JSON `{ "score", "rationale" }`, validé strictement ; une réponse illisible déclenche un seul nouvel appel, puis la note échoue. Ses appels sont des éléments de la série : ils partagent la concurrence, le plafond par fournisseur et le plafond de dépense, et sont comptés avec l'origine `judge`. Leur coût est suivi à part et n'est jamais imputé au modèle évalué. La série ne passe `completed` qu'une fois les notes du juge rendues.
+- **Manuelle à l'aveugle** (`manual.service.ts`) : chaque compte (Utilisateur ou Admin) note les réponses d'une question, désignées par des lettres A, B, C… sans nom de modèle ni métrique, avec une note entière de 0 à 10 et un commentaire facultatif. L'ordre des lettres est propre à chaque compte : il est calculé par HMAC-SHA256 avec une clé secrète dérivée de `APP_ENCRYPTION_KEY`, donc un compte ne peut pas le recalculer. Tant qu'un Utilisateur n'a pas noté toute la question, ni les réponses ni les métriques ni les notes de ce test ne lui sont envoyées (page de résultats et export CSV compris) ; les modèles sont révélés une fois la question notée. La note d'un résultat est la moyenne des évaluateurs ; l'écart-type n'est visible que de l'Admin (onglet « Écarts entre évaluateurs »). Sans aucune note, le résultat reste en attente et n'entre pas dans la qualité.
+
+L'Admin peut **imposer une note** à un résultat terminé (0 à 10, une décimale ; elle remplace la note de la méthode, l'action est journalisée) et **relancer le juge** sur un résultat, un test ou toute la série, éventuellement avec un autre juge. Le **juge par défaut** se règle dans Admin → Fournisseurs (réglage `scoring.default_judge_model_id`) et est proposé par l'assistant de lancement.
+
+### Page de résultats
+
+Podium, curseurs de pondération, graphes (qualité contre vitesse, qualité par catégorie), classement, constellation 3D (repli sans WebGL) et réponses côte à côte pour un test choisi. Le **score global** (`server/src/modules/scoring/aggregate.ts`) est la moyenne pondérée de quatre notes avec la pondération de la série (défaut : qualité 50, vitesse 20, coût 20, fiabilité 10) :
+
+- qualité : moyenne, sur les tests notés, de la moyenne des répétitions notées ;
+- vitesse : moyenne de deux notes logarithmiques (médiane du premier token, plus bas = mieux ; médiane du débit, plus haut = mieux) ;
+- coût : note logarithmique du coût moyen par réponse réussie (plus bas = mieux) ;
+- fiabilité : réussis ÷ (réussis + erreurs + délais dépassés) × 10, les `unsupported` exclus.
+
+Une note logarithmique va de 2 à 10 selon la position de la valeur entre le plus petit et le plus grand des modèles de la série (10 si toutes les valeurs sont égales ou s'il n'y a qu'un modèle ; valeur nulle ou négative ignorée). Un critère sans note est retiré et les poids restants sont renormalisés ; un modèle sans aucun test noté n'a pas de rang et reste hors du podium.
+
+**Export CSV** (`csv.ts`) : une ligne par résultat, UTF-8 avec BOM, séparateur `;`, virgule décimale. Toute cellule qui commence par `=`, `+`, `-`, `@`, une tabulation ou un retour chariot est préfixée par `'` (protection contre l'injection de formules).
+
+**Fiche modèle** : chiffres clés (qualité moyenne, fiabilité, premier token et débit médians avec leur rang), radar par catégorie contre la moyenne des modèles et historique des séries.
+
+### Directive du faux fournisseur pour le juge
+
+Avec `AIC_FAKE_LLM=1`, la directive `[[fake:judge=<texte>]]` placée n'importe où dans un prompt (`server/src/modules/providers/fake.ts`) fait répondre le faux fournisseur par `<texte>` tel quel, jusqu'au premier `]]`, sans panne tirée au sort ni autre directive. Pour imposer une note de juge, le texte est le JSON attendu :
+
+```
+[[fake:judge={"score": 7.5, "rationale": "Réponse correcte mais incomplète."}]]
+```
+
+Le prompt d'un test étant transmis au juge, la directive écrite dans un test noté par le juge fixe sa note ; un texte qui n'est pas du JSON valide sert à tester le nouvel appel puis l'échec de la note.
+
 ## Commandes
 
 | Commande | Rôle |
