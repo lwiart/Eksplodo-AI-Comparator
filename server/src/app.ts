@@ -15,6 +15,8 @@ import type { ScheduleEntry } from './modules/jobs/scheduler.js';
 import { registerTickRoutes } from './modules/jobs/tick.routes.js';
 import { registerCatalogRoutes } from './modules/catalog/catalog.routes.js';
 import { createCatalogService } from './modules/catalog/catalog.service.js';
+import { registerRunsRoutes } from './modules/runs/runs.routes.js';
+import { createRunsService } from './modules/runs/runs.service.js';
 import { MAX_ATTACHMENT_BYTES } from './modules/tests/attachments.js';
 import { registerSuitesRoutes } from './modules/tests/suites.routes.js';
 import { createSuitesService } from './modules/tests/suites.service.js';
@@ -181,6 +183,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   registerCatalogRoutes(app, catalog);
   registerTestsRoutes(app, createTestsService(deps), deps);
   registerSuitesRoutes(app, createSuitesService(deps));
+  registerRunsRoutes(app, createRunsService(deps));
   registerTickRoutes(app, deps);
   registerErrorRoutes(app, deps);
 
