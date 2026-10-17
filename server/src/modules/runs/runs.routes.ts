@@ -6,6 +6,8 @@ const idParams = z.object({ id: z.string().uuid() });
 
 const unique = (ids: string[]) => new Set(ids).size === ids.length;
 const weight = z.number().int().min(0).max(100);
+/** Plafond stocké en `DECIMAL(10,4)` : précision au dix-millième, jamais arrondi à zéro. */
+const BUDGET_STEP = 0.0001;
 
 const runBody = z
   .object({
@@ -16,7 +18,13 @@ const runBody = z
     repetitions: z.number().int().min(1).max(5).default(1),
     concurrency: z.number().int().min(1).max(8).default(4),
     judgeModelId: z.string().uuid().nullable().optional(),
-    budgetUsd: z.number().positive().max(1_000_000).nullable().optional(),
+    budgetUsd: z
+      .number()
+      .min(BUDGET_STEP)
+      .max(999_999)
+      .refine((v) => Math.abs(v / BUDGET_STEP - Math.round(v / BUDGET_STEP)) < 1e-6, 'Plafond : 4 décimales au plus')
+      .nullable()
+      .optional(),
     weights: z
       .object({ quality: weight, speed: weight, cost: weight, reliability: weight })
       .strict()

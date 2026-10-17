@@ -124,6 +124,8 @@ export const results = mysqlTable(
   (t) => [
     uniqueIndex('results_run_test_model_rep_uq').on(t.runId, t.runTestId, t.modelId, t.repetition),
     index('results_run_status_idx').on(t.runId, t.status),
+    // Activité récente d'une série (derniers résultats terminés).
+    index('results_run_completed_idx').on(t.runId, t.completedAt),
   ],
 );
 

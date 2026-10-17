@@ -1,0 +1,1 @@
+CREATE INDEX `results_run_completed_idx` ON `results` (`run_id`,`completed_at`);

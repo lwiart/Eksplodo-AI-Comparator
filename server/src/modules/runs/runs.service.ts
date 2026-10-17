@@ -120,6 +120,32 @@ function testView(row: TestRow): Omit<PublicTest, 'attachments'> {
   };
 }
 
+/**
+ * Instantanés des tests, dans l'ordre de `testIds` ; test inconnu ou archivé → `test_not_found`.
+ * `lock` (création) : lignes des tests verrouillées (`FOR UPDATE`, comme le retrait d'une pièce jointe) et pièces
+ * jointes lues en lecture courante (`FOR UPDATE` : MariaDB n'accepte pas `FOR SHARE`). Une lecture ordinaire verrait l'image figée par une lecture antérieure
+ * de la transaction (REPEATABLE READ), éventuellement d'avant un retrait validé entre-temps.
+ */
+export async function snapshotTests(conn: DbOrTx, testIds: string[], lock: boolean): Promise<TestSnapshot[]> {
+  const testsQuery = conn.select().from(tests).where(inArray(tests.id, testIds));
+  const rows = lock ? await testsQuery.for('update') : await testsQuery;
+  const byId = new Map(rows.map((r) => [r.id, r]));
+  const ordered = testIds.map((id) => byId.get(id));
+  if (ordered.some((r) => r === undefined || r.archivedAt !== null)) throw testNotFound();
+  const attachmentsQuery = conn
+    .select()
+    .from(testAttachments)
+    .where(and(inArray(testAttachments.testId, testIds), isNull(testAttachments.deletedAt)))
+    .orderBy(asc(testAttachments.createdAt), asc(testAttachments.id));
+  const attachments = lock ? await attachmentsQuery.for('update') : await attachmentsQuery;
+  return ordered.map((r) =>
+    snapshotOf(
+      testView(r!),
+      attachments.filter((a) => a.testId === r!.id),
+    ),
+  );
+}
+
 export function createRunsService(deps: RunsServiceDeps) {
   const { db, registry } = deps;
   const repo = createRunsRepo(db);
@@ -138,29 +164,6 @@ export function createRunsService(deps: RunsServiceDeps) {
       .map((id, index) => ({ id, index, position: position.get(id) ?? Number.POSITIVE_INFINITY }))
       .sort((a, b) => a.position - b.position || a.index - b.index)
       .map((x) => x.id);
-  }
-
-  /**
-   * Instantanés des tests, dans l'ordre. `lock` : lignes des tests verrouillées (`FOR UPDATE`) avant la lecture des
-   * pièces jointes, pour se sérialiser avec leur retrait (qui prend le même verrou).
-   */
-  async function snapshotsOf(conn: DbOrTx, testIds: string[], lock: boolean): Promise<TestSnapshot[]> {
-    const query = conn.select().from(tests).where(inArray(tests.id, testIds));
-    const rows = lock ? await query.for('update') : await query;
-    const byId = new Map(rows.map((r) => [r.id, r]));
-    const ordered = testIds.map((id) => byId.get(id));
-    if (ordered.some((r) => r === undefined || r.archivedAt !== null)) throw testNotFound();
-    const attachments = await conn
-      .select()
-      .from(testAttachments)
-      .where(and(inArray(testAttachments.testId, testIds), isNull(testAttachments.deletedAt)))
-      .orderBy(asc(testAttachments.createdAt), asc(testAttachments.id));
-    return ordered.map((r) =>
-      snapshotOf(
-        testView(r!),
-        attachments.filter((a) => a.testId === r!.id),
-      ),
-    );
   }
 
   async function candidateModels(conn: DbOrTx, ids: string[]): Promise<Map<string, CandidateModel>> {
@@ -188,7 +191,9 @@ export function createRunsService(deps: RunsServiceDeps) {
 
   /** Valide la demande : tests actifs, modèles disponibles, juge requis et disponible. */
   async function resolve(conn: DbOrTx, input: RunInput, lock: boolean) {
-    const snapshots = await snapshotsOf(conn, await orderedTestIds(conn, input), lock);
+    // Tests verrouillés avant toute autre lecture (suite, modèles) : l'image de la transaction est prise après le verrou.
+    const byTest = new Map((await snapshotTests(conn, input.testIds, lock)).map((snap) => [snap.testId, snap]));
+    const snapshots = (await orderedTestIds(conn, input)).map((id) => byTest.get(id)!);
     const judgeId = input.judgeModelId ?? null;
     const found = await candidateModels(conn, judgeId === null ? input.modelIds : [...input.modelIds, judgeId]);
     const chosen = input.modelIds.map((id) => found.get(id));

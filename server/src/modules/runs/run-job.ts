@@ -17,7 +17,8 @@ export async function enqueueRunJob(db: DbOrTx, runId: string, now: Date): Promi
     const [run] = await tx.select({ activeJobId: runs.activeJobId }).from(runs).where(eq(runs.id, runId)).for('update');
     if (!run) throw new NotFoundError('Série introuvable');
     if (run.activeJobId !== null) {
-      const [job] = await tx.select({ status: jobs.status }).from(jobs).where(eq(jobs.id, run.activeJobId));
+      // Lecture courante : une lecture ordinaire dans une transaction englobante verrait un état figé plus ancien.
+      const [job] = await tx.select({ status: jobs.status }).from(jobs).where(eq(jobs.id, run.activeJobId)).for('update');
       if (job && (job.status === 'queued' || job.status === 'running')) return run.activeJobId;
     }
     const id = await enqueue(tx, { type: RUN_EXECUTE, payload: { runId } }, now);

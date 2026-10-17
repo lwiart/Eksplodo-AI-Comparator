@@ -13,10 +13,32 @@ const snapshotName = sql<string>`JSON_UNQUOTE(JSON_EXTRACT(${runTests.snapshot},
 const snapshotCategory = sql<string>`JSON_UNQUOTE(JSON_EXTRACT(${runTests.snapshot}, '$.category'))`;
 
 const INSERT_CHUNK = 1000;
+/** Instantanés : au plus 50 lignes et ~4 Mo de JSON par INSERT, bien sous `max_allowed_packet`. */
+const SNAPSHOT_CHUNK_ROWS = 50;
+const SNAPSHOT_CHUNK_BYTES = 4 * 1024 * 1024;
 
 /** Insère par paquets (une série peut compter des dizaines de milliers de résultats). */
 async function insertChunked<T>(rows: T[], insert: (chunk: T[]) => Promise<unknown>): Promise<void> {
   for (let i = 0; i < rows.length; i += INSERT_CHUNK) await insert(rows.slice(i, i + INSERT_CHUNK));
+}
+
+/** Découpe en paquets d'au plus `maxRows` lignes et `maxBytes` octets (une ligne plus grosse forme un paquet seule). */
+export function chunkBySize<T>(rows: T[], sizeOf: (row: T) => number, maxRows: number, maxBytes: number): T[][] {
+  const chunks: T[][] = [];
+  let current: T[] = [];
+  let bytes = 0;
+  for (const row of rows) {
+    const size = sizeOf(row);
+    if (current.length > 0 && (current.length >= maxRows || bytes + size > maxBytes)) {
+      chunks.push(current);
+      current = [];
+      bytes = 0;
+    }
+    current.push(row);
+    bytes += size;
+  }
+  if (current.length > 0) chunks.push(current);
+  return chunks;
 }
 
 export function createRunsRepo(db: Db) {
@@ -28,7 +50,10 @@ export function createRunsRepo(db: Db) {
       await insertChunked(rows, (chunk) => tx.insert(runModels).values(chunk));
     },
     async insertRunTests(tx: DbOrTx, rows: (typeof runTests.$inferInsert)[]): Promise<void> {
-      await insertChunked(rows, (chunk) => tx.insert(runTests).values(chunk));
+      const sizeOf = (r: typeof runTests.$inferInsert) => Buffer.byteLength(JSON.stringify(r.snapshot));
+      for (const chunk of chunkBySize(rows, sizeOf, SNAPSHOT_CHUNK_ROWS, SNAPSHOT_CHUNK_BYTES)) {
+        await tx.insert(runTests).values(chunk);
+      }
     },
     async insertResults(tx: DbOrTx, rows: (typeof results.$inferInsert)[]): Promise<void> {
       await insertChunked(rows, (chunk) => tx.insert(results).values(chunk));

@@ -4,8 +4,10 @@ import { afterEach, expect, test } from 'vitest';
 import { auditLog } from '../src/db/schema/core.js';
 import { jobs } from '../src/db/schema/jobs.js';
 import { results, runModels, runTests, runs } from '../src/db/schema/runs.js';
-import { testAttachments } from '../src/db/schema/tests.js';
+import { suiteTests, testAttachments } from '../src/db/schema/tests.js';
 import { enqueueRunJob } from '../src/modules/runs/run-job.js';
+import { chunkBySize } from '../src/modules/runs/runs.repo.js';
+import { snapshotTests } from '../src/modules/runs/runs.service.js';
 import { buildTestApp, loginAs, seedModel, seedProvider, seedUser, type TestApp } from './helpers/test-app.js';
 
 const PW = 'motdepasse-solide';
@@ -102,8 +104,12 @@ test('estimate ne crée rien', async () => {
   const estimate = res.json().estimate;
   expect(estimate.calls).toBe(2 * 2 * 3);
   expect(estimate.unsupported).toBe(0);
-  // Alpha : test A = 100 tokens d'entrée × 1 $ + 1 000 × 2 $ ; par million, × 3 répétitions (plus le test B).
-  expect(estimate.perModel.find((p: { modelId: string }) => p.modelId === t.modelA.id).maxCostUsd).toBeGreaterThan(0);
+  // Alpha : test A = (100 tokens d'entrée × 1 $ + 1 000 × 2 $) ÷ 1 000 000 = 0,0021 ; test B (« Question B », 3 tokens)
+  // = 0,002003 ; × 3 répétitions = 0,012309. Bêta est gratuit.
+  const perModel = new Map(estimate.perModel.map((p: { modelId: string; maxCostUsd: number }) => [p.modelId, p.maxCostUsd]));
+  expect(perModel.get(t.modelA.id)).toBeCloseTo(0.012309, 10);
+  expect(perModel.get(t.modelB.id)).toBe(0);
+  expect(estimate.maxCostUsd).toBeCloseTo(0.012309, 10);
   // Aucun historique : 10 s par appel, 12 appels, concurrence 2.
   expect(estimate.durationSeconds).toBe(60);
   expect(await countOf(t, runs)).toBe(0);
@@ -268,6 +274,72 @@ test('enqueueRunJob appelé deux fois en parallèle → une seule tâche active'
   expect(active.map((j) => j.id)).toEqual([x]);
   const [row] = await t.db.select().from(runs).where(eq(runs.id, run.id));
   expect(row!.activeJobId).toBe(x);
+});
+
+test("enqueueRunJob dans une transaction à l'image figée : réutilise la tâche validée entre-temps par une autre connexion", async () => {
+  const t = await setup();
+  const a = await t.makeTest('A');
+  const run = (await t.post('/api/runs', t.runBody([a], [t.modelA.id]))).json().run;
+  const [first] = await activeJobs(t, run.id);
+  await t.db.update(jobs).set({ status: 'done' }).where(eq(jobs.id, first!.id));
+  const { fresh, reused } = await t.db.transaction(async (tx) => {
+    // MariaDB ≥ 11.6 (`innodb_snapshot_isolation` actif) refuserait la lecture verrouillante d'une ligne modifiée après
+    // l'image (erreur 1020, transaction annulée) : on reproduit ici le comportement des versions antérieures, où une
+    // lecture ordinaire renverrait silencieusement l'état figé. La connexion est propre à cette application de test.
+    await tx.execute(sql`SET SESSION innodb_snapshot_isolation = OFF`);
+    await tx.select().from(jobs); // lecture ordinaire : fige l'image de la transaction
+    const fresh = await enqueueRunJob(t.db, run.id, t.clock.now()); // autre connexion, validée
+    const reused = await enqueueRunJob(tx, run.id, t.clock.now());
+    return { fresh, reused };
+  });
+  expect(reused).toBe(fresh);
+  expect((await activeJobs(t, run.id)).map((j) => j.id)).toEqual([fresh]);
+});
+
+test("instantané d'une série issue d'une suite : une pièce jointe retirée entre la lecture de la suite et le verrou est absente", async () => {
+  const t = await setup();
+  const a = await t.makeTest('Image');
+  const attachmentId = randomUUID();
+  await t.db.insert(testAttachments).values({
+    id: attachmentId,
+    testId: a,
+    originalName: 'photo.png',
+    mime: 'image/png',
+    size: 10,
+    storagePath: `attachments/${a}/${attachmentId}`,
+    sha256: '0'.repeat(64),
+  });
+  const suite = (await t.post('/api/suites', { name: 'Suite', testIds: [a] })).json().suite;
+  const snapshots = await t.db.transaction(async (tx) => {
+    await tx.select().from(suiteTests).where(eq(suiteTests.suiteId, suite.id)); // lecture de la suite : image figée
+    // Retrait validé par une autre connexion (pièce non référencée : effacée).
+    expect((await t.del(`/api/tests/${a}/attachments/${attachmentId}`)).json().outcome).toBe('deleted');
+    return snapshotTests(tx, [a], true);
+  });
+  expect(snapshots[0]!.attachments).toEqual([]);
+});
+
+test('plafond : bornes du DECIMAL(10,4) → 400, jamais un zéro enregistré', async () => {
+  const t = await setup();
+  const a = await t.makeTest('A');
+  for (const budgetUsd of [0, 0.00001, 0.00004, 1.23456, 1_000_000, -1]) {
+    const res = await t.post('/api/runs', t.runBody([a], [t.modelA.id], { budgetUsd }));
+    expect(res.statusCode, String(budgetUsd)).toBe(400);
+    expect(res.json().error.code).toBe('validation');
+  }
+  expect(await countOf(t, runs)).toBe(0);
+  for (const budgetUsd of [0.0001, 0.1, 12.3456, 999_999]) {
+    const res = await t.post('/api/runs', t.runBody([a], [t.modelA.id], { budgetUsd }));
+    expect(res.statusCode, String(budgetUsd)).toBe(201);
+    expect(res.json().run.budgetUsd).toBe(budgetUsd);
+  }
+});
+
+test('chunkBySize : paquets bornés en lignes et en octets', () => {
+  const size = (n: number) => n;
+  expect(chunkBySize([1, 2, 3, 4, 5], size, 2, 100)).toEqual([[1, 2], [3, 4], [5]]);
+  expect(chunkBySize([60, 30, 20, 150, 10], size, 50, 100)).toEqual([[60, 30], [20], [150], [10]]);
+  expect(chunkBySize([], size, 2, 100)).toEqual([]);
 });
 
 test('modèle indisponible (clé manquante) → 409 model_unavailable ; test juge sans juge → 400 judge_required', async () => {
