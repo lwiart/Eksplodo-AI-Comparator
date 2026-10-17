@@ -4,6 +4,7 @@ import { AccessDeniedPage } from '../pages/AccessDeniedPage';
 import { AccountPage } from '../pages/AccountPage';
 import { DashboardPage } from '../pages/DashboardPage';
 import { InvitationPage } from '../pages/InvitationPage';
+import { LaunchRunPage } from '../pages/LaunchRunPage';
 import { LoginPage } from '../pages/LoginPage';
 import { ModelPage } from '../pages/ModelPage';
 import { ModelsPage } from '../pages/ModelsPage';
@@ -69,6 +70,7 @@ export function AppRoutes() {
             <Route path="/admin/tests/nouveau" element={<TestEditorPage />} />
             <Route path="/admin/tests/:id" element={<TestEditorPage />} />
             <Route path="/admin/suites" element={<SuitesPage />} />
+            <Route path="/series/nouvelle" element={<LaunchRunPage />} />
             <Route path="/admin/erreurs" element={<ErrorLogPage />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
