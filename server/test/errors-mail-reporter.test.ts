@@ -71,7 +71,8 @@ describe('reportingMailer', () => {
       clock: () => NOW,
       db: t.db,
       mailer: reportingMailer(failing(), { db: t.db, clock: () => NOW }),
-      schedules: [], registry: testRegistry(),
+      schedules: [],
+      registry: testRegistry(),
     });
     try {
       await seedUser(t.db, { email: 'admin@x.fr', password: 'motdepasse-solide', role: 'admin' });

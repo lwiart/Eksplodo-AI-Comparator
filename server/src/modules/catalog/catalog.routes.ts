@@ -72,6 +72,7 @@ const patchModelBody = z
     color: color.optional(),
     inputPricePerM: price.optional(),
     outputPricePerM: price.optional(),
+    priceSource: z.enum(['manual', 'openrouter']).optional(),
     supportsVision: z.boolean().optional(),
     supportsPdf: z.boolean().optional(),
     contextWindow: contextWindow.optional(),

@@ -1,4 +1,6 @@
+import { eq } from 'drizzle-orm';
 import { afterEach, describe, expect, test } from 'vitest';
+import { models } from '../src/db/schema/catalog.js';
 import { auditLog } from '../src/db/schema/core.js';
 import { fakeFetch } from './helpers/fake-fetch.js';
 import { buildTestApp, loginAs, seedModel, seedProvider, seedUser, type TestApp } from './helpers/test-app.js';
@@ -262,6 +264,22 @@ describe('modèles', () => {
     expect((await patch(`/api/models/${m.id}`, { contextWindow: 0 })).statusCode).toBe(400);
     expect((await patch(`/api/models/${m.id}`, { contextWindow: null })).json().model.contextWindow).toBeNull();
     expect((await patch(`/api/models/${m.id}`, { apiModelId: 'autre' })).statusCode).toBe(400); // champ non modifiable
+  });
+
+  test('modifier un prix repasse la source en manual ; priceSource peut être remis explicitement', async () => {
+    const { post, patch, db } = await setup();
+    const p = await seedProvider(db);
+    const created = await post('/api/models', { providerId: p.id, apiModelId: 'or-1', displayName: 'OR', priceSource: 'openrouter' });
+    expect(created.json().model.priceSource).toBe('openrouter');
+    const id = created.json().model.id as string;
+    const edited = await patch(`/api/models/${id}`, { inputPricePerM: 5 });
+    expect(edited.json().model).toMatchObject({ inputPricePerM: 5, priceSource: 'manual' });
+    expect((await db.select().from(models).where(eq(models.id, id)))[0]!.priceSource).toBe('manual');
+    const back = await patch(`/api/models/${id}`, { priceSource: 'openrouter' });
+    expect(back.json().model.priceSource).toBe('openrouter');
+    expect((await db.select().from(models).where(eq(models.id, id)))[0]!.priceSource).toBe('openrouter');
+    const both = await patch(`/api/models/${id}`, { outputPricePerM: 1, priceSource: 'openrouter' });
+    expect(both.json().model.priceSource).toBe('openrouter');
   });
 
   test('available : faux si clé absente ou illisible, fournisseur ou modèle désactivé', async () => {

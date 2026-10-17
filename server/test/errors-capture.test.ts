@@ -146,7 +146,8 @@ describe('/health', () => {
         clock: () => clock.now(),
         db: lazy.db,
         mailer: createFakeMailer(),
-        schedules: [], registry: testRegistry(),
+        schedules: [],
+        registry: testRegistry(),
       });
       for (let i = 0; i < 105; i++) expect((await app.inject({ method: 'GET', url: '/health' })).statusCode).toBe(503);
       expect(pendingErrorCount()).toBe(100);
@@ -203,7 +204,7 @@ describe('vidange de la file sans autre erreur (I1)', () => {
     await drain();
     deferError(ev(), clock.now());
     const loop = startSchedulerLoop(
-      { db: t.db, schedules: [], registry: testRegistry(), clock: () => clock.now(), logger: { info: vi.fn(), error: vi.fn() } },
+      { db: t.db, schedules: [], clock: () => clock.now(), logger: { info: vi.fn(), error: vi.fn() } },
       { intervalMs: 60_000 },
     );
     await vi.waitFor(() => expect(pendingErrorCount()).toBe(0), { timeout: 10_000 });

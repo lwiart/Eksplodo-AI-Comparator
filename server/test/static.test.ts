@@ -32,7 +32,8 @@ function newApp(opts: { webRoot?: string; config?: Partial<AppConfig> } = {}): P
     clock: () => new Date(),
     db: lazy.db,
     mailer: createFakeMailer(),
-    schedules: [], registry: testRegistry(),
+    schedules: [],
+    registry: testRegistry(),
     logStream: { write: () => undefined }, // journal muet : sortie de test propre
     ...(opts.webRoot !== undefined ? { webRoot: opts.webRoot } : {}),
   });

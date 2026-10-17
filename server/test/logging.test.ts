@@ -40,7 +40,8 @@ describe('journal des requêtes', () => {
       clock: () => new Date(),
       mailer: createFakeMailer(),
       db,
-      schedules: [], registry: testRegistry(),
+      schedules: [],
+      registry: testRegistry(),
       logStream: { write: (line: string) => void lines.push(line) },
     });
     for (const [purpose, token] of [
@@ -65,7 +66,8 @@ describe('journal des requêtes', () => {
       clock: () => new Date(),
       mailer: createFakeMailer(),
       db,
-      schedules: [], registry: testRegistry(),
+      schedules: [],
+      registry: testRegistry(),
       logStream: { write: (line: string) => void lines.push(line) },
     });
     app.get('/crash', async () => {

@@ -144,7 +144,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   // 503 seulement si la base est injoignable ; l'événement `db_unreachable` est mis en attente en mémoire (la base
   // ne répond pas) puis écrit dès qu'elle revient.
   app.get('/health', async (_req, reply) => {
-    if (!(await checkDb(deps.db))) {
+    const down = () => {
       deferError(
         {
           source: 'request',
@@ -157,14 +157,16 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
         deps.clock(),
       );
       return reply.status(503).send({ status: 'degraded', db: 'down' });
-    }
-    await flushPendingErrors(deps.db); // la base répond : écrit l'événement de panne différé
-    return {
-      status: 'ok',
-      db: 'ok',
-      worker: deps.workerStatus?.() ?? 'stopped',
-      providers: { configured: await catalog.configuredCount() },
     };
+    if (!(await checkDb(deps.db))) return down();
+    await flushPendingErrors(deps.db); // la base répond : écrit l'événement de panne différé
+    let configured: number;
+    try {
+      configured = await catalog.configuredCount();
+    } catch {
+      return down(); // la base a lâché entre la sonde et la lecture : même réponse que base injoignable
+    }
+    return { status: 'ok', db: 'ok', worker: deps.workerStatus?.() ?? 'stopped', providers: { configured } };
   });
 
   registerAuthRoutes(app, deps);

@@ -1,10 +1,11 @@
-import { afterAll, beforeAll, expect, test } from 'vitest';
+import { afterAll, beforeAll, beforeEach, expect, test } from 'vitest';
 import { buildApp } from '../src/app.js';
 import { loadConfig } from '../src/config/config.js';
 import { createDb } from '../src/db/client.js';
 import { createFakeMailer } from '../src/modules/mail/mailer.js';
 import { seedProvider, testRegistry } from './helpers/test-app.js';
 import { seedProviders } from '../src/modules/catalog/seed.js';
+import { providers } from '../src/db/schema/catalog.js';
 import { createTestDb } from './helpers/test-db.js';
 
 const config = loadConfig({
@@ -20,6 +21,9 @@ let testDb: Awaited<ReturnType<typeof createTestDb>>;
 beforeAll(async () => {
   testDb = await createTestDb();
 }, 60_000);
+beforeEach(async () => {
+  await testDb.db.delete(providers); // tests indépendants de l'ordre
+});
 afterAll(async () => {
   await testDb.destroy();
 });

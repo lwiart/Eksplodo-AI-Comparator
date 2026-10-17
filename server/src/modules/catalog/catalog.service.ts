@@ -78,7 +78,7 @@ export type ModelInput = {
   contextWindow?: number | null;
   enabled?: boolean;
 };
-export type ModelUpdate = ModelPatch;
+export type ModelUpdate = ModelPatch;  // `priceSource` : voir `updateModel`
 
 export type CatalogServiceDeps = {
   db: Db;
@@ -321,14 +321,17 @@ export function createCatalogService(deps: CatalogServiceDeps) {
 
     async updateModel(actor: Actor, id: string, patch: ModelUpdate): Promise<PublicModel> {
       if (!(await modelsRepo.find(id))) throw modelNotFound();
-      const row = await modelsRepo.update(id, patch);
+      // Un prix saisi à la main ne doit pas être écrasé par la synchronisation OpenRouter : il repasse en `manual`.
+      const pricesChanged = patch.inputPricePerM !== undefined || patch.outputPricePerM !== undefined;
+      const columns: ModelUpdate = pricesChanged && patch.priceSource === undefined ? { ...patch, priceSource: 'manual' } : patch;
+      const row = await modelsRepo.update(id, columns);
       if (!row) throw modelNotFound();
       await audit(db, {
         actorUserId: actor.userId,
         action: 'model_updated',
         targetType: 'model',
         targetId: id,
-        details: { fields: Object.keys(patch).sort() },
+        details: { fields: Object.keys(columns).sort() },
       });
       return publicModel(row, await requireProvider(row.providerId));
     },
