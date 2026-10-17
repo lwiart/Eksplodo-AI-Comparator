@@ -47,9 +47,8 @@ beforeEach(() => {
 });
 afterEach(() => vi.unstubAllGlobals());
 
-function renderAt(path: string) {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  render(
+function renderAt(path: string, client = new QueryClient({ defaultOptions: { queries: { retry: false } } })) {
+  return render(
     <QueryClientProvider client={client}>
       <MemoryRouter initialEntries={[path]}>
         <Routes>
@@ -262,4 +261,21 @@ test('enregistrement refusé par le serveur → message en français', async () 
   await fillRequired(user);
   await user.click(screen.getByRole('button', { name: 'Enregistrer' }));
   expect(await screen.findByRole('alert')).toHaveTextContent('Certaines informations sont invalides');
+});
+
+test('pièces jointes : après un dépôt, rouvrir le test affiche la pièce jointe (sans serveur à jour)', async () => {
+  vi.stubGlobal('XMLHttpRequest', FakeXhr);
+  FakeXhr.instances = [];
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const first = renderAt('/admin/tests/t1', client);
+  const zone = await screen.findByRole('region', { name: 'Zone de dépôt des pièces jointes' });
+  fireEvent.drop(zone, { dataTransfer: { files: [new File(['x'], 'cctp.pdf', { type: 'application/pdf' })] } });
+  await waitFor(() => expect(FakeXhr.instances).toHaveLength(1));
+  FakeXhr.instances[0]!.finish(201, { attachment: { id: 'a9', originalName: 'cctp.pdf', mime: 'application/pdf', size: 4096, pages: 3, sha256: 'cd' } });
+  await screen.findByRole('link', { name: /cctp\.pdf/ });
+
+  first.unmount();
+  // Le serveur simulé renverrait encore l'ancienne liste : seul le cache à jour peut la montrer.
+  renderAt('/admin/tests/t1', client);
+  expect(await screen.findByRole('link', { name: /cctp\.pdf/ })).toBeInTheDocument();
 });

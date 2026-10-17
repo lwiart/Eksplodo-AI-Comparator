@@ -30,6 +30,8 @@ import { Chip } from '../../components/ui/Chip';
 import { Field } from '../../components/ui/Field';
 import { TextArea } from '../../components/ui/TextArea';
 
+const detailKey = (id: string | undefined) => [...TESTS_KEY, 'detail', id] as const;
+
 const DEFAULT_TEMPERATURE = 0.2;
 const DEFAULT_MAX_TOKENS = 1000;
 const MAX_TOKENS_LIMIT = 16_000;
@@ -129,7 +131,7 @@ function EditorForm({ initial }: { initial: PublicTest | null }) {
   const [form, setForm] = useState<Form>(initial ? formFromTest(initial) : EMPTY_FORM);
   const [errors, setErrors] = useState<FormErrors>({ scoring: {} });
   const [attachments, setAttachments] = useState<PublicAttachment[]>(initial?.attachments ?? []);
-  const [testId, setTestId] = useState<string | null>(initial?.id ?? null);
+  const testId = initial?.id ?? null;
   // Corps tel qu'enregistré : une saisie différente (ou invalide) est « non enregistrée ».
   const [savedKey, setSavedKey] = useState<string | null>(initial ? JSON.stringify(buildBodyOrNull(formFromTest(initial))) : null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -142,6 +144,14 @@ function EditorForm({ initial }: { initial: PublicTest | null }) {
   const save = useMutation({
     mutationFn: (body: TestInput) => (testId === null ? createTest(body) : updateTest(testId, body)),
   });
+
+  /** Met à jour la liste affichée et le détail en cache : rouvrir le test ne montre pas une liste périmée. */
+  function changeAttachments(change: (list: PublicAttachment[]) => PublicAttachment[]) {
+    setAttachments(change);
+    if (testId === null) return;
+    client.setQueryData<PublicTest>(detailKey(testId), (cached) => (cached ? { ...cached, attachments: change(cached.attachments) } : cached));
+    void client.invalidateQueries({ queryKey: [...TESTS_KEY, 'list'] });
+  }
 
   /** Valide puis enregistre ; renvoie l'identifiant du test, ou `null` si la saisie ou le serveur refuse. */
   async function saveNow(): Promise<string | null> {
@@ -157,12 +167,15 @@ function EditorForm({ initial }: { initial: PublicTest | null }) {
     try {
       const saved = await save.mutateAsync(result.body);
       setSavedKey(JSON.stringify(result.body));
-      void client.invalidateQueries({ queryKey: TESTS_KEY });
+      // Le détail est alimenté avec la réponse du serveur (sans flash de chargement après la création) ;
+      // la liste et les catégories sont invalidées sans toucher au détail.
+      client.setQueryData(detailKey(saved.id), saved);
+      void client.invalidateQueries({ queryKey: [...TESTS_KEY, 'list'] });
+      void client.invalidateQueries({ queryKey: TESTS_META_KEY });
       if (testId === null) {
         navigate(`/admin/tests/${saved.id}`, { replace: true });
         return saved.id;
       }
-      client.setQueryData([...TESTS_KEY, 'detail', saved.id], saved);
       setNotice('Test enregistré.');
       return saved.id;
     } catch (err) {
@@ -252,8 +265,8 @@ function EditorForm({ initial }: { initial: PublicTest | null }) {
             <AttachmentsField
               testId={testId}
               attachments={attachments}
-              onAdded={(a) => setAttachments((list) => [...list, a])}
-              onRemoved={(id) => setAttachments((list) => list.filter((a) => a.id !== id))}
+              onAdded={(a) => changeAttachments((list) => [...list, a])}
+              onRemoved={(id) => changeAttachments((list) => list.filter((x) => x.id !== id))}
             />
           )}
         </Card>
@@ -299,7 +312,7 @@ function buildBodyOrNull(f: Form): TestInput | null {
 /** Éditeur d'un test (Admin) : prompts, paramètres, notation, pièces jointes et essai rapide. */
 export function TestEditorPage() {
   const { id } = useParams<{ id: string }>();
-  const test = useQuery({ queryKey: [...TESTS_KEY, 'detail', id], queryFn: () => getTest(id!), enabled: id !== undefined, staleTime: Infinity });
+  const test = useQuery({ queryKey: detailKey(id), queryFn: () => getTest(id!), enabled: id !== undefined, staleTime: Infinity });
 
   if (id === undefined) return <EditorForm initial={null} />;
   if (test.isError) {

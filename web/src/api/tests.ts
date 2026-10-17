@@ -121,7 +121,10 @@ export async function uploadAttachment(
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable && e.total > 0) onProgress?.(e.loaded / e.total);
     };
-    xhr.onerror = () => reject(new ApiError('network', 0, 'Serveur injoignable'));
+    const fail = () => reject(new ApiError('network', 0, 'Serveur injoignable'));
+    xhr.onerror = fail;
+    xhr.onabort = fail;
+    xhr.ontimeout = fail;
     xhr.onload = () => {
       let data: unknown = null;
       try {
@@ -130,8 +133,16 @@ export async function uploadAttachment(
         data = null;
       }
       if (xhr.status >= 200 && xhr.status < 300) {
+        const attachment = (data as { attachment?: PublicAttachment } | null)?.attachment;
+        if (!attachment) {
+          reject(new ApiError('http_error', xhr.status, 'Réponse inattendue du serveur'));
+          return;
+        }
         onProgress?.(1);
-        resolve((data as { attachment: PublicAttachment }).attachment);
+        resolve(attachment);
+      } else if (xhr.status === 413 && !(data as { error?: unknown } | null)?.error) {
+        // Le proxy inverse refuse avant le serveur : corps non JSON.
+        reject(new ApiError('file_too_large', 413, 'Fichier trop volumineux (10 Mo au plus)'));
       } else {
         reject(errorFromResponse(xhr.status, data));
       }
