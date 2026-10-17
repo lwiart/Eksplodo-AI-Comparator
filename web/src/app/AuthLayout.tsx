@@ -19,8 +19,8 @@ export function AuthLayout({ title, intro, children }: { title: string; intro?: 
         className="opacity-40 lg:opacity-100"
         fallback={<FanoutFallback className="h-full w-full lg:translate-x-[8%]" />}
       />
-      <div className="relative z-10 flex min-h-screen items-center justify-center px-4 py-44 lg:justify-start lg:pr-4 lg:pl-[6%]">
-        <div className="relative w-full max-w-[26rem]">
+      <div data-testid="auth-overlay" className="pointer-events-none relative z-10 flex min-h-screen items-center justify-center px-4 py-44 lg:justify-start lg:pr-4 lg:pl-[6%]">
+        <div data-testid="auth-column" className="pointer-events-auto relative w-full max-w-[26rem]">
           <div className="absolute inset-x-0 bottom-[calc(100%+22px)]">
             <Link to="/connexion" className="mb-3.5 flex items-center gap-3 text-white no-underline" aria-label="Eksplodo, connexion">
               <img src="/logo-icon-white.png" alt="" className="logo-glow block h-10 w-auto" />

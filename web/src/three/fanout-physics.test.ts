@@ -58,3 +58,11 @@ test('pickNearest : le plus proche dans le rayon, sinon -1', () => {
   expect(pickNearest(pts, v(5, 5), 0.6)).toBe(-1);
   expect(pickNearest([], v(0, 0), 0.6)).toBe(-1);
 });
+
+test('aimant : `out` est rempli et renvoyé, y compris remis à zéro hors rayon', () => {
+  const out = v(9, 9, 9);
+  expect(magnetOffset(v(0, 0), v(0.3, 0), 1.6, 0.35, out)).toBe(out);
+  expect(out.x).toBeGreaterThan(0);
+  magnetOffset(v(0, 0), v(5, 0), 1.6, 0.35, out);
+  expect(out).toEqual(v());
+});

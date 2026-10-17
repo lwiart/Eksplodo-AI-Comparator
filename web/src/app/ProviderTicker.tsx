@@ -19,7 +19,7 @@ function Chips({ hidden = false }: { hidden?: boolean }) {
 /** Bandeau défilant des autres fournisseurs (grand écran). Le défilement s'arrête au survol et si les animations sont coupées. */
 export function ProviderTicker() {
   return (
-    <div data-testid="provider-ticker" className="absolute right-[3%] bottom-6 z-10 hidden w-[min(700px,50vw)] text-right lg:block">
+    <div data-testid="provider-ticker" className="pointer-events-auto absolute right-[3%] bottom-6 z-10 hidden w-[min(700px,50vw)] text-right lg:block">
       <div className="ticker-window overflow-hidden">
         <div className="ticker-track flex w-max gap-2">
           <Chips />

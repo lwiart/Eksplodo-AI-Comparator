@@ -18,17 +18,21 @@ export function springStep(pos: Vec3, vel: Vec3, target: Vec3, k: number, c: num
 /**
  * Décalage d'« aimant » d'un logo dont la position d'origine est `home` quand la souris est en `mouse` : un vecteur
  * dirigé vers la souris, de longueur min(distance, force × (1 − distance / rayon)). Il ne dépasse donc jamais la souris
- * (le logo reste attrapable) et s'annule au bord du rayon. Nul hors rayon ou si la souris est sur `home`.
+ * (le logo reste attrapable) et s'annule au bord du rayon. Nul hors rayon ou si la souris est sur `home`. Si `out` est fourni, il est rempli et renvoyé (aucune allocation).
  */
-export function magnetOffset(home: Vec3, mouse: Vec3, radius: number, strength: number): Vec3 {
+export function magnetOffset(home: Vec3, mouse: Vec3, radius: number, strength: number, out: Vec3 = { x: 0, y: 0, z: 0 }): Vec3 {
+  out.x = out.y = out.z = 0;
   const dx = mouse.x - home.x;
   const dy = mouse.y - home.y;
   const dz = mouse.z - home.z;
   const dist = Math.hypot(dx, dy, dz);
-  if (dist >= radius || dist < 1e-9) return { x: 0, y: 0, z: 0 };
+  if (dist >= radius || dist < 1e-9) return out;
   const len = Math.min(dist, strength * (1 - dist / radius));
   const f = len / dist;
-  return { x: dx * f, y: dy * f, z: dz * f };
+  out.x = dx * f;
+  out.y = dy * f;
+  out.z = dz * f;
+  return out;
 }
 
 /** Indice du point le plus proche de `p` dans le rayon `radius` (distance 3D), ou -1 si aucun. */

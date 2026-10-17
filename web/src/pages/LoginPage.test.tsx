@@ -68,3 +68,11 @@ test('le bandeau défilant ne charge rien d externe', () => {
   imgs.forEach((img) => expect(img.getAttribute('src')).not.toMatch(/^(https?:)?\/\//));
   expect(screen.getByTestId('provider-ticker').innerHTML).not.toMatch(/(src|href)="(https?:)?\/\//);
 });
+
+test('la couche de page laisse passer la souris vers la scène ; seule la colonne de la carte la capte', () => {
+  setup(vi.fn());
+  expect(screen.getByTestId('auth-overlay')).toHaveClass('pointer-events-none');
+  const column = screen.getByTestId('auth-column');
+  expect(column).toHaveClass('pointer-events-auto');
+  expect(column).toContainElement(screen.getByLabelText('E-mail'));
+});

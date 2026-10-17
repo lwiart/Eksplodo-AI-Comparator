@@ -361,22 +361,33 @@ export const fanoutScene: SceneFactory = ({ THREE, canvas, width, height, isMobi
   const ndc = new THREE.Vector2();
   const plane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
   const hit = new THREE.Vector3();
+  const local = new THREE.Vector3(); // vecteur réutilisé : aucune allocation par événement
   const mouse = new THREE.Vector3(1e3, 1e3, 0);
   let drag: Node | null = null;
   const toLocal = (e: PointerEvent): Vector3 | null => {
     const r = canvas.getBoundingClientRect();
     ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
     ray.setFromCamera(ndc, camera);
-    return ray.ray.intersectPlane(plane, hit) ? hit.clone().sub(root.position) : null;
+    return ray.ray.intersectPlane(plane, hit) ? local.copy(hit).sub(root.position) : null;
   };
   const pick = (p: Vector3): Node | null => nodes[pickNearest(positions, p, GRAB_R)] ?? null;
 
-  const listeners: Array<() => void> = [];
-  if (!isMobile) {
-    const on = <E extends keyof HTMLElementEventMap>(type: E, fn: (e: HTMLElementEventMap[E]) => void) => {
-      canvas.addEventListener(type, fn as EventListener);
-      listeners.push(() => canvas.removeEventListener(type, fn as EventListener));
-    };
+  // Interaction réservée au grand écran (même seuil que la mise en page) : en dessous, pas d'écouteurs, le défilement tactile reste libre.
+  let listeners: Array<() => void> = [];
+  const on = <E extends keyof HTMLElementEventMap>(type: E, fn: (e: HTMLElementEventMap[E]) => void) => {
+    canvas.addEventListener(type, fn as EventListener);
+    listeners.push(() => canvas.removeEventListener(type, fn as EventListener));
+  };
+  function detachInteraction() {
+    listeners.forEach((off) => off());
+    listeners = [];
+    drag = null;
+    mouse.set(1e3, 1e3, 0);
+    canvas.style.cursor = '';
+    canvas.style.touchAction = '';
+  }
+  function attachInteraction() {
+    canvas.style.touchAction = 'none';
     on('pointermove', (e) => {
       const p = toLocal(e as PointerEvent);
       if (!p) return;
@@ -404,6 +415,15 @@ export const fanoutScene: SceneFactory = ({ THREE, canvas, width, height, isMobi
     on('pointerup', release);
     on('pointercancel', release);
   }
+  let interactive = false;
+  function syncInteraction(w: number) {
+    const want = !isMobile && w >= CENTERED_BELOW;
+    if (want === interactive) return;
+    interactive = want;
+    if (want) attachInteraction();
+    else detachInteraction();
+  }
+  syncInteraction(width);
 
   // ---------- cycle ----------
   let T = 0;
@@ -425,6 +445,7 @@ export const fanoutScene: SceneFactory = ({ THREE, canvas, width, height, isMobi
 
   let time = 0;
   const target = new THREE.Vector3();
+  const magnet = { x: 0, y: 0, z: 0 };
   function update(dt: number) {
     time += dt;
     const t = time;
@@ -437,7 +458,7 @@ export const fanoutScene: SceneFactory = ({ THREE, canvas, width, height, isMobi
       target.set(Math.sin(t * 0.9 + n.ph) * 0.13, Math.cos(t * 1.15 + n.ph * 1.3) * 0.11, 0).add(n.home);
       n.hover = drag !== n && n.pos.distanceTo(mouse) < GRAB_R;
       if (drag !== n) {
-        const m = magnetOffset(n.home, mouse, HOVER_R, MAGNET);
+        const m = magnetOffset(n.home, mouse, HOVER_R, MAGNET, magnet);
         target.x += m.x;
         target.y += m.y;
         springStep(n.pos, n.vel, target, K, C, dt);
@@ -508,12 +529,11 @@ export const fanoutScene: SceneFactory = ({ THREE, canvas, width, height, isMobi
     resize(w, h) {
       renderer.setSize(w, h, false);
       fit(w, h);
+      syncInteraction(w);
     },
     dispose() {
       disposed = true;
-      listeners.forEach((off) => off());
-      canvas.style.cursor = '';
-      drag = null;
+      detachInteraction();
       scene.traverse((o) => {
         const m = o as Mesh;
         m.geometry?.dispose();
@@ -522,6 +542,7 @@ export const fanoutScene: SceneFactory = ({ THREE, canvas, width, height, isMobi
       });
       textures.forEach((t) => t.dispose());
       renderer.dispose();
+      renderer.forceContextLoss();
     },
   };
 };
