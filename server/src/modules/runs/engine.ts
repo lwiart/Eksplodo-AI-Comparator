@@ -19,7 +19,9 @@ import {
   claimJudgement,
   commitJudgeCall,
   countPendingJudgements,
+  currentJudgeId,
   failJudgements,
+  holdsJudgement,
   judgeCallMaxCostUsd,
   judgeInputTokens,
   loadPendingJudgements,
@@ -85,6 +87,7 @@ type GenerateItem = BaseItem & {
 type JudgeItem = BaseItem & {
   kind: 'judge';
   judge: JudgeModel;
+  responseChars: number;
   inputTokens: number;
   /** Nouvelles tentatives après une erreur réessayable. */
   retries: number;
@@ -229,18 +232,37 @@ export async function executeRunSlice(deps: EngineDeps, job: Job, ctx: JobContex
 
   // 3. File de lancement de la tranche : appels de génération, puis notes du juge en attente.
   const queue: WorkItem[] = await loadQueue(db, runId);
-  const runJudge = await loadRunJudge(db, run.judgeModelId);
+  let cachedJudgeId = run.judgeModelId;
+  let cachedJudge = await loadRunJudge(db, cachedJudgeId);
 
-  /** Notes du juge ajoutées en fin de file ; juge indisponible : mises en échec aussitôt (aucune tranche sans fin). */
+  /**
+   * Juge actuel de la série, relu à chaque décision et rechargé s'il a changé (recalcul avec un autre juge pendant la
+   * tranche). Les valeurs renvoyées font foi ; le cache ne sert qu'à éviter de recharger un juge inchangé.
+   */
+  async function currentJudge() {
+    const id = await currentJudgeId(db, runId);
+    if (id === cachedJudgeId) return { id, state: cachedJudge };
+    const state = await loadRunJudge(db, id);
+    cachedJudgeId = id;
+    cachedJudge = state;
+    return { id, state };
+  }
+
+  /**
+   * Notes du juge ajoutées en fin de file, avec le juge actuel de la série ; juge indisponible : mises en échec aussitôt
+   * (aucune tranche sans fin), seulement si le juge de la série est toujours celui-là.
+   */
   async function addJudgements(pending: PendingJudgement[]): Promise<void> {
     if (pending.length === 0) return;
-    const { judge } = runJudge;
+    const { id, state } = await currentJudge();
+    const { judge } = state;
     if (judge === null) {
-      return failJudgements(
-        db,
-        pending.map((p) => p.resultId),
-        runJudge.unavailable,
-      );
+      return failJudgements(db, {
+        runId,
+        resultIds: pending.map((p) => p.resultId),
+        rationale: state.unavailable,
+        expectedJudgeId: id,
+      });
     }
     for (const p of pending) {
       const inputTokens = judgeInputTokens(p.snapshot, p.responseChars, judge);
@@ -253,6 +275,7 @@ export async function executeRunSlice(deps: EngineDeps, job: Job, ctx: JobContex
         snapshot: p.snapshot,
         maxCostUsd: judgeCallMaxCostUsd(inputTokens, judge.prices),
         judge,
+        responseChars: p.responseChars,
         inputTokens,
         retries: 0,
         invalidReplies: 0,
@@ -518,6 +541,13 @@ export async function executeRunSlice(deps: EngineDeps, job: Job, ctx: JobContex
     }
   }
 
+  const judgementOf = (item: JudgeItem) => ({ runId, resultId: item.resultId, judgeModelId: item.judge.id, jobId: job.id });
+  const pendingOf = (item: JudgeItem): PendingJudgement => ({
+    resultId: item.resultId,
+    snapshot: item.snapshot,
+    responseChars: item.responseChars,
+  });
+
   async function callJudge(item: JudgeItem): Promise<CallOutcome> {
     let adapter;
     try {
@@ -595,7 +625,13 @@ export async function executeRunSlice(deps: EngineDeps, job: Job, ctx: JobContex
           delay = retryDelayMs(outcome, item.retries);
         }
         const next = await beforeNextCall(item, delay);
-        if (next === 'go') continue;
+        if (next === 'go') {
+          // Un recalcul a pu retirer la prise ou changer le juge pendant l'appel : aucun nouvel appel facturé pour rien.
+          const hold = await holdsJudgement(db, judgementOf(item));
+          if (hold === 'held') continue;
+          if (hold === 'stale' && (await releaseJudgement(db, item.resultId, job.id))) await addJudgements([pendingOf(item)]);
+          return;
+        }
         // Note rendue, toujours en attente : relancée par la boucle de lancement (plafond) ou par la tranche suivante.
         if ((await releaseJudgement(db, item.resultId, job.id)) && next === 'over_budget') queue.unshift(item);
         return;
@@ -609,7 +645,10 @@ export async function executeRunSlice(deps: EngineDeps, job: Job, ctx: JobContex
   /** Prise de l'élément avant son lancement : résultat `pending` → `running`, ou note du juge prise par cette tâche. */
   async function claim(item: WorkItem): Promise<boolean> {
     if (item.kind === 'judge') {
-      return claimJudgement(db, { runId, resultId: item.resultId, judgeModelId: item.judge.id, jobId: job.id });
+      const claimed = await claimJudgement(db, judgementOf(item));
+      // Juge changé par un recalcul : la note est reprise en fin de file avec le nouveau juge.
+      if (claimed === 'stale') await addJudgements([pendingOf(item)]);
+      return claimed === 'claimed';
     }
     const claimed = await withTxRetry(async () =>
       affectedRows(

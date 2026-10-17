@@ -66,8 +66,9 @@ async function scopeOf(conn: DbOrTx, runId: string, input: RescoreInput): Promis
  * effacées, prise éventuelle d'une tâche retirée, note imposée conservée), change le juge de la série s'il est fourni, puis
  * relance la série : `completed` → `queued` et sa tâche ; une série en cours garde sa tâche (la tranche suivante prend les
  * notes) ; une série en pause ou interrompue les notera à sa reprise. Les lectures de validation (juge, périmètre) précèdent
- * la transaction : celle-ci, ligne de la série verrouillée, ne fait que des lectures verrouillantes et des écritures, sans
- * image figée qui entrerait en conflit avec les écritures du moteur (`innodb_snapshot_isolation`).
+ * la transaction : celle-ci (résultats du périmètre puis ligne de la série verrouillés) ne fait que des lectures
+ * verrouillantes et des écritures, sans image figée qui entrerait en conflit avec les écritures du moteur
+ * (`innodb_snapshot_isolation`).
  */
 export async function rescore(db: Db, actor: Actor, runId: string, input: RescoreInput, ctx: RescoreContext): Promise<{ queued: number }> {
   if (input.scope === 'test' && !input.runTestId) throw new ValidationError('validation', 'runTestId requis pour recalculer un test');
@@ -81,11 +82,8 @@ export async function rescore(db: Db, actor: Actor, runId: string, input: Rescor
 
   return withTxRetry(() =>
     db.transaction(async (tx) => {
-      const [run] = await tx.select().from(runs).where(eq(runs.id, runId)).for('update');
-      if (!run) throw runNotFound();
-      // Sans juge demandé : celui de la série, relu sous verrou (un recalcul simultané a pu le changer, après l'avoir vérifié).
-      const judgeModelId = input.judgeModelId ?? run.judgeModelId ?? checkedJudgeId;
-
+      // Lignes des résultats verrouillées (par l'écriture) avant celle de la série : même ordre que l'enregistrement d'une
+      // réponse ou d'une note du juge par le moteur (résultat puis série), pour éviter les interblocages.
       let queued = 0;
       if (scope.runTestIds.length > 0) {
         const res = await tx
@@ -101,6 +99,10 @@ export async function rescore(db: Db, actor: Actor, runId: string, input: Rescor
           );
         queued = affectedRows(res);
       }
+      const [run] = await tx.select().from(runs).where(eq(runs.id, runId)).for('update');
+      if (!run) throw runNotFound();
+      // Sans juge demandé : celui de la série, relu sous verrou (un recalcul simultané a pu le changer, après l'avoir vérifié).
+      const judgeModelId = input.judgeModelId ?? run.judgeModelId ?? checkedJudgeId;
       if (judgeModelId !== run.judgeModelId) await tx.update(runs).set({ judgeModelId }).where(eq(runs.id, runId));
       if (queued > 0) {
         if (run.status === 'completed') {

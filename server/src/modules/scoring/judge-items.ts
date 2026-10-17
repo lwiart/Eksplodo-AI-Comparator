@@ -148,18 +148,27 @@ export function judgeCallMaxCostUsd(inputTokens: number, prices: ModelPrices): n
   return (inputTokens * prices.inputPricePerM + JUDGE_MAX_OUTPUT_TOKENS * prices.outputPricePerM) / 1_000_000;
 }
 
+/** Condition SQL : le juge de la série est toujours celui attendu (`<=>` : égalité qui accepte le nul). */
+const runJudgeIs = (runId: string, judgeModelId: string | null) =>
+  sql`EXISTS (SELECT 1 FROM runs WHERE runs.id = ${runId} AND runs.judge_model_id <=> ${judgeModelId})`;
+
+/** Juge actuel de la série (relu à chaque décision : un recalcul a pu le changer pendant la tranche). */
+export async function currentJudgeId(conn: DbOrTx, runId: string): Promise<string | null> {
+  const [run] = await conn.select({ judgeModelId: runs.judgeModelId }).from(runs).where(eq(runs.id, runId));
+  return run?.judgeModelId ?? null;
+}
+
 /**
- * Prise exclusive d'une note par une tâche : seulement si la note attend encore, n'est prise par aucune tâche et que le
- * juge de la série est toujours celui-ci (un recalcul a pu le changer). Renvoie vrai si la note est prise.
+ * Prise exclusive d'une note par une tâche, en une écriture : seulement si la note attend encore, n'est prise par aucune
+ * tâche et que le juge de la série est toujours celui-ci. `stale` : un recalcul a changé le juge (note à reprendre avec
+ * le nouveau) ; `taken` : la note n'est plus à prendre (déjà prise, rendue ou remise en cause).
  */
 export async function claimJudgement(
   conn: DbOrTx,
   input: { runId: string; resultId: string; judgeModelId: string; jobId: string },
-): Promise<boolean> {
-  return withTxRetry(async () => {
-    const [run] = await conn.select({ judgeModelId: runs.judgeModelId }).from(runs).where(eq(runs.id, input.runId));
-    if (run?.judgeModelId !== input.judgeModelId) return false;
-    const res = await conn
+): Promise<'claimed' | 'taken' | 'stale'> {
+  const res = await withTxRetry(() =>
+    conn
       .update(results)
       .set({ judgeClaimedBy: input.jobId })
       .where(
@@ -168,10 +177,30 @@ export async function claimJudgement(
           eq(results.status, 'done'),
           eq(results.scoreStatus, 'pending'),
           isNull(results.judgeClaimedBy),
+          runJudgeIs(input.runId, input.judgeModelId),
         ),
-      );
-    return affectedRows(res) === 1;
-  });
+      ),
+  );
+  if (affectedRows(res) === 1) return 'claimed';
+  return (await currentJudgeId(conn, input.runId)) === input.judgeModelId ? 'taken' : 'stale';
+}
+
+/**
+ * Avant un nouvel appel du juge pour une note déjà prise (nouvelle tentative, réponse illisible) : `held` si la tâche la
+ * tient toujours, note en attente et juge inchangé ; `lost` si un recalcul l'a retirée (rien à faire) ; `stale` si la
+ * prise tient mais que le juge a changé (note à rendre puis à reprendre avec le nouveau juge).
+ */
+export async function holdsJudgement(
+  conn: DbOrTx,
+  input: { runId: string; resultId: string; judgeModelId: string; jobId: string },
+): Promise<'held' | 'lost' | 'stale'> {
+  const [row] = await conn
+    .select({ claimedBy: results.judgeClaimedBy, scoreStatus: results.scoreStatus, judgeModelId: runs.judgeModelId })
+    .from(results)
+    .innerJoin(runs, eq(runs.id, results.runId))
+    .where(eq(results.id, input.resultId));
+  if (!row || row.claimedBy !== input.jobId || row.scoreStatus !== 'pending') return 'lost';
+  return row.judgeModelId === input.judgeModelId ? 'held' : 'stale';
 }
 
 /** Rend la note (toujours en attente) si cette tâche la tient encore ; renvoie vrai si elle a été rendue. */
@@ -194,19 +223,26 @@ export async function resetJudgeClaims(conn: DbOrTx, runId: string): Promise<voi
     .where(and(eq(results.runId, runId), isNotNull(results.judgeClaimedBy)));
 }
 
-/** Notes libres mises en échec d'un coup (juge indisponible), avec la justification donnée. */
-export async function failJudgements(conn: DbOrTx, resultIds: string[], rationale: string): Promise<void> {
-  if (resultIds.length === 0) return;
+/**
+ * Notes libres mises en échec d'un coup (juge indisponible), avec la justification donnée ; seulement si le juge de la
+ * série est toujours celui jugé indisponible (`expectedJudgeId`) : un recalcul a pu en choisir un autre entre-temps.
+ */
+export async function failJudgements(
+  conn: DbOrTx,
+  input: { runId: string; resultIds: string[]; rationale: string; expectedJudgeId: string | null },
+): Promise<void> {
+  if (input.resultIds.length === 0) return;
   await withTxRetry(() =>
     conn
       .update(results)
-      .set({ scoreStatus: 'judge_failed', autoScore: null, judgeRationale: rationale })
+      .set({ scoreStatus: 'judge_failed', autoScore: null, judgeRationale: input.rationale })
       .where(
         and(
-          inArray(results.id, resultIds),
+          inArray(results.id, input.resultIds),
           eq(results.status, 'done'),
           eq(results.scoreStatus, 'pending'),
           isNull(results.judgeClaimedBy),
+          runJudgeIs(input.runId, input.expectedJudgeId),
         ),
       ),
   );
