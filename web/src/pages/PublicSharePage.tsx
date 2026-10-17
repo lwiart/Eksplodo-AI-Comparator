@@ -101,8 +101,9 @@ function ShareContent({ share }: { share: PublicShare }) {
   return (
     <Frame auditUrl={share.auditUrl} printable>
       <section className="relative border-b border-line">
-        <div className="no-print">
-          <ThreeStage factory={fanoutScene} className="opacity-50 lg:opacity-100" fallback={<FanoutFallback className="h-full w-full lg:translate-x-[18%]" />} />
+        {/* Sur petit écran, la gerbe passerait sous le titre et gênerait la lecture : réservée aux grands écrans. */}
+        <div className="no-print hidden lg:block">
+          <ThreeStage factory={fanoutScene} fallback={<FanoutFallback className="h-full w-full lg:translate-x-[18%]" />} />
         </div>
         <div className="relative z-10 mx-auto max-w-[1100px] px-4 py-14 sm:px-8 sm:py-20">
           <div className="max-w-[40rem]">
