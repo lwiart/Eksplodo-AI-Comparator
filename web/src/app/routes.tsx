@@ -9,6 +9,8 @@ import { ModelPage } from '../pages/ModelPage';
 import { ModelsPage } from '../pages/ModelsPage';
 import { ErrorLogPage } from '../pages/admin/ErrorLogPage';
 import { ProvidersPage } from '../pages/admin/ProvidersPage';
+import { TestEditorPage } from '../pages/admin/TestEditorPage';
+import { TestsPage } from '../pages/admin/TestsPage';
 import { UsersPage } from '../pages/admin/UsersPage';
 import { ResetPasswordPage } from '../pages/ResetPasswordPage';
 import { AppShell } from './AppShell';
@@ -62,6 +64,9 @@ export function AppRoutes() {
           <Route element={<RequireRole roles={['admin']} />}>
             <Route path="/admin/utilisateurs" element={<UsersPage />} />
             <Route path="/admin/fournisseurs" element={<ProvidersPage />} />
+            <Route path="/admin/tests" element={<TestsPage />} />
+            <Route path="/admin/tests/nouveau" element={<TestEditorPage />} />
+            <Route path="/admin/tests/:id" element={<TestEditorPage />} />
             <Route path="/admin/erreurs" element={<ErrorLogPage />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />

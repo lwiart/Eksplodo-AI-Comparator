@@ -18,6 +18,7 @@ const EXPLORE: NavItem[] = [
 const ADMIN: NavItem[] = [
   { to: '/admin/utilisateurs', label: 'Utilisateurs', icon: '☻' },
   { to: '/admin/fournisseurs', label: 'Fournisseurs', icon: '⌁' },
+  { to: '/admin/tests', label: 'Tests', icon: '✎' },
   { to: '/admin/erreurs', label: 'Journal des erreurs', icon: '⚠' },
 ];
 
