@@ -133,6 +133,9 @@ function ProviderCard({ provider }: { provider: PublicProvider }) {
             </span>
           ) : null}
           {test.data?.ok === false ? <span className="text-bad">{test.data.message}</span> : null}
+          {test.data?.ok === false && test.data.detail ? (
+            <span className="w-full break-words font-mono text-xs text-mute">Message du fournisseur : {test.data.detail}</span>
+          ) : null}
           {error ? <span className="text-bad">{error}</span> : null}
         </div>
       </Card>

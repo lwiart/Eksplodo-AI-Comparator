@@ -152,6 +152,17 @@ describe('fournisseurs', () => {
     expect(ko.body).not.toContain(KEY);
   });
 
+  test('Tester la connexion : 400 du fournisseur → bad_request avec le message du fournisseur, sans la clé', async () => {
+    const body = JSON.stringify({ type: 'error', error: { type: 'invalid_request_error', message: `Your credit balance is too low (${KEY})` } });
+    const f = fakeFetch({ [`GET ${BASE}/models`]: () => new Response(body, { status: 400 }) });
+    const { post, db } = await setup({ fetch: f });
+    const p = await seedProvider(db, { apiKey: KEY });
+    const ko = await post(`/api/providers/${p.id}/test`);
+    expect(ko.json()).toMatchObject({ ok: false, code: 'bad_request', message: 'Requête refusée par le fournisseur' });
+    expect(ko.json().detail).toMatch(/^Your credit balance is too low/);
+    expect(ko.body).not.toContain(KEY);
+  });
+
   test('Tester la connexion sans clé → ok false key_missing', async () => {
     const { post, db } = await setup({ fetch: fakeFetch({}) });
     const p = await seedProvider(db);

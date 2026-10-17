@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { httpError, thrownError, ProviderError } from '../src/modules/providers/errors.js';
+import { httpError, thrownError, ProviderError, readableDetail } from '../src/modules/providers/errors.js';
 import {
   acceptsTemperature,
   isTemperatureRejection,
@@ -64,4 +64,17 @@ test('rejet de temperature : 400 mentionnant temperature', () => {
   expect(isTemperatureRejection(httpError(400, '{"error":{"message":"unsupported value: temperature"}}', {}, []))).toBe(true);
   expect(isTemperatureRejection(httpError(400, 'autre chose', {}, []))).toBe(false);
   expect(isTemperatureRejection(httpError(500, 'temperature', {}, []))).toBe(false);
+});
+
+test('readableDetail : message des corps JSON Anthropic, OpenAI, Google, sinon texte brut', () => {
+  expect(readableDetail('{"type":"error","error":{"type":"invalid_request_error","message":"Your credit balance is too low"}}')).toBe(
+    'Your credit balance is too low',
+  );
+  expect(readableDetail('{"error":{"message":"Invalid model","code":400}}')).toBe('Invalid model');
+  expect(readableDetail('{"message":"Bad request"}')).toBe('Bad request');
+  expect(readableDetail('"Bad gateway"')).toBe('Bad gateway');
+  expect(readableDetail('  upstream error  ')).toBe('upstream error');
+  expect(readableDetail('{}')).toBe('{}');
+  expect(readableDetail('')).toBe('');
+  expect(readableDetail('x'.repeat(400))).toHaveLength(300);
 });
