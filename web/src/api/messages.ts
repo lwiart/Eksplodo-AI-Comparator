@@ -22,6 +22,8 @@ const MESSAGES: Record<string, string> = {
   too_many_attachments: 'Dix pièces jointes au plus par test.',
   model_unavailable: 'Ce modèle est indisponible (inactif, ou fournisseur sans clé utilisable).',
   unsupported_attachment: 'Ce modèle ne gère pas une des pièces jointes du test.',
+  suite_name_taken: 'Une suite porte déjà ce nom.',
+  test_not_found: 'Un des tests choisis n’existe plus. Rechargez la page.',
   not_found: "Cet élément n'existe plus. Rechargez la page.",
   csrf: 'Votre session a expiré, rechargez la page.',
   internal: "Une erreur inattendue s'est produite. Réessayez dans quelques instants.",

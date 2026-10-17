@@ -171,3 +171,49 @@ export async function startQuickTry(testId: string, modelId: string): Promise<st
 export function getQuickTry(jobId: string): Promise<QuickTryStatus> {
   return apiFetch(`/api/tests/try/${enc(jobId)}`);
 }
+
+// Suites (miroir de server/src/modules/tests/suites.service.ts).
+export type PublicSuiteTest = {
+  id: string;
+  name: string;
+  category: string;
+  scoringMethod: ScoringMethod;
+  archived: boolean;
+  attachmentCount: number;
+};
+export type PublicSuite = {
+  id: string;
+  name: string;
+  description: string | null;
+  tests: PublicSuiteTest[];
+  createdAt: string;
+  updatedAt: string;
+};
+/** `testIds` : les tests de la suite, dans l'ordre voulu (le PUT remplace l'ordre). */
+export type SuiteInput = { name: string; description: string | null; testIds: string[] };
+
+export const SUITES_KEY = ['suites'] as const;
+
+export async function listSuites(): Promise<PublicSuite[]> {
+  return (await apiFetch<{ suites: PublicSuite[] }>('/api/suites')).suites;
+}
+
+export async function getSuite(id: string): Promise<PublicSuite> {
+  return (await apiFetch<{ suite: PublicSuite }>(`/api/suites/${enc(id)}`)).suite;
+}
+
+export async function createSuite(body: SuiteInput): Promise<PublicSuite> {
+  return (await apiFetch<{ suite: PublicSuite }>('/api/suites', { method: 'POST', body })).suite;
+}
+
+export async function updateSuite(id: string, body: SuiteInput): Promise<PublicSuite> {
+  return (await apiFetch<{ suite: PublicSuite }>(`/api/suites/${enc(id)}`, { method: 'PUT', body })).suite;
+}
+
+export async function duplicateSuite(id: string): Promise<PublicSuite> {
+  return (await apiFetch<{ suite: PublicSuite }>(`/api/suites/${enc(id)}/duplicate`, { method: 'POST' })).suite;
+}
+
+export async function deleteSuite(id: string): Promise<void> {
+  await apiFetch(`/api/suites/${enc(id)}`, { method: 'DELETE' });
+}
