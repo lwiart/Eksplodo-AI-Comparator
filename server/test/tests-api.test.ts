@@ -1,10 +1,13 @@
 import { randomUUID } from 'node:crypto';
+import { existsSync } from 'node:fs';
+import { mkdir, rm, writeFile } from 'node:fs/promises';
+import path from 'node:path';
 import { eq } from 'drizzle-orm';
 import { afterEach, expect, test } from 'vitest';
 import { auditLog } from '../src/db/schema/core.js';
 import { runTests, runs } from '../src/db/schema/runs.js';
 import { suiteTests, suites, testAttachments, tests } from '../src/db/schema/tests.js';
-import { buildTestApp, loginAs, seedUser, type TestApp } from './helpers/test-app.js';
+import { buildTestApp, loginAs, seedUser, testConfig, type TestApp } from './helpers/test-app.js';
 
 const PW = 'motdepasse-solide';
 const created: TestApp[] = [];
@@ -173,4 +176,38 @@ test('un Utilisateur reçoit 403 sur toutes les routes /api/tests', async () => 
     t.post(`/api/tests/${id}/restore`, {}, u),
   ]);
   expect(results.map((r) => r.statusCode)).toEqual([403, 403, 403, 403, 403, 403, 403]);
+});
+
+test('supprimer un test efface ses fichiers sous dataDir, jamais un fichier hors de la racine', async () => {
+  const t = await setup();
+  const root = path.resolve(testConfig().dataDir);
+  const id = (await t.post('/api/tests', base)).json().test.id as string;
+  const rel = `attachments/${id}/${randomUUID()}`;
+  await mkdir(path.join(root, 'attachments', id), { recursive: true });
+  await writeFile(path.join(root, rel), 'contenu');
+  const outsideName = `outside-${randomUUID()}.txt`;
+  const outside = path.resolve(root, '..', outsideName);
+  await writeFile(outside, 'à conserver');
+  try {
+    const row = { testId: id, originalName: 'x.png', mime: 'image/png' as const, size: 7, sha256: 'a'.repeat(64) };
+    await t.db.insert(testAttachments).values([
+      { ...row, id: randomUUID(), storagePath: rel },
+      { ...row, id: randomUUID(), storagePath: `../${outsideName}`, deletedAt: new Date() },
+    ]);
+    expect((await t.del(`/api/tests/${id}`)).json()).toEqual({ outcome: 'deleted' });
+    expect(existsSync(path.join(root, rel))).toBe(false);
+    expect(existsSync(path.join(root, 'attachments', id))).toBe(false);
+    expect(existsSync(outside)).toBe(true);
+    expect(await t.db.select().from(testAttachments).where(eq(testAttachments.testId, id))).toHaveLength(0);
+  } finally {
+    await rm(outside, { force: true });
+    await rm(path.join(root, 'attachments', id), { recursive: true, force: true });
+  }
+});
+
+test('modifier ou restaurer un test inconnu → 404', async () => {
+  const t = await setup();
+  const id = randomUUID();
+  expect((await t.put(`/api/tests/${id}`, { ...base, scoringConfig: { mode: 'exact', expected: 'x' } })).statusCode).toBe(404);
+  expect((await t.post(`/api/tests/${id}/restore`)).statusCode).toBe(404);
 });
