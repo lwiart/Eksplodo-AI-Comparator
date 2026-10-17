@@ -126,6 +126,11 @@ export function registerCatalogRoutes(app: FastifyInstance, service: CatalogServ
     return { model: await service.getModel(req.actor!, id) };
   });
 
+  app.get('/api/models/:id/stats', connected, async (req) => {
+    const { id } = idParams.parse(req.params);
+    return { stats: await service.modelStats(req.actor!, id) };
+  });
+
   app.post('/api/models', admin, async (req, reply) => {
     const body = createModelBody.parse(req.body);
     return reply.status(201).send({ model: await service.createModel(req.actor!, body) });

@@ -12,6 +12,7 @@ import { ProviderError } from '../providers/errors.js';
 import { KeyMissingError, KeyUnreadableError, sealApiKey, type KeyState, type Registry } from '../providers/registry.js';
 import type { RemoteModel } from '../providers/types.js';
 import { KNOWN_PRICES } from './known-prices.js';
+import { computeModelStats, type ModelStats } from './model-stats.js';
 import { createModelsRepo, type ModelPatch, type ModelRow } from './models.repo.js';
 import { createProvidersRepo, type ProviderPatch, type ProviderRow } from './providers.repo.js';
 
@@ -315,6 +316,12 @@ export function createCatalogService(deps: CatalogServiceDeps) {
       if (!m || (!isAdmin(actor) && !m.enabled)) throw modelNotFound();
       const p = await requireProvider(m.providerId);
       return { ...publicModel(m, p), provider: await providerView(p, actor) };
+    },
+
+    /** Chiffres de la fiche modèle : mêmes règles de visibilité que `getModel`. */
+    async modelStats(actor: Actor, id: string): Promise<ModelStats> {
+      await this.getModel(actor, id);
+      return computeModelStats(db, id);
     },
 
     async createModel(actor: Actor, input: ModelInput): Promise<PublicModel> {

@@ -1,4 +1,4 @@
-import { and, asc, eq, sql, type SQL } from 'drizzle-orm';
+import { and, asc, eq, inArray, sql, type SQL } from 'drizzle-orm';
 import type { Db } from '../../db/client.js';
 import { models, providers } from '../../db/schema/catalog.js';
 import { results, runModels, runTests, runs } from '../../db/schema/runs.js';
@@ -7,7 +7,7 @@ import type { Actor } from '../auth/actor.js';
 import type { ResultStatus } from '../runs/runs.repo.js';
 import { maskHiddenRow, resultRowOf, type ResultRow, type Weights } from '../runs/runs.service.js';
 import type { ScoringMethod } from '../tests/scoring-config.js';
-import { aggregateRun, rankModels, type ModelAggregate } from './aggregate.js';
+import { aggregateRun, rankModels, type AggregateInputRow, type ModelAggregate } from './aggregate.js';
 import { csvDocument, csvFileName, type CsvValue } from './csv.js';
 import { incompleteManualQuestions } from './manual.service.js';
 import { finalScore } from './override.js';
@@ -83,6 +83,29 @@ const CSV_HEADER = [
 
 /** Cellule « réponse » d'une question manuelle que le compte n'a pas encore notée. */
 const HIDDEN_RESPONSE = "(masquée jusqu'à notation)";
+
+/** Résultats de plusieurs séries réduits à ce que l'agrégation lit (une seule requête), avec la série d'origine. */
+export async function loadAggregateRows(db: Db, runIds: string[]): Promise<(AggregateInputRow & { runId: string })[]> {
+  if (runIds.length === 0) return [];
+  return db
+    .select({
+      runId: results.runId,
+      modelId: results.modelId,
+      runTestId: results.runTestId,
+      category: snapshotCategory,
+      scoringMethod: snapshotMethod,
+      status: results.status,
+      overrideScore: results.overrideScore,
+      autoScore: results.autoScore,
+      manualAvg,
+      ttftMs: results.ttftMs,
+      tokensPerS: results.tokensPerS,
+      costUsd: results.costUsd,
+    })
+    .from(results)
+    .innerJoin(runTests, eq(runTests.id, results.runTestId))
+    .where(inArray(results.runId, runIds));
+}
 
 const runNotFound = () => new NotFoundError('Série introuvable');
 
@@ -160,23 +183,7 @@ export function createResultsService(deps: { db: Db }) {
     async ranking(runId: string): Promise<Ranking> {
       const [run, rows, modelRows, categoryRows] = await Promise.all([
         requireRun(runId),
-        db
-          .select({
-            modelId: results.modelId,
-            runTestId: results.runTestId,
-            category: snapshotCategory,
-            scoringMethod: snapshotMethod,
-            status: results.status,
-            overrideScore: results.overrideScore,
-            autoScore: results.autoScore,
-            manualAvg,
-            ttftMs: results.ttftMs,
-            tokensPerS: results.tokensPerS,
-            costUsd: results.costUsd,
-          })
-          .from(results)
-          .innerJoin(runTests, eq(runTests.id, results.runTestId))
-          .where(eq(results.runId, runId)),
+        loadAggregateRows(db, [runId]),
         db
           .select({ modelId: runModels.modelId, name: models.displayName, color: models.color, providerName: providers.name })
           .from(runModels)
