@@ -1,0 +1,187 @@
+import { useQuery } from '@tanstack/react-query';
+import { useEffect, useMemo, type ReactNode } from 'react';
+import { useParams } from 'react-router-dom';
+import { ApiError } from '../api/client';
+import { getPublicShare, type PublicShare } from '../api/public-share';
+import { messageForError } from '../api/messages';
+import { Card } from '../components/ui/Card';
+import { CategoryChart } from '../components/results/CategoryChart';
+import { Podium } from '../components/results/Podium';
+import { QualitySpeedChart } from '../components/results/QualitySpeedChart';
+import { RankingTable } from '../components/results/RankingTable';
+import { PublicResponses } from '../components/sharing/PublicResponses';
+import { VerdictCards } from '../components/sharing/VerdictCards';
+import type { RankedRow } from '../lib/ranking';
+import { FanoutFallback } from '../three/FanoutFallback';
+import { fanoutScene } from '../three/fanout-scene';
+import { ThreeStage } from '../three/ThreeStage';
+
+/** Nombre de modèles tracés dans les graphes (les mieux classés). */
+const CHART_MODELS = 6;
+
+const monthYear = (iso: string | null): string | null =>
+  iso ? new Date(iso).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' }) : null;
+
+function Brand() {
+  return (
+    <div className="flex items-center gap-3 text-white">
+      <img src="/logo-icon-white.png" alt="" className="logo-glow block h-9 w-auto" />
+      <span className="font-mono text-[19px] leading-tight font-semibold">
+        Eksplodo
+        <small className="block font-mono text-[10px] font-semibold tracking-[0.08em] text-mute">COMPARATEUR IA</small>
+      </span>
+    </div>
+  );
+}
+
+function AuditButton({ url }: { url: string }) {
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="inline-flex items-center justify-center rounded-full bg-gradient-to-r from-orange to-orange-soft px-5 py-2.5 text-[13px] font-semibold text-white no-underline shadow-[0_8px_24px_-8px_rgba(240,99,31,0.7)] hover:brightness-110 print:hidden"
+    >
+      Audit gratuit
+    </a>
+  );
+}
+
+/** Cadre commun (en-tête, bouton) des états chargement, erreur et page complète. */
+function Frame({ children, auditUrl }: { children: ReactNode; auditUrl?: string }) {
+  return (
+    <div className="min-h-screen overflow-x-hidden">
+      <header className="flex items-center justify-between gap-3 border-b border-line px-4 py-4 sm:px-8">
+        <Brand />
+        {auditUrl ? <AuditButton url={auditUrl} /> : null}
+      </header>
+      {children}
+    </div>
+  );
+}
+
+function Notice({ title, text }: { title: string; text?: string }) {
+  return (
+    <main className="mx-auto flex max-w-xl flex-col items-center gap-3 px-4 py-24 text-center">
+      <h1 className="m-0 font-display text-3xl font-extrabold text-white">{title}</h1>
+      {text ? <p className="m-0 text-sm text-mute">{text}</p> : null}
+    </main>
+  );
+}
+
+function ShareContent({ share }: { share: PublicShare }) {
+  // Rang et score global viennent du serveur : avec les coûts masqués, un recalcul donnerait un autre score.
+  const rows: RankedRow[] = useMemo(() => share.models.map((model) => ({ model, rank: model.rank, global: model.global })), [share.models]);
+  const chartModels = useMemo(() => share.models.slice(0, CHART_MODELS), [share.models]);
+  const { run } = share;
+  const date = monthYear(run.completedAt);
+  const plural = run.modelCount > 1 ? 's' : '';
+  const facts = [
+    `${run.modelCount} modèle${plural} testé${plural} sur ${run.testCount} cas`,
+    run.judgeName ? `notés par un juge IA (${run.judgeName})` : null,
+    share.showCosts && run.totalCostUsd !== null ? `coût total de la série : ${run.totalCostUsd.toLocaleString('fr-FR', { maximumFractionDigits: 4 })} $` : null,
+  ].filter((f): f is string => f !== null);
+
+  return (
+    <Frame auditUrl={share.auditUrl}>
+      <section className="relative border-b border-line print:border-0">
+        <div className="print:hidden">
+          <ThreeStage factory={fanoutScene} className="opacity-50 lg:opacity-100" fallback={<FanoutFallback className="h-full w-full lg:translate-x-[18%]" />} />
+        </div>
+        <div className="relative z-10 mx-auto max-w-[1100px] px-4 py-14 sm:px-8 sm:py-20">
+          <div className="max-w-[40rem]">
+            {date ? (
+              <span className="inline-block rounded-full border border-orange/50 bg-orange/10 px-3 py-1 font-mono text-[11px] font-semibold text-peach">Résultats de {date}</span>
+            ) : null}
+            <h1 className="mt-3.5 mb-0 font-display text-3xl leading-[1.1] font-extrabold tracking-[-0.01em] text-white sm:text-5xl">{share.title}</h1>
+            {share.intro ? <p className="mt-4 mb-0 text-[15px] leading-relaxed whitespace-pre-line text-[#b9d4e1]">{share.intro}</p> : null}
+            <p className="mt-4 mb-0 font-mono text-xs text-mute">{facts.join(' · ')}</p>
+          </div>
+        </div>
+      </section>
+
+      <main className="mx-auto flex max-w-[1100px] flex-col gap-5 px-4 py-6 pb-16 sm:px-8">
+        <VerdictCards verdicts={share.verdicts} />
+        <Card className="flex flex-col gap-4">
+          <h2 className="m-0 font-display text-base font-bold text-white">
+            Podium <span className="ml-1 font-mono text-[11px] font-medium text-mute">score global pondéré</span>
+          </h2>
+          <Podium rows={rows} />
+        </Card>
+        {rows.length > CHART_MODELS ? (
+          <p className="m-0 text-xs text-mute">
+            Graphes : {CHART_MODELS} premiers modèles sur {rows.length}.
+          </p>
+        ) : null}
+        <div className="grid gap-4 lg:grid-cols-2">
+          <Card className="min-w-0">
+            <h2 className="m-0 mb-2 font-display text-sm font-bold text-white">
+              Qualité et vitesse <span className="ml-1 font-mono text-[11px] font-medium text-mute">en haut à droite : idéal</span>
+            </h2>
+            <QualitySpeedChart models={chartModels} />
+          </Card>
+          <Card className="min-w-0">
+            <h2 className="m-0 mb-2 font-display text-sm font-bold text-white">
+              Par catégorie <span className="ml-1 font-mono text-[11px] font-medium text-mute">qualité moyenne sur 10</span>
+            </h2>
+            <CategoryChart models={chartModels} categories={share.categories} />
+          </Card>
+        </div>
+        <RankingTable rows={rows} judgeName={run.judgeName} hideCosts={!share.showCosts} />
+        {share.responses ? <PublicResponses responses={share.responses} models={share.models} /> : null}
+        <div className="flex flex-col items-center gap-3 pt-6 text-center print:hidden">
+          <p className="m-0 max-w-md text-sm text-ink">Quel modèle pour vos propres usages ? Nous faisons passer ce banc d'essai à vos cas réels.</p>
+          <AuditButton url={share.auditUrl} />
+        </div>
+      </main>
+    </Frame>
+  );
+}
+
+/** Page publique d'un lien de partage : lecture seule, sans session ni menu, une seule requête `GET /share/:token`. */
+export default function PublicSharePage() {
+  const { token = '' } = useParams();
+  const { data, error, isPending } = useQuery({
+    queryKey: ['public-share', token],
+    queryFn: () => getPublicShare(token),
+    retry: false,
+    refetchOnWindowFocus: false,
+  });
+
+  // Page à ne pas indexer : le lien est privé.
+  useEffect(() => {
+    const meta = document.createElement('meta');
+    meta.name = 'robots';
+    meta.content = 'noindex, nofollow';
+    document.head.appendChild(meta);
+    return () => meta.remove();
+  }, []);
+  useEffect(() => {
+    if (data) document.title = `${data.title} · Eksplodo`;
+  }, [data]);
+
+  if (isPending) {
+    return (
+      <Frame>
+        <div role="status" className="py-24 text-center text-sm text-mute">
+          Chargement des résultats…
+        </div>
+      </Frame>
+    );
+  }
+  if (error) {
+    const status = error instanceof ApiError ? error.status : 0;
+    return (
+      <Frame>
+        {status === 404 ? (
+          <Notice title="Ce lien n'existe pas ou a été désactivé" text="Demandez à la personne qui vous l'a transmis un lien à jour." />
+        ) : status === 429 ? (
+          <Notice title="Trop de consultations, réessayez dans une minute" />
+        ) : (
+          <Notice title="Les résultats sont indisponibles" text={messageForError(error)} />
+        )}
+      </Frame>
+    );
+  }
+  return <ShareContent share={data} />;
+}

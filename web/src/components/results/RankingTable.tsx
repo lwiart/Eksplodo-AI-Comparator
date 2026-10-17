@@ -6,8 +6,8 @@ import { DASH, costPerAnswer, reliabilityPercent, score, tokensPerSecond } from 
 
 const TH = 'px-4 py-3 font-medium';
 
-/** Classement détaillé : rang, score global et mesures par modèle ; « — » pour une valeur nulle. */
-export function RankingTable({ rows, judgeName }: { rows: RankedRow[]; judgeName?: string | null }) {
+/** Classement détaillé : rang, score global et mesures par modèle ; « — » pour une valeur nulle ; `hideCosts` retire la colonne coût. */
+export function RankingTable({ rows, judgeName, hideCosts = false }: { rows: RankedRow[]; judgeName?: string | null; hideCosts?: boolean }) {
   const headingId = useId();
   return (
     <Card className="p-0">
@@ -29,7 +29,7 @@ export function RankingTable({ rows, judgeName }: { rows: RankedRow[]; judgeName
               <th scope="col" className={`${TH} text-right`}>Qualité</th>
               <th scope="col" className={`${TH} text-right`}>Premier token médian</th>
               <th scope="col" className={`${TH} text-right`}>Débit médian</th>
-              <th scope="col" className={`${TH} text-right`}>Coût moyen</th>
+              {hideCosts ? null : <th scope="col" className={`${TH} text-right`}>Coût moyen</th>}
               <th scope="col" className={`${TH} text-right`}>Fiabilité</th>
             </tr>
           </thead>
@@ -57,7 +57,7 @@ export function RankingTable({ rows, judgeName }: { rows: RankedRow[]; judgeName
                 <td className="px-4 py-3 text-right font-mono text-xs text-ink">{score(m.quality)}</td>
                 <td className="px-4 py-3 text-right font-mono text-xs text-ink">{m.raw.medianTtftMs === null ? DASH : formatDuration(m.raw.medianTtftMs)}</td>
                 <td className="px-4 py-3 text-right font-mono text-xs text-ink">{tokensPerSecond(m.raw.medianTokensPerS)}</td>
-                <td className="px-4 py-3 text-right font-mono text-xs text-ink">{costPerAnswer(m.raw.meanCostUsd)}</td>
+                {hideCosts ? null : <td className="px-4 py-3 text-right font-mono text-xs text-ink">{costPerAnswer(m.raw.meanCostUsd)}</td>}
                 <td className="px-4 py-3 text-right font-mono text-xs text-ink">{reliabilityPercent(m.reliability)}</td>
               </tr>
             ))}

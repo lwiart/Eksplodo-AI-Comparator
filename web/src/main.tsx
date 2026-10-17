@@ -3,8 +3,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import { applyAnimationsPreference, getAnimationsPreference } from './app/preferences';
-import { AppRoutes } from './app/routes';
-import { AuthProvider } from './auth/AuthProvider';
+import { RootRoutes } from './app/RootRoutes';
 import './theme/theme.css';
 
 const queryClient = new QueryClient({
@@ -20,9 +19,7 @@ createRoot(root).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
-        <AuthProvider>
-          <AppRoutes />
-        </AuthProvider>
+        <RootRoutes />
       </BrowserRouter>
     </QueryClientProvider>
   </StrictMode>,

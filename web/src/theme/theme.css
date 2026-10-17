@@ -141,3 +141,15 @@ html[data-animations="off"] .ticker-track {
   .reveal-in { animation: none; }
 }
 html[data-animations="off"] .reveal-in { animation: none; }
+
+/* Version imprimable (PDF du navigateur) : conserve le fond « Nuit » ; la 3D et les boutons sont masqués par `print:hidden`. */
+@media print {
+  html,
+  body {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .card-surface {
+    break-inside: avoid;
+  }
+}
