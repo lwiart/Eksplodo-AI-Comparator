@@ -80,3 +80,10 @@ test('six modèles ou moins : pas de mention', () => {
   renderView(false);
   expect(screen.queryByText(/premiers modèles sur/)).toBeNull();
 });
+
+test('constellation : repli SVG sans WebGL, un astre et une entrée de légende par modèle', () => {
+  renderView(false);
+  expect(screen.getAllByTestId('constellation-astre')).toHaveLength(MODELS.length);
+  const legend = within(screen.getByRole('list', { name: 'Légende de la constellation' }));
+  expect(legend.getAllByRole('listitem').map((li) => li.textContent)).toEqual(['Alpha', 'Bravo', 'Charlie', 'Delta']);
+});
