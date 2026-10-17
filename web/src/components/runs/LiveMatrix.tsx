@@ -60,7 +60,9 @@ export function LiveMatrix({ matrix, models }: Pick<RunProgress, 'matrix' | 'mod
         <table aria-labelledby={headingId} className="w-full border-collapse text-xs">
           <thead>
             <tr>
-              <td className="w-px" />
+              <th scope="col" className="w-px">
+                <span className="sr-only">Test</span>
+              </th>
               {models.map((m) => (
                 <th key={m.id} scope="col" className="px-1.5 pb-2 text-left font-medium text-ink">
                   <span className="flex max-w-36 items-center gap-1.5">

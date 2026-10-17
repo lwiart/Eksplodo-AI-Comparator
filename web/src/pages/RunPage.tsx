@@ -19,9 +19,12 @@ import { RUN_STATUS_LABELS, RunStatusChip, finishedCalls } from './RunsPage';
 const POLL_MS = 2000;
 const ACTIVE: readonly RunStatus[] = ['queued', 'running', 'paused'];
 
-/** Interrogation seulement pendant la série et onglet visible ; au retour sur l'onglet, react-query relance une requête. */
+/**
+ * Interrogation seulement pendant la série. Onglet caché, react-query saute les échéances (`refetchIntervalInBackground`
+ * est faux par défaut) sans arrêter le minuteur ; au retour, `refetchOnWindowFocus: 'always'` relance aussitôt une requête.
+ */
 export function pollInterval(status: RunStatus | undefined): number | false {
-  return status !== undefined && ACTIVE.includes(status) && document.visibilityState !== 'hidden' ? POLL_MS : false;
+  return status !== undefined && ACTIVE.includes(status) ? POLL_MS : false;
 }
 
 function Facts({ run, progress }: { run: RunSummary; progress: RunProgress | undefined }) {
@@ -143,6 +146,8 @@ export function RunPage() {
     queryKey: [...RUNS_KEY, id, 'progress'],
     queryFn: () => getRunProgress(id),
     refetchInterval: (query) => pollInterval(query.state.data?.status),
+    // Désactivé globalement (main.tsx) : ici, le retour sur l'onglet doit rafraîchir l'avancement.
+    refetchOnWindowFocus: 'always',
   });
 
   const status = progress.data?.status ?? run.data?.status;

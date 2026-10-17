@@ -57,10 +57,7 @@ function AddModelsDialog({ open, onOpenChange, runModelIds, onAdd, pending, erro
   return (
     <Dialog
       open={open}
-      onOpenChange={(o) => {
-        if (!o) setPicked([]);
-        onOpenChange(o);
-      }}
+      onOpenChange={onOpenChange}
       title="Ajouter un modèle"
       description="Le modèle passe tous les tests de la série ; la série reprend aussitôt."
     >
@@ -200,14 +197,17 @@ export function RunControls({ runId, progress }: { runId: string; progress: RunP
         </p>
       ) : null}
 
-      <AddModelsDialog
-        open={adding}
-        onOpenChange={setAdding}
-        runModelIds={progress.models.map((m) => m.id)}
-        pending={busy}
-        error={action.isError ? controlError(action.error) : null}
-        onAdd={(ids) => action.mutate(() => addRunModels(runId, ids))}
-      />
+      {/* Monté seulement ouvert : chaque ouverture repart d'une sélection vide (pas d'identifiants périmés). */}
+      {adding ? (
+        <AddModelsDialog
+          open
+          onOpenChange={setAdding}
+          runModelIds={progress.models.map((m) => m.id)}
+          pending={busy}
+          error={action.isError ? controlError(action.error) : null}
+          onAdd={(ids) => action.mutate(() => addRunModels(runId, ids))}
+        />
+      ) : null}
     </div>
   );
 }

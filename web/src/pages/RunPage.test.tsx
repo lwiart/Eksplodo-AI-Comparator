@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, render, screen, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
@@ -109,13 +109,21 @@ const CATALOG = [
 
 let progressQueue: unknown[];
 let summary: Record<string, unknown>;
+/** Si défini, la prochaine réponse de l'avancement attend cette promesse (requête encore en vol). */
+let holdProgress: Promise<void> | null;
 beforeEach(() => {
   progressQueue = [];
   summary = SUMMARY;
+  holdProgress = null;
   apiFetch.mockReset();
   apiFetch.mockImplementation((path: string, init?: { method?: string }) => {
     if (path === '/api/runs/r1' && !init) return Promise.resolve({ run: summary });
-    if (path === '/api/runs/r1/progress') return Promise.resolve({ progress: progressQueue.length > 1 ? progressQueue.shift() : progressQueue[0] });
+    if (path === '/api/runs/r1/progress') {
+      const progress = progressQueue.length > 1 ? progressQueue.shift() : progressQueue[0];
+      const hold = holdProgress;
+      holdProgress = null;
+      return hold ? hold.then(() => ({ progress })) : Promise.resolve({ progress });
+    }
     if (path === '/api/runs/r1/results') return Promise.resolve({ results: RESULTS });
     if (path === '/api/models') return Promise.resolve({ models: CATALOG });
     if (init?.method) return Promise.resolve({ run: summary });
@@ -131,7 +139,7 @@ function renderPage(role: Role = 'admin', ...progress: unknown[]) {
   progressQueue = progress.length > 0 ? progress : [PROGRESS];
   const user: PublicUser = { id: 'u1', email: 'a@example.test', name: 'Laurent', role };
   render(
-    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false, refetchOnWindowFocus: false } } })}>
       <AuthContext.Provider value={{ user, loading: false, login: vi.fn(), logout: vi.fn(), refresh: vi.fn() }}>
         <MemoryRouter initialEntries={['/series/r1']}>
           <Routes>
@@ -169,6 +177,7 @@ test('vue en direct : progression, matrice test × modèle, fil d’activité', 
   expect(screen.getByText('≈ 2 min 5 s')).toBeInTheDocument();
 
   const matrix = within(screen.getByRole('table', { name: 'Progression par test et par modèle' }));
+  expect(matrix.getByRole('columnheader', { name: 'Test' })).toBeInTheDocument();
   expect(matrix.getByRole('columnheader', { name: 'Claude Opus' })).toBeInTheDocument();
   expect(matrix.getByRole('columnheader', { name: 'GPT Test' })).toBeInTheDocument();
   expect(matrix.getByRole('rowheader', { name: 'Traduire' })).toBeInTheDocument();
@@ -219,6 +228,39 @@ test('onglet caché : pas d’interrogation, une requête au retour', async () =
   expect(progressCalls()).toBe(2);
 });
 
+const setVisibility = (state: 'hidden' | 'visible') => {
+  Object.defineProperty(document, 'visibilityState', { configurable: true, value: state });
+  act(() => {
+    document.dispatchEvent(new Event('visibilitychange', { bubbles: true }));
+  });
+};
+
+test('requête terminée onglet caché : l’interrogation reprend au retour sur l’onglet', async () => {
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+  renderPage();
+  await screen.findByRole('progressbar', { name: 'Avancement' });
+  let release!: () => void;
+  holdProgress = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await tick(2000);
+  expect(progressCalls()).toBe(2); // requête en vol
+  setVisibility('hidden');
+  await act(async () => {
+    release();
+    await Promise.resolve();
+  });
+  await tick(10_000);
+  expect(progressCalls()).toBe(2);
+  setVisibility('visible');
+  await tick(100);
+  expect(progressCalls()).toBe(3);
+  await tick(2000);
+  expect(progressCalls()).toBe(4);
+  await tick(2000);
+  expect(progressCalls()).toBe(5);
+});
+
 test('pause budget : message et champ de plafond ; reprendre envoie PATCH puis resume', async () => {
   const user = userEvent.setup();
   summary = { ...SUMMARY, status: 'paused', pauseReason: 'budget', modelsCostUsd: 1, budgetUsd: 1 };
@@ -261,6 +303,13 @@ test('Admin : mettre en pause, relancer les erreurs, ajouter un modèle disponib
   await user.click(await dialog.findByRole('checkbox', { name: /Mistral Large/ }));
   await user.click(dialog.getByRole('button', { name: 'Ajouter à la série' }));
   expect(apiFetch).toHaveBeenCalledWith('/api/runs/r1/models', { method: 'POST', body: { modelIds: ['m3'] } });
+
+  // Rouvert après l'ajout : aucune sélection héritée.
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  await user.click(screen.getByRole('button', { name: 'Ajouter un modèle' }));
+  const again = within(await screen.findByRole('dialog', { name: 'Ajouter un modèle' }));
+  expect(await again.findByRole('checkbox', { name: /Mistral Large/ })).not.toBeChecked();
+  expect(again.getByRole('button', { name: 'Ajouter à la série' })).toBeDisabled();
 });
 
 test('Utilisateur : aucun bouton de contrôle', async () => {
