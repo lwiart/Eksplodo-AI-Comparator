@@ -16,6 +16,16 @@ npm install
 npm run dev              # API sur :3000 + Vite sur :5173 (proxy /api, /internal, /health vers l'API)
 ```
 
+Dans `.env`, renseigner `APP_ENCRYPTION_KEY` (clé maîtresse qui chiffre les clés des fournisseurs ; obligatoire, sans elle l'application ne démarre pas) :
+
+```
+node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+```
+
+Ajouter aussi `AIC_FAKE_LLM=1` pour travailler sans appel réel : un faux fournisseur répond à la place des fournisseurs (ignoré en production).
+
+Les clés API des fournisseurs ne se mettent pas dans `.env` : elles se saisissent dans l'écran **Fournisseurs** (Admin) et sont enregistrées chiffrées en base.
+
 Le développement lit `.env`. Pour l'aperçu dans Claude Code, `.claude/launch.json` définit deux configurations séparées : `comparateur-api` (API, port 3000) et `comparateur-web` (Vite, port 5173).
 
 ## Commandes

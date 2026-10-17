@@ -39,6 +39,10 @@ Les clés des fournisseurs se saisissent **dans l'application**, pas dans hPanel
 
 Fournisseurs préconfigurés à la première installation, sans clé : OpenRouter, OpenAI, Anthropic, Google, Mistral, DeepSeek, Requesty et Eden AI. On peut en ajouter d'autres (type compatible OpenAI, Anthropic ou Google).
 
+États d'une clé sur l'écran Fournisseurs : « Clé enregistrée », « Clé manquante » ou « Clé illisible ». « Tester la connexion » vérifie la clé enregistrée.
+
+Le catalogue OpenRouter (modèles et prix) est resynchronisé chaque jour à 06:00 (heure de Paris) par la tâche planifiée `catalog_refresh`, déclenchée par le planificateur interne ou par le cron ci-dessous.
+
 « Clé illisible » sur un fournisseur : `APP_ENCRYPTION_KEY` a changé depuis l'enregistrement de la clé ; la ressaisir.
 
 `AIC_FAKE_LLM=1` (faux fournisseur, sans appel réel) sert au développement local et n'a aucun effet en production.
@@ -50,7 +54,7 @@ Tant que le dépôt GitHub n'est pas branché dans hPanel, le déploiement se fa
 1. `git archive --format=zip -o app.zip HEAD` (seuls les fichiers commités sont inclus).
 2. Envoyer `app.zip` dans `public_html` (gestionnaire de fichiers hPanel, ou envoi TUS via l'API `hosting_files_generate-upload-url`). **L'archive est consommée par chaque build : la renvoyer avant chaque nouveau build.**
 3. Lancer le build : Node 24, type `fastify`, script `build`, fichier d'entrée `dist/server/index.js`, dossier de sortie `.`.
-4. Vérifier : `https://ia.eksplodo.fr/health` → `{"status":"ok","db":"ok","worker":"running"}`, puis la page de connexion.
+4. Vérifier : `https://ia.eksplodo.fr/health` → `{"status":"ok","db":"ok","worker":"running","providers":{"configured":N}}` (`N` : nombre de fournisseurs activés dont la clé est utilisable), puis la page de connexion.
 
 Plus tard (recommandé) : brancher GitHub dans hPanel (Sites web → Gérer → Avancé → Git) pour un déploiement automatique.
 
