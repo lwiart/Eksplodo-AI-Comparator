@@ -1,18 +1,13 @@
 import { useRef, useState, type DragEvent } from 'react';
 import { messageForError, messageFor } from '../../api/messages';
 import { attachmentDownloadUrl, deleteAttachment, uploadAttachment, type PublicAttachment } from '../../api/tests';
-import { formatNumber } from '../catalog/format';
+import { formatSize } from '../../lib/format';
 import { Button } from '../ui/Button';
 
 const MAX_BYTES = 10 * 1024 * 1024;
 const ACCEPT = 'image/png,image/jpeg,image/webp,application/pdf';
 
 type Upload = { key: number; name: string; progress: number; error: string | null };
-
-export function formatSize(bytes: number): string {
-  if (bytes >= 1024 * 1024) return `${formatNumber(Math.round((bytes / (1024 * 1024)) * 10) / 10)} Mo`;
-  return `${formatNumber(Math.max(1, Math.round(bytes / 1024)))} Ko`;
-}
 
 type Props = {
   testId: string;

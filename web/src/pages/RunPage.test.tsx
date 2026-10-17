@@ -46,6 +46,7 @@ const PROGRESS = {
   modelsCostUsd: 2.41,
   judgeCostUsd: 0,
   budgetUsd: 5,
+  nextCallMaxCostUsd: null,
   startedAt: '2026-10-17T12:30:02.000Z',
   elapsedMs: 60_000,
   etaSeconds: 125,
@@ -264,15 +265,23 @@ test('requête terminée onglet caché : l’interrogation reprend au retour sur
 test('pause budget : message et champ de plafond ; reprendre envoie PATCH puis resume', async () => {
   const user = userEvent.setup();
   summary = { ...SUMMARY, status: 'paused', pauseReason: 'budget', modelsCostUsd: 1, budgetUsd: 1 };
-  renderPage('admin', { ...PROGRESS, status: 'paused', pauseReason: 'budget', modelsCostUsd: 1, budgetUsd: 1, running: [] });
+  // Prochain appel (le moins cher en attente) : 0,2345 $ au plus → minimum utile 1,2345 $ (jamais arrondi en dessous).
+  renderPage('admin', { ...PROGRESS, status: 'paused', pauseReason: 'budget', modelsCostUsd: 1, budgetUsd: 1, nextCallMaxCostUsd: 0.2345, running: [] });
   expect(await screen.findByText(/Plafond atteint/)).toHaveTextContent('1,00 $');
   const field = screen.getByLabelText('Nouveau plafond en $');
+  expect(field).toHaveAccessibleDescription('Au moins 1,2345 $ pour lancer un appel de plus.');
   const submit = screen.getByRole('button', { name: 'Relever le plafond et reprendre' });
   expect(submit).toBeDisabled();
   expect(screen.queryByRole('button', { name: 'Reprendre' })).toBeNull();
   await user.type(field, '0,9');
-  expect(screen.getByText(/supérieur à la dépense/)).toBeInTheDocument();
+  expect(screen.getByText('Saisissez au moins 1,2345 $ pour lancer un appel de plus.')).toBeInTheDocument();
   expect(submit).toBeDisabled();
+  await user.clear(field);
+  await user.type(field, '1,2344');
+  expect(submit).toBeDisabled();
+  await user.clear(field);
+  await user.type(field, '1,2345');
+  expect(submit).toBeEnabled();
   await user.clear(field);
   await user.type(field, '2,12345');
   expect(submit).toBeDisabled();

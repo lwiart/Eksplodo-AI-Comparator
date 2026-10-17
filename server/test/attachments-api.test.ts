@@ -6,7 +6,7 @@ import path from 'node:path';
 import { eq } from 'drizzle-orm';
 import { afterEach, expect, test } from 'vitest';
 import { runTests, runs } from '../src/db/schema/runs.js';
-import { testAttachments } from '../src/db/schema/tests.js';
+import { testAttachments, tests } from '../src/db/schema/tests.js';
 import { MAX_ATTACHMENT_BYTES, readAttachment } from '../src/modules/tests/attachments.js';
 import { buildTestApp, loginAs, seedUser, type TestApp } from './helpers/test-app.js';
 
@@ -122,6 +122,16 @@ test('onzième pièce jointe → 409', async () => {
 test('test inconnu → 404', async () => {
   const t = await setup();
   expect((await t.upload(PNG, 'a.png', t.admin, randomUUID())).statusCode).toBe(404);
+});
+
+test('test archivé → 409 test_archived, aucune ligne ni fichier', async () => {
+  const t = await setup();
+  await t.db.update(tests).set({ archivedAt: new Date() }).where(eq(tests.id, t.testId));
+  const res = await t.upload(PNG, 'a.png');
+  expect(res.statusCode).toBe(409);
+  expect(res.json().error.code).toBe('test_archived');
+  expect(await t.db.select().from(testAttachments)).toHaveLength(0);
+  expect(existsSync(path.join(t.dataDir, 'attachments', t.testId)) ? await readdir(path.join(t.dataDir, 'attachments', t.testId)) : []).toEqual([]);
 });
 
 test('téléchargement : en-têtes attachment et nosniff', async () => {

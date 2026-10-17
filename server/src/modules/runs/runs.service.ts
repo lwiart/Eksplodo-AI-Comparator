@@ -14,7 +14,7 @@ import type { Registry } from '../providers/registry.js';
 import type { PublicTest } from '../tests/tests.service.js';
 import type { TestRow } from '../tests/tests.repo.js';
 import { roundUsd } from './engine.js';
-import { estimateRun, isSupported, type ModelForEstimate, type RunEstimate } from './estimate.js';
+import { estimateRun, isSupported, maxCallCostUsd, type ModelForEstimate, type RunEstimate } from './estimate.js';
 import { ACTIVITY_LIMIT, buildProgress, countsOf, type RunProgress, type StatusCounts } from './progress.js';
 import { enqueueRunJob, withTxRetry } from './run-job.js';
 import { createRunsRepo, type ResultStatus, type RunRow } from './runs.repo.js';
@@ -23,6 +23,9 @@ import { snapshotOf, type TestSnapshot } from './snapshot.js';
 export type Weights = RunWeights;
 
 export const DEFAULT_WEIGHTS: Weights = { quality: 50, speed: 20, cost: 20, reliability: 10 };
+
+/** Appels au plus dans une série (tests × modèles × répétitions). */
+export const MAX_RUN_CALLS = 5_000;
 
 export type RunInput = {
   name: string;
@@ -105,8 +108,31 @@ const modelUnavailable = () =>
 const judgeRequired = () => new ValidationError('judge_required', 'Un modèle juge est requis : la sélection contient des tests notés par le juge');
 const runNotActive = () => new ConflictError('run_not_active', 'La série n\'est pas en cours : rien à mettre en pause');
 const runNotPaused = () => new ConflictError('run_not_paused', 'La série n\'est ni en pause ni interrompue');
+const runTooLarge = () => new ValidationError('run_too_large', 'Série trop grande : 5 000 appels au plus');
 const budgetExceeded = () =>
-  new ConflictError('budget_exceeded', 'Plafond de dépense atteint : relevez-le au-dessus de la dépense avant de reprendre');
+  new ConflictError(
+    'budget_exceeded',
+    'Plafond de dépense insuffisant : relevez-le au moins à la dépense plus le coût maximal du prochain appel avant de reprendre',
+  );
+
+/** Coût maximal du prochain appel : le moins cher des résultats en attente ; `null` sans résultat en attente. */
+export async function nextCallMaxCostUsd(conn: DbOrTx, runId: string): Promise<number | null> {
+  const pending = await conn
+    .selectDistinct({ runTestId: results.runTestId, modelId: results.modelId })
+    .from(results)
+    .where(and(eq(results.runId, runId), eq(results.status, 'pending')));
+  if (pending.length === 0) return null;
+  const [snapshots, prices] = await Promise.all([
+    conn.select({ id: runTests.id, snapshot: runTests.snapshot }).from(runTests).where(eq(runTests.runId, runId)),
+    conn
+      .select({ id: models.id, inputPricePerM: models.inputPricePerM, outputPricePerM: models.outputPricePerM })
+      .from(models)
+      .where(inArray(models.id, [...new Set(pending.map((p) => p.modelId))])),
+  ]);
+  const snapshotOf = new Map(snapshots.map((s) => [s.id, s.snapshot]));
+  const pricesOf = new Map(prices.map((p) => [p.id, p]));
+  return Math.min(...pending.map((p) => maxCallCostUsd(snapshotOf.get(p.runTestId)!, pricesOf.get(p.modelId)!)));
+}
 
 /**
  * Résultats d'une série pour ces modèles : par répétition, test puis modèle ; les combinaisons non supportées directement
@@ -137,6 +163,11 @@ function resultRowsFor(
     }
   }
   return rows;
+}
+
+/** Refuse une série de plus de `MAX_RUN_CALLS` appels, avant toute lecture. */
+function assertRunSize(input: Pick<RunInput, 'testIds' | 'modelIds' | 'repetitions'>): void {
+  if (input.testIds.length * input.modelIds.length * input.repetitions > MAX_RUN_CALLS) throw runTooLarge();
 }
 
 /** Vue minimale d'une ligne de test attendue par `snapshotOf` (seuls les champs du test sont repris). */
@@ -314,6 +345,7 @@ export function createRunsService(deps: RunsServiceDeps) {
   return {
     /** Estimation du coût maximal et de la durée, sans rien créer. */
     async estimate(input: RunInput): Promise<RunEstimate> {
+      assertRunSize(input);
       const { snapshots, models: chosen, judge } = await resolve(db, input, false);
       const medians = await repo.medianTotalMs(chosen.map((m) => m.id)); // la durée ne compte que les modèles évalués
       const forEstimate = ({ available: _available, ...m }: CandidateModel): ModelForEstimate => ({
@@ -331,54 +363,58 @@ export function createRunsService(deps: RunsServiceDeps) {
 
     /**
      * Crée la série dans une transaction : série `queued`, modèles, instantanés des tests, tous les résultats (les
-     * combinaisons non supportées directement en `unsupported`), puis sa tâche `run_execute`.
+     * combinaisons non supportées directement en `unsupported`), puis sa tâche `run_execute`. Transaction rejouée sur
+     * conflit d'instantané ou interblocage.
      */
     async create(actor: Actor, input: RunInput): Promise<RunSummary> {
+      assertRunSize(input);
       const runId = randomUUID();
       const now = deps.clock();
-      await db.transaction(async (tx) => {
-        const { snapshots, models: chosen, judge } = await resolve(tx, input, true);
-        await repo.insertRun(tx, {
-          id: runId,
-          name: input.name,
-          suiteId: input.suiteId ?? null,
-          judgeModelId: judge?.id ?? null,
-          repetitions: input.repetitions,
-          concurrency: input.concurrency,
-          budgetUsd: input.budgetUsd ?? null,
-          status: 'queued',
-          weights: input.weights ?? DEFAULT_WEIGHTS,
-          createdBy: actor.userId,
-          createdAt: now,
-        });
-        await repo.insertRunModels(
-          tx,
-          chosen.map((m) => ({ runId, modelId: m.id, addedAt: now })),
-        );
-        const runTestRows = snapshots.map((snapshot, position) => ({
-          id: randomUUID(),
-          runId,
-          testId: snapshot.testId,
-          position,
-          snapshot,
-        }));
-        await repo.insertRunTests(tx, runTestRows);
-        await repo.insertResults(tx, resultRowsFor(runId, input.repetitions, runTestRows, chosen));
-        await enqueueRunJob(tx, runId, now);
-        await audit(tx, {
-          actorUserId: actor.userId,
-          action: 'run_created',
-          targetType: 'run',
-          targetId: runId,
-          details: {
+      await withTxRetry(() =>
+        db.transaction(async (tx) => {
+          const { snapshots, models: chosen, judge } = await resolve(tx, input, true);
+          await repo.insertRun(tx, {
+            id: runId,
             name: input.name,
-            tests: snapshots.length,
-            models: chosen.length,
-            repetitions: input.repetitions,
+            suiteId: input.suiteId ?? null,
             judgeModelId: judge?.id ?? null,
-          },
-        });
-      });
+            repetitions: input.repetitions,
+            concurrency: input.concurrency,
+            budgetUsd: input.budgetUsd ?? null,
+            status: 'queued',
+            weights: input.weights ?? DEFAULT_WEIGHTS,
+            createdBy: actor.userId,
+            createdAt: now,
+          });
+          await repo.insertRunModels(
+            tx,
+            chosen.map((m) => ({ runId, modelId: m.id, addedAt: now })),
+          );
+          const runTestRows = snapshots.map((snapshot, position) => ({
+            id: randomUUID(),
+            runId,
+            testId: snapshot.testId,
+            position,
+            snapshot,
+          }));
+          await repo.insertRunTests(tx, runTestRows);
+          await repo.insertResults(tx, resultRowsFor(runId, input.repetitions, runTestRows, chosen));
+          await enqueueRunJob(tx, runId, now);
+          await audit(tx, {
+            actorUserId: actor.userId,
+            action: 'run_created',
+            targetType: 'run',
+            targetId: runId,
+            details: {
+              name: input.name,
+              tests: snapshots.length,
+              models: chosen.length,
+              repetitions: input.repetitions,
+              judgeModelId: judge?.id ?? null,
+            },
+          });
+        }),
+      );
       return (await summaries(runId))[0]!;
     },
 
@@ -396,13 +432,17 @@ export function createRunsService(deps: RunsServiceDeps) {
       return summaryOf(id);
     },
 
-    /** Reprise d'une série en pause ou interrompue ; après une pause `budget`, le plafond doit dépasser la dépense. */
+    /**
+     * Reprise d'une série en pause ou interrompue ; après une pause `budget`, le plafond doit couvrir la dépense plus le
+     * coût maximal du prochain appel en attente (le moins cher).
+     */
     async resume(actor: Actor, id: string): Promise<RunSummary> {
       await withLockedRun(id, async (tx, run) => {
         if (run.status !== 'paused' && run.status !== 'interrupted') throw runNotPaused();
-        const spentUsd = roundUsd(run.modelsCostUsd + run.judgeCostUsd);
-        if (run.status === 'paused' && run.pauseReason === 'budget' && run.budgetUsd !== null && run.budgetUsd <= spentUsd) {
-          throw budgetExceeded();
+        if (run.status === 'paused' && run.pauseReason === 'budget' && run.budgetUsd !== null) {
+          // Même règle que le moteur avant un lancement : le prochain appel (le moins cher) doit tenir sous le plafond.
+          const nextUsd = (await nextCallMaxCostUsd(tx, id)) ?? 0;
+          if (roundUsd(run.modelsCostUsd + run.judgeCostUsd + nextUsd) > run.budgetUsd) throw budgetExceeded();
         }
         await requeue(tx, run, deps.clock());
         await auditRun(tx, actor, 'run_resumed', id, { from: run.status, pauseReason: run.pauseReason });
@@ -471,13 +511,15 @@ export function createRunsService(deps: RunsServiceDeps) {
 
     async progress(id: string): Promise<RunProgress> {
       const run = await requireRun(id);
-      const [runModelRows, runTestRows, cells, running, activity, averageTotalMs] = await Promise.all([
+      const budgetPause = run.status === 'paused' && run.pauseReason === 'budget';
+      const [runModelRows, runTestRows, cells, running, activity, averageTotalMs, nextUsd] = await Promise.all([
         repo.runModelsOf(id),
         repo.runTestsOf(id),
         repo.cellCounts(id),
         repo.runningOf(id),
         repo.recentActivity(id, ACTIVITY_LIMIT),
         repo.averageTotalMs(id),
+        budgetPause ? nextCallMaxCostUsd(db, id) : null,
       ]);
       return buildProgress({
         run,
@@ -488,6 +530,7 @@ export function createRunsService(deps: RunsServiceDeps) {
         running,
         activity,
         averageTotalMs,
+        nextCallMaxCostUsd: nextUsd,
       });
     },
 

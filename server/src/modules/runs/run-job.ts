@@ -3,6 +3,8 @@ import type { Db } from '../../db/client.js';
 import { jobs } from '../../db/schema/jobs.js';
 import { runs } from '../../db/schema/runs.js';
 import { NotFoundError } from '../../errors.js';
+import { describeError } from '../errors/capture.js';
+import { reportError } from '../errors/report.js';
 import { enqueue, type DbOrTx } from '../jobs/queue.js';
 
 export const RUN_EXECUTE = 'run_execute';
@@ -57,7 +59,8 @@ export async function enqueueRunJob(db: DbOrTx, runId: string, now: Date): Promi
 /**
  * Reprise des séries `queued` ou `running` sans tâche active (`activeJobId` nul, ou tâche `done`, `failed` ou absente) :
  * tâche `failed` (reprises épuisées) → série `interrupted`, à reprendre par l'Admin ; sinon une tâche est enfilée.
- * Chaque série est retraitée sous verrou de sa ligne : deux passages simultanés n'enfilent qu'une tâche.
+ * Chaque série est retraitée sous verrou de sa ligne : deux passages simultanés n'enfilent qu'une tâche. L'échec de la
+ * reprise d'une série est journalisé (message masqué) sans arrêter celle des suivantes.
  */
 export async function recoverRuns(db: Db, now: Date): Promise<{ enqueued: number; interrupted: number }> {
   const candidates = await db
@@ -73,32 +76,56 @@ export async function recoverRuns(db: Db, now: Date): Promise<{ enqueued: number
   let enqueued = 0;
   let interrupted = 0;
   for (const { id } of candidates) {
-    const outcome = await withTxRetry(() =>
-      db.transaction(async (tx): Promise<'enqueued' | 'interrupted' | null> => {
-        const [run] = await tx
-          .select({ status: runs.status, activeJobId: runs.activeJobId })
-          .from(runs)
-          .where(eq(runs.id, id))
-          .for('update');
-        if (!run || (run.status !== 'queued' && run.status !== 'running')) return null;
-        if (run.activeJobId !== null) {
-          const [job] = await tx.select({ status: jobs.status }).from(jobs).where(eq(jobs.id, run.activeJobId)).for('update');
-          if (job && (job.status === 'queued' || job.status === 'running')) return null;
-          if (job?.status === 'failed') {
-            await tx
-              .update(runs)
-              .set({ status: 'interrupted', pauseReason: null, activeJobId: null })
-              .where(eq(runs.id, id));
-            return 'interrupted';
-          }
-        }
-        await enqueueRunJob(tx, id, now);
-        return 'enqueued';
-      }),
-    );
+    let outcome: 'enqueued' | 'interrupted' | null;
+    try {
+      outcome = await recoverRun(db, id, now);
+    } catch (err) {
+      const d = describeError(err);
+      await reportError(
+        db,
+        {
+          source: 'job',
+          origin: 'run_recovery',
+          code: d.name,
+          message: d.message,
+          stack: d.stack,
+          severity: 'normale',
+          target: { type: 'run', id },
+        },
+        now,
+      );
+      continue;
+    }
     if (outcome === 'enqueued') enqueued++;
     else if (outcome === 'interrupted') interrupted++;
   }
   return { enqueued, interrupted };
+}
+
+/** Reprise d'une série, sous verrou de sa ligne (voir `recoverRuns`). */
+function recoverRun(db: Db, id: string, now: Date): Promise<'enqueued' | 'interrupted' | null> {
+  return withTxRetry(() =>
+    db.transaction(async (tx): Promise<'enqueued' | 'interrupted' | null> => {
+      const [run] = await tx
+        .select({ status: runs.status, activeJobId: runs.activeJobId })
+        .from(runs)
+        .where(eq(runs.id, id))
+        .for('update');
+      if (!run || (run.status !== 'queued' && run.status !== 'running')) return null;
+      if (run.activeJobId !== null) {
+        const [job] = await tx.select({ status: jobs.status }).from(jobs).where(eq(jobs.id, run.activeJobId)).for('update');
+        if (job && (job.status === 'queued' || job.status === 'running')) return null;
+        if (job?.status === 'failed') {
+          await tx
+            .update(runs)
+            .set({ status: 'interrupted', pauseReason: null, activeJobId: null })
+            .where(eq(runs.id, id));
+          return 'interrupted';
+        }
+      }
+      await enqueueRunJob(tx, id, now);
+      return 'enqueued';
+    }),
+  );
 }
 

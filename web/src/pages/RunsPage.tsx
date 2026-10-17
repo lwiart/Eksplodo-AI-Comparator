@@ -1,32 +1,13 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { messageForError } from '../api/messages';
-import { RUNS_KEY, listRuns, type RunStatus, type StatusCounts } from '../api/runs';
+import { RUNS_KEY, listRuns } from '../api/runs';
 import { useAuth } from '../auth/AuthProvider';
 import { formatDate } from '../components/catalog/format';
 import { Card } from '../components/ui/Card';
+import { RunStatusChip } from '../components/runs/RunStatusChip';
 import { Chip } from '../components/ui/Chip';
-import { PRIMARY_LINK } from './admin/TestsPage';
-import { plural, usd } from './LaunchRunPage';
-
-export const RUN_STATUS_LABELS: Record<RunStatus, string> = {
-  queued: 'En file d’attente',
-  running: 'En cours',
-  paused: 'En pause',
-  completed: 'Terminée',
-  interrupted: 'Interrompue',
-};
-
-const STATUS_TONES = { queued: 'default', running: 'live', paused: 'default', completed: 'good', interrupted: 'bad' } as const;
-
-export function RunStatusChip({ status }: { status: RunStatus }) {
-  return <Chip tone={STATUS_TONES[status]}>{RUN_STATUS_LABELS[status]}</Chip>;
-}
-
-/** Appels terminés, quelle que soit l'issue (réussis, en erreur, hors délai ou non supportés). */
-export function finishedCalls(c: StatusCounts): number {
-  return c.done + c.error + c.timeout + c.unsupported;
-}
+import { PRIMARY_LINK, finishedCalls, plural, usd } from '../lib/format';
 
 /** Liste des séries, la plus récente en tête ; l'Admin peut en lancer une nouvelle. */
 export function RunsPage() {

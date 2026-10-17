@@ -4,7 +4,12 @@ import { messageFor, messageForError } from './messages';
 const CODES = [
   'unauthorized', 'forbidden', 'validation', 'rate_limited', 'invitation_invalid', 'invalid_password', 'weak_password',
   'email_taken', 'user_not_active', 'user_not_invited', 'user_not_activated', 'last_admin', 'internal', 'not_found',
+  'run_too_large', 'test_archived',
 ];
+
+test('série trop grande : message de la limite de 5 000 appels', () => {
+  expect(messageFor('run_too_large')).toBe('Série trop grande : 5 000 appels au plus.');
+});
 
 test('chaque code d’erreur de l’API a un message français dédié', () => {
   const fallback = messageFor('code_inconnu');

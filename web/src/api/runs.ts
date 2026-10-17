@@ -73,6 +73,8 @@ export type RunProgress = {
   modelsCostUsd: number;
   judgeCostUsd: number;
   budgetUsd: number | null;
+  /** Après une pause budget : coût maximal du prochain appel (le moins cher en attente), à ajouter à la dépense pour reprendre. */
+  nextCallMaxCostUsd: number | null;
   startedAt: string | null;
   elapsedMs: number;
   etaSeconds: number | null;

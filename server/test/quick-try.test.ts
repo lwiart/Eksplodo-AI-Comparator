@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { tmpdir } from 'node:os';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { afterEach, expect, test } from 'vitest';
+import { errorEvents } from '../src/db/schema/errors.js';
 import { jobs } from '../src/db/schema/jobs.js';
 import { aiUsage, results } from '../src/db/schema/runs.js';
 import { testAttachments } from '../src/db/schema/tests.js';
@@ -118,6 +119,24 @@ test('essai rapide : 202 puis done avec texte, métriques et coût ; ai_usage qu
   const [job] = await t.db.select().from(jobs).where(eq(jobs.id, jobId));
   expect(job).toMatchObject({ type: 'quick_try', maxAttempts: 1, payload: { testId, modelId: t.model.id } });
   expect(Object.keys(job!.payload as object).sort()).toEqual(['modelId', 'requestedBy', 'testId']);
+});
+
+test('ai_usage impossible à écrire : essai done avec son issue, erreur journalisée', async () => {
+  const t = await setup();
+  const testId = await t.createTest('Bonjour');
+  await t.db.execute(
+    sql.raw(`CREATE TRIGGER fail_usage BEFORE INSERT ON ai_usage FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'écriture refusée'`),
+  );
+  const { jobId } = (await t.post('/api/tests/try', { testId, modelId: t.model.id })).json() as { jobId: string };
+  expect(await t.runFast()).toBe(true);
+  const body = (await t.get(`/api/tests/try/${jobId}`)).json();
+  expect(body.status).toBe('done');
+  expect(body.outcome).toMatchObject({ status: 'done', modelName: 'Modèle 0' });
+  expect(body.outcome.text.length).toBeGreaterThan(0);
+  expect(await t.db.select().from(aiUsage)).toHaveLength(0);
+  const events = await t.db.select().from(errorEvents);
+  expect(events).toHaveLength(1);
+  expect(events[0]).toMatchObject({ source: 'job', origin: 'quick_try', targetType: 'job', targetId: jobId });
 });
 
 test('erreur du fournisseur : status done avec outcome.status error et message masqué', async () => {

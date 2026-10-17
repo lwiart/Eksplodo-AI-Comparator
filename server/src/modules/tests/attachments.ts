@@ -30,6 +30,7 @@ export type AttachmentsDeps = {
 const tooLarge = () => new AppError('file_too_large', 413, 'Fichier trop volumineux (10 Mo au plus)');
 const unsupported = () =>
   new AppError('unsupported_file_type', 415, 'Type de fichier non pris en charge : PNG, JPEG, WebP ou PDF');
+const testArchived = () => new ConflictError('test_archived', 'Test archivé : aucune pièce jointe ne peut y être ajoutée');
 
 /** Chemin absolu de `relative` sous `dataDir` ; refuse tout chemin qui en sort. */
 export function resolveAttachmentPath(dataDir: string, relative: string): string {
@@ -91,8 +92,9 @@ export async function addAttachment(
   testId: string,
   file: { filename: string; stream: Readable },
 ): Promise<PublicAttachment> {
-  const [test] = await deps.db.select({ id: tests.id }).from(tests).where(eq(tests.id, testId));
+  const [test] = await deps.db.select({ id: tests.id, archivedAt: tests.archivedAt }).from(tests).where(eq(tests.id, testId));
   if (!test) throw new NotFoundError('Test introuvable');
+  if (test.archivedAt !== null) throw testArchived();
   const [active] = await deps.db
     .select({ n: count() })
     .from(testAttachments)
@@ -120,7 +122,9 @@ export async function addAttachment(
     try {
       // Contrôle faisant foi du plafond : sous verrou de la ligne du test, pour que des dépôts parallèles se sérialisent.
       await deps.db.transaction(async (tx) => {
-        await tx.select({ id: tests.id }).from(tests).where(eq(tests.id, testId)).for('update');
+        const [locked] = await tx.select({ archivedAt: tests.archivedAt }).from(tests).where(eq(tests.id, testId)).for('update');
+        if (!locked) throw new NotFoundError('Test introuvable');
+        if (locked.archivedAt !== null) throw testArchived(); // archivé pendant l'écriture du fichier
         const [now] = await tx
           .select({ n: count() })
           .from(testAttachments)

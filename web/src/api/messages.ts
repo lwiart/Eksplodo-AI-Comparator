@@ -27,6 +27,8 @@ const MESSAGES: Record<string, string> = {
   budget_exceeded: 'Le coût maximal estimé dépasse le plafond fixé.',
   run_not_active: "Cette série n'est plus en cours.",
   run_not_paused: "Cette série n'est pas en pause.",
+  run_too_large: 'Série trop grande : 5 000 appels au plus.',
+  test_archived: 'Ce test est archivé : aucune pièce jointe ne peut y être ajoutée.',
   suite_name_taken: 'Une suite porte déjà ce nom.',
   test_not_found: 'Un des tests choisis n’existe plus. Rechargez la page.',
   not_found: "Cet élément n'existe plus. Rechargez la page.",

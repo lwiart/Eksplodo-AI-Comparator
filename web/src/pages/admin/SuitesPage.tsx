@@ -20,7 +20,7 @@ import { Chip } from '../../components/ui/Chip';
 import { Dialog } from '../../components/ui/Dialog';
 import { Field } from '../../components/ui/Field';
 import { TextArea } from '../../components/ui/TextArea';
-import { METHOD_LABEL } from './TestsPage';
+import { METHOD_LABEL } from '../../lib/format';
 
 /** Brouillon en cours d'édition : `id` absent = nouvelle suite. */
 type Draft = { id: string | null; name: string; description: string; tests: PublicSuiteTest[] };

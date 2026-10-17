@@ -299,6 +299,23 @@ test('[[fake:429]] puis succès : deux nouvelles tentatives au plus, délais 2 s
   expect((await resultRows(third.runId))[0]).toMatchObject({ status: 'done', attempts: 3 });
 });
 
+test('nouvelle tentative qui ne tient plus sous le plafond (abaissé) : résultat rendu à la file, pause budget sans appel en vol', async () => {
+  let n = 0;
+  const registry = wrappedRegistry((inner) => ({
+    ...inner,
+    generate: (req, signal) => (++n === 1 ? failing(httpError(503, 'Indisponible', {}, [])) : inner.generate(req, signal)),
+  }));
+  const { runId, modelIds } = await seedRun({ prompts: ['Un'], concurrency: 1 });
+  await t.db.delete(results).where(and(eq(results.runId, runId), eq(results.modelId, modelIds[1]!)));
+  await t.db.update(runs).set({ budgetUsd: 1 }).where(eq(runs.id, runId));
+  // Plafond abaissé pendant l'attente de la nouvelle tentative : coût maximal (≈ 0,008 $) au-dessus de 0,001 $.
+  const sleep = async () => void (await t.db.update(runs).set({ budgetUsd: 0.001 }).where(eq(runs.id, runId)));
+  await drain(engineDeps({ registry, sleep }));
+  expect(n).toBe(1);
+  expect((await resultRows(runId))[0]).toMatchObject({ status: 'pending', attempts: 1 });
+  expect(await runRow(runId)).toMatchObject({ status: 'paused', pauseReason: 'budget', activeJobId: null, modelsCostUsd: 0 });
+});
+
 test('erreur définitive (401) : status error, pas de nouvelle tentative', async () => {
   let n = 0;
   const sleeps: number[] = [];

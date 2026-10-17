@@ -3,18 +3,28 @@ import { useState } from 'react';
 import { MODELS_KEY, listModels } from '../../api/catalog';
 import { messageForError } from '../../api/messages';
 import { RUNS_KEY, addRunModels, pauseRun, resumeRun, retryRunErrors, updateRun, type RunProgress } from '../../api/runs';
-import { parseBudget, usd } from '../../pages/LaunchRunPage';
+import { budgetUsd, parseBudget, usd } from '../../lib/format';
 import { Button } from '../ui/Button';
 import { Dialog } from '../ui/Dialog';
 import { Field } from '../ui/Field';
 
 const spentOf = (p: Pick<RunProgress, 'modelsCostUsd' | 'judgeCostUsd'>) => p.modelsCostUsd + p.judgeCostUsd;
 
-/** À la reprise, `budget_exceeded` signifie « plafond atteint » (et non l'estimation du lancement). */
+/** À la reprise, `budget_exceeded` signifie « plafond insuffisant » (et non l'estimation du lancement). */
 function controlError(err: unknown): string {
   return (err as { code?: unknown } | null)?.code === 'budget_exceeded'
-    ? 'Plafond atteint : relevez-le au-dessus de la dépense avant de reprendre.'
+    ? 'Plafond insuffisant : il doit couvrir la dépense et le coût maximal du prochain appel.'
     : messageForError(err);
+}
+
+/**
+ * Plafond minimal pour lancer un appel de plus : dépense + coût maximal du prochain appel, arrondi au dix-millième
+ * supérieur (précision du plafond) ; `null` quand ce coût est inconnu.
+ */
+function minimumBudget(p: Pick<RunProgress, 'modelsCostUsd' | 'judgeCostUsd' | 'nextCallMaxCostUsd'>): number | null {
+  if (p.nextCallMaxCostUsd === null) return null;
+  const microUsd = Math.round((spentOf(p) + p.nextCallMaxCostUsd) * 1_000_000);
+  return Math.ceil(microUsd / 100) / 10_000;
 }
 
 /** Raison d'une pause ou d'une interruption, pour tous les rôles ; la consigne d'action est réservée à l'Admin. */
@@ -127,14 +137,19 @@ export function RunControls({ runId, progress }: { runId: string; progress: RunP
   const errors = counts.error + counts.timeout;
 
   const newBudget = parseBudget(budget);
+  const minimum = minimumBudget(progress);
   const budgetError =
     budget.trim() === ''
       ? null
       : newBudget === undefined || newBudget === null
         ? 'Saisissez un montant supérieur à 0 (4 décimales au plus).'
-        : newBudget <= spent
-          ? `Saisissez un montant supérieur à la dépense (${usd(spent)}).`
-          : null;
+        : minimum !== null
+          ? newBudget < minimum
+            ? `Saisissez au moins ${budgetUsd(minimum)} pour lancer un appel de plus.`
+            : null
+          : newBudget <= spent
+            ? `Saisissez un montant supérieur à la dépense (${usd(spent)}).`
+            : null;
   const budgetOk = typeof newBudget === 'number' && budgetError === null;
 
   return (
@@ -152,7 +167,14 @@ export function RunControls({ runId, progress }: { runId: string; progress: RunP
           }}
         >
           <div className="w-56">
-            <Field label="Nouveau plafond en $" inputMode="decimal" value={budget} error={budgetError} onChange={(e) => setBudget(e.target.value)} />
+            <Field
+              label="Nouveau plafond en $"
+              inputMode="decimal"
+              value={budget}
+              error={budgetError}
+              {...(minimum === null ? {} : { hint: `Au moins ${budgetUsd(minimum)} pour lancer un appel de plus.` })}
+              onChange={(e) => setBudget(e.target.value)}
+            />
           </div>
           <Button type="submit" variant="primary" disabled={!budgetOk || busy}>
             Relever le plafond et reprendre

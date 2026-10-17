@@ -10,9 +10,9 @@ type LogFn = (obj: object, msg: string) => void;
 
 /**
  * Planificateur interne : un passage immédiat puis toutes les `intervalMs` (60 s en production) : reprise des
- * tâches abandonnées, reprise des séries sans tâche active, puis création des tâches planifiées échues (idempotent grâce aux clés de dédoublonnage ;
- * le cron `/internal/tick` fait de même et réveille l'application). Les entrées sont validées au démarrage :
- * une entrée invalide lève immédiatement.
+ * tâches abandonnées, création des tâches planifiées échues (idempotent grâce aux clés de dédoublonnage), puis reprise
+ * des séries sans tâche active (le cron `/internal/tick` fait de même et réveille l'application). Les entrées sont
+ * validées au démarrage : une entrée invalide lève immédiatement.
  */
 export function startSchedulerLoop(
   deps: { db: Db; schedules: ScheduleEntry[]; clock: Clock; logger: { info: LogFn; error: LogFn } },
@@ -29,8 +29,9 @@ export function startSchedulerLoop(
       await flushPendingErrors(deps.db);
       const { requeued, failed, failedJobs } = await recoverStaleJobs(deps.db, now);
       await reportStaleJobs(deps.db, failedJobs, now);
-      const runs = await recoverRuns(deps.db, now);
+      // Tâches planifiées avant la reprise des séries : celle-ci ne les retarde ni ne les empêche.
       const scheduled = await scheduleDueJobs(deps.db, deps.schedules, now);
+      const runs = await recoverRuns(deps.db, now);
       if (requeued + failed + scheduled + runs.enqueued + runs.interrupted > 0) {
         deps.logger.info(
           { requeued, failed, scheduled, runsEnqueued: runs.enqueued, runsInterrupted: runs.interrupted },

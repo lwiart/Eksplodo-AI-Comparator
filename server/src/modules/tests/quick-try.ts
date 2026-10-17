@@ -5,6 +5,7 @@ import type { Db } from '../../db/client.js';
 import { models, providers } from '../../db/schema/catalog.js';
 import { ConflictError, NotFoundError, ValidationError } from '../../errors.js';
 import type { Clock } from '../../lib/clock.js';
+import { describeError, reportJobFailure } from '../errors/capture.js';
 import { enqueue, getJob, type JobHandler } from '../jobs/queue.js';
 import type { Registry } from '../providers/registry.js';
 import { buildRequest, measureCall, CALL_TIMEOUT_MS, type CallOutcome } from '../runs/call.js';
@@ -88,18 +89,24 @@ export function createQuickTryHandler(deps: QuickTryHandlerDeps): JobHandler {
       { inputPricePerM: model.inputPricePerM, outputPricePerM: model.outputPricePerM },
       { now: () => Date.now(), signal: ctx.signal, timeoutMs: CALL_TIMEOUT_MS, estimatedInputTokens: estimateInputTokens(snapshot!) },
     );
-    // Un appel échoué n'est pas facturé : aucune ligne `ai_usage`.
+    // Un appel échoué n'est pas facturé : aucune ligne `ai_usage`. L'appel a eu lieu : une écriture impossible est
+    // journalisée (message masqué), et l'essai garde son issue.
     if (outcome.status === 'done') {
-      await recordUsage(deps.db, {
-        origin: 'quick_try',
-        runId: null,
-        modelId,
-        inputTokens: outcome.inputTokens,
-        outputTokens: outcome.outputTokens,
-        reasoningTokens: outcome.reasoningTokens ?? 0,
-        costUsd: roundUsd(outcome.costUsd ?? 0),
-        now: ctx.now(),
-      });
+      try {
+        await recordUsage(deps.db, {
+          origin: 'quick_try',
+          runId: null,
+          modelId,
+          inputTokens: outcome.inputTokens,
+          outputTokens: outcome.outputTokens,
+          reasoningTokens: outcome.reasoningTokens ?? 0,
+          costUsd: roundUsd(outcome.costUsd ?? 0),
+          now: ctx.now(),
+        });
+      } catch (err) {
+        const d = describeError(err);
+        await reportJobFailure(deps.db, job, { code: d.name, message: d.message, stack: d.stack, severity: 'normale' }, ctx.now());
+      }
     }
     await ctx.reportProgress({ outcome: { ...outcome, modelName: model.displayName } });
   };

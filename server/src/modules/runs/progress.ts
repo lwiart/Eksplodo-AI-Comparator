@@ -19,6 +19,8 @@ export type RunProgress = {
   modelsCostUsd: number;
   judgeCostUsd: number;
   budgetUsd: number | null;
+  /** Après une pause budget : coût maximal du prochain appel (le moins cher en attente), à ajouter à la dépense pour reprendre. */
+  nextCallMaxCostUsd: number | null;
   startedAt: string | null;
   elapsedMs: number;
   etaSeconds: number | null;
@@ -65,6 +67,7 @@ export type ProgressInput = {
   activity: (Omit<RunProgress['activity'][number], 'completedAt'> & { completedAt: Date | null })[];
   /** Moyenne observée de `total_ms` des résultats `done` ; `null` sans mesure. */
   averageTotalMs: number | null;
+  nextCallMaxCostUsd: number | null;
 };
 
 /** Assemble l'avancement d'une série à partir des lectures du dépôt. */
@@ -99,6 +102,7 @@ export function buildProgress(input: ProgressInput): RunProgress {
     modelsCostUsd: run.modelsCostUsd,
     judgeCostUsd: run.judgeCostUsd,
     budgetUsd: run.budgetUsd,
+    nextCallMaxCostUsd: input.nextCallMaxCostUsd,
     startedAt: run.startedAt?.toISOString() ?? null,
     elapsedMs,
     etaSeconds,

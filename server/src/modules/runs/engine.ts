@@ -226,8 +226,12 @@ export async function executeRunSlice(deps: EngineDeps, job: Job, ctx: JobContex
    * Avant chaque lancement (nouvelle tentative comprise) : relit la série (pause, tâche remplacée, plafond éventuellement
    * relevé), puis vérifie que dépense + réservations en vol + coût maximal de l'appel ne dépassent pas le plafond. Une
    * nouvelle tentative garde la réservation de son résultat (`reserved`) : seul un nouvel appel en ajoute une.
+   * `stopped` : plus aucun lancement (série arrêtée ou tâche remplacée) ; `over_budget` : l'appel ne tient pas pour l'instant.
    */
-  async function mayLaunch(item: WorkItem, reserved = false): Promise<boolean> {
+  async function checkLaunch(item: WorkItem, reserved = false): Promise<'ok' | 'stopped' | 'over_budget'> {
+    // Réservations additionnées avant la lecture : un appel qui se termine pendant celle-ci est alors compté deux fois
+    // (réservation et dépense) plutôt qu'oublié (dépense lue avant sa validation, réservation déjà rendue).
+    const inFlightUsd = [...reservations.values()].reduce((s, usd) => s + usd, 0);
     const [row] = await db
       .select({
         status: runs.status,
@@ -240,18 +244,13 @@ export async function executeRunSlice(deps: EngineDeps, job: Job, ctx: JobContex
       .where(eq(runs.id, runId));
     if (!row || row.status !== 'running' || row.activeJobId !== job.id) {
       stopLaunching = true;
-      return false;
+      return 'stopped';
     }
     if (row.budgetUsd !== null) {
-      const inFlightUsd = [...reservations.values()].reduce((s, usd) => s + usd, 0);
       const next = reserved ? 0 : item.maxCostUsd;
-      if (roundUsd(row.modelsCostUsd + row.judgeCostUsd + inFlightUsd + next) > row.budgetUsd) {
-        stopLaunching = true;
-        await pauseForBudget();
-        return false;
-      }
+      if (roundUsd(row.modelsCostUsd + row.judgeCostUsd + inFlightUsd + next) > row.budgetUsd) return 'over_budget';
     }
-    return true;
+    return 'ok';
   }
 
   /** Écriture conditionnée au statut `running` du résultat ; renvoie vrai si la ligne a changé. */
@@ -409,7 +408,14 @@ export async function executeRunSlice(deps: EngineDeps, job: Job, ctx: JobContex
           await backToPending(item, false); // l'appel a eu lieu : la tentative reste comptée
           return;
         }
-        if (expired() || !(await mayLaunch(item, true))) return void (await backToPending(item, false));
+        if (expired()) return void (await backToPending(item, false));
+        const check = await checkLaunch(item, true);
+        if (check === 'stopped') return void (await backToPending(item, false));
+        if (check === 'over_budget') {
+          // Rendu à la file de la tranche : la boucle de lancement attend la fin d'autres appels, ou met la série en pause.
+          if (await backToPending(item, false)) queue.unshift(item);
+          return;
+        }
         if (!(await updateRunning(item.resultId, { attempts: sql`${results.attempts} + 1`, startedAt: ctx.now() }))) return;
         item.attempts++;
       }
@@ -432,7 +438,19 @@ export async function executeRunSlice(deps: EngineDeps, job: Job, ctx: JobContex
           continue;
         }
         const item = queue[index]!;
-        if (!(await mayLaunch(item))) break;
+        const check = await checkLaunch(item);
+        if (check === 'stopped') break;
+        if (check === 'over_budget') {
+          // Appels en vol : leur coût réel, souvent bien inférieur au coût maximal réservé, peut libérer de quoi lancer
+          // celui-ci. Pause seulement quand l'appel ne tient pas alors qu'aucun appel n'est plus en vol.
+          if (inFlight.size > 0) {
+            await Promise.race(inFlight);
+            continue;
+          }
+          stopLaunching = true;
+          await pauseForBudget();
+          break;
+        }
         queue.splice(index, 1);
         // Réservation prise avant la prise du résultat, rendue à la fin de l'appel (coût alors compté dans la série).
         reservations.set(item.resultId, item.maxCostUsd);

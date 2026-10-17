@@ -71,7 +71,7 @@ Réponse attendue : `{"recovered":0,"failedStale":0,"scheduled":0,"runsEnqueued"
 ## Séries, voie rapide et pièces jointes (plan 3)
 
 - **Voie rapide** : un second worker, dédié aux tâches `quick_try`, tourne à côté du worker principal. Les essais rapides ne sont donc pas bloqués par les longues tâches d'une série.
-- **Reprise des séries** : une série reprend seule après un redémarrage. À l'arrêt propre (SIGTERM), la tâche en cours est remise en file aussitôt, sans tentative consommée. Après un arrêt brutal, la tâche est récupérée sous 15 minutes au plus. En outre, `recoverRuns` remet en file toute série sans tâche active, à chaque passage du planificateur et à chaque appel de `/internal/tick`.
+- **Reprise des séries** : une série reprend seule après un redémarrage. À l'arrêt propre (SIGTERM), la tâche en cours est remise en file et reprend **60 s plus tard**, sans tentative consommée. Après un arrêt brutal, la tâche est reprise après 15 minutes sans signe de vie, au passage suivant du planificateur (soit ≈ 16 minutes au plus). En outre, `recoverRuns` remet en file toute série sans tâche active, à chaque passage du planificateur et à chaque appel de `/internal/tick`.
 - **Pièces jointes** : elles sont stockées dans `DATA_DIR/attachments` (hors du dossier de l'application) et doivent être conservées entre les déploiements ; sinon les tests qui en ont perdent leurs fichiers. Chaque appel les relit sur disque et les encode en base64.
 
 ## Vérifications de la mise en production (2026-10-17)

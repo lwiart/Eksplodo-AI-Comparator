@@ -11,24 +11,15 @@ import {
   restoreTest,
   testsMeta,
   type PublicTest,
-  type ScoringMethod,
 } from '../../api/tests';
 import { formatDate } from '../../components/catalog/format';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { Chip } from '../../components/ui/Chip';
 import { Dialog } from '../../components/ui/Dialog';
-
-export const METHOD_LABEL: Record<ScoringMethod, string> = {
-  judge: 'IA-juge',
-  expected: 'Réponse attendue',
-  manual: 'Manuelle',
-};
+import { METHOD_LABEL, PRIMARY_LINK } from '../../lib/format';
 
 const FILTER_CONTROL = 'rounded-xl border border-line-strong bg-night-0/60 px-3 py-2 text-sm text-white';
-const LINK_BUTTON =
-  'inline-flex items-center justify-center gap-2 rounded-full px-4 py-2 text-[13px] font-semibold no-underline transition-[box-shadow] ';
-export const PRIMARY_LINK = `${LINK_BUTTON}bg-gradient-to-r from-orange to-orange-soft text-white shadow-[0_8px_24px_-8px_rgba(240,99,31,0.7)] hover:shadow-[0_8px_28px_-6px_rgba(240,99,31,0.85)]`;
 
 function TestRow({ test, onDelete, onRestore }: { test: PublicTest; onDelete(): void; onRestore(): void }) {
   return (

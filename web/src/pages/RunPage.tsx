@@ -8,12 +8,12 @@ import { ActivityFeed } from '../components/runs/ActivityFeed';
 import { LiveMatrix } from '../components/runs/LiveMatrix';
 import { PauseNotice, RunControls } from '../components/runs/RunControls';
 import { RunMetricsTable } from '../components/runs/RunMetricsTable';
+import { RunStatusChip } from '../components/runs/RunStatusChip';
 import { Card } from '../components/ui/Card';
+import { RUN_STATUS_LABELS, duration, finishedCalls, plural, usd } from '../lib/format';
 import { LiveFlowFallback } from '../three/LiveFlowFallback';
 import { ThreeStage } from '../three/ThreeStage';
 import { liveFlowScene, type LiveFlowData } from '../three/live-flow-scene';
-import { duration, plural, usd } from './LaunchRunPage';
-import { RUN_STATUS_LABELS, RunStatusChip, finishedCalls } from './RunsPage';
 
 /** Intervalle d'interrogation : aucune requête HTTP n'attend la fin d'un appel (limite de 60 s du proxy). */
 const POLL_MS = 2000;

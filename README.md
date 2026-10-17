@@ -47,6 +47,7 @@ Avec `AIC_FAKE_LLM=1` dans `.env`, un faux fournisseur répond à la place des v
 | `[[fake:refusal]]` | Réponse de refus |
 | `[[fake:cut]]` | Flux coupé en cours de réponse, sans fin ni usage |
 | `[[fake:reasoning]]` | Ajoute des jetons de raisonnement |
+| `[[fake:length]]` | Réponse coupée à `max_tokens` (fin de génération `length`) |
 
 Parcours rapide : `npm run dev`, créer un test dont le prompt contient par exemple `[[fake:500]]`, le lancer en essai rapide ou en série, puis utiliser « Relancer les erreurs » pour constater la reprise.
 

@@ -10,39 +10,13 @@ import { Card } from '../components/ui/Card';
 import { Chip } from '../components/ui/Chip';
 import { Field } from '../components/ui/Field';
 import { SelectField } from '../components/ui/SelectField';
-import { MAIN_PROVIDERS, MORE_PROVIDERS } from '../three/providers';
+import { duration, parseBudget, plural, usd } from '../lib/format';
+import { logoFor } from '../lib/providers';
 
 type Source = 'suite' | 'custom';
 type Step = 1 | 2 | 3 | 4;
 const STEPS = ['Tests', 'Modèles', 'Paramètres', 'Récapitulatif'] as const;
 const ESTIMATE_DELAY_MS = 400;
-
-const LOGO_ALIASES: Record<string, string> = { anthropic: 'claude', google: 'gemini' };
-const LOGOS = new Map<string, string>([...MAIN_PROVIDERS, ...MORE_PROVIDERS].map((p) => [p.name.toLowerCase(), p.icon] as const));
-const logoFor = (name: string) => {
-  const key = name.trim().toLowerCase();
-  return LOGOS.get(key) ?? LOGOS.get(LOGO_ALIASES[key] ?? '');
-};
-
-export const plural = (n: number, one: string, many: string) => `${n} ${n > 1 ? many : one}`;
-export const usd = (n: number) => `${n.toLocaleString('fr-FR', n > 0 && n < 0.01 ? { minimumFractionDigits: 4, maximumFractionDigits: 4 } : { minimumFractionDigits: 2, maximumFractionDigits: 2 })} $`;
-
-export function duration(seconds: number): string {
-  const s = Math.max(1, Math.round(seconds));
-  if (s < 60) return `${s} s`;
-  const m = Math.floor(s / 60);
-  if (m < 60) return s % 60 === 0 ? `${m} min` : `${m} min ${s % 60} s`;
-  return `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')} min`;
-}
-
-/** Plafond saisi (virgule ou point) : `null` = sans plafond, `undefined` = saisie invalide. */
-export function parseBudget(raw: string): number | null | undefined {
-  const text = raw.trim().replace(',', '.');
-  if (text === '') return null;
-  const n = Number(text);
-  const fourDecimals = Math.abs(n * 10_000 - Math.round(n * 10_000)) < 1e-6;
-  return Number.isFinite(n) && n >= 0.0001 && n <= 999_999 && fourDecimals ? Math.round(n * 10_000) / 10_000 : undefined;
-}
 
 type PickedTest = { id: string; name: string; scoringMethod: ScoringMethod };
 

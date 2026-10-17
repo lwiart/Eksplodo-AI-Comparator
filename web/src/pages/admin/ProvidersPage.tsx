@@ -17,24 +17,13 @@ import { RemoteModelsDialog } from '../../components/catalog/RemoteModelsDialog'
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { Chip } from '../../components/ui/Chip';
-import { MAIN_PROVIDERS, MORE_PROVIDERS } from '../../three/providers';
+import { logoFor } from '../../lib/providers';
 
 const TYPE_LABEL: Record<ProviderType, string> = {
   openai_compatible: 'Compatible OpenAI',
   anthropic: 'Anthropic',
   google: 'Google',
 };
-
-// Le nom d'un fournisseur du catalogue ne coïncide pas toujours avec celui de sa marque (Anthropic → Claude, Google → Gemini).
-const LOGO_ALIASES: Record<string, string> = { anthropic: 'claude', google: 'gemini' };
-const LOGOS = new Map<string, string>(
-  [...MAIN_PROVIDERS, ...MORE_PROVIDERS].map((p) => [p.name.toLowerCase(), p.icon] as const),
-);
-
-function logoFor(name: string): string | undefined {
-  const key = name.trim().toLowerCase();
-  return LOGOS.get(key) ?? LOGOS.get(LOGO_ALIASES[key] ?? '');
-}
 
 function ProviderLogo({ name }: { name: string }) {
   const src = logoFor(name);

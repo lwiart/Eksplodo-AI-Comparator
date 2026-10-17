@@ -1,14 +1,16 @@
 import { randomUUID } from 'node:crypto';
+import { tmpdir } from 'node:os';
 import { and, asc, count, eq, inArray, sql } from 'drizzle-orm';
 import { afterEach, expect, test } from 'vitest';
+import type { Db } from '../src/db/client.js';
 import { auditLog } from '../src/db/schema/core.js';
 import { jobs } from '../src/db/schema/jobs.js';
 import { results, runModels, runTests, runs } from '../src/db/schema/runs.js';
 import { suiteTests, testAttachments } from '../src/db/schema/tests.js';
 import { enqueueRunJob } from '../src/modules/runs/run-job.js';
 import { chunkBySize } from '../src/modules/runs/runs.repo.js';
-import { snapshotTests } from '../src/modules/runs/runs.service.js';
-import { buildTestApp, loginAs, seedModel, seedProvider, seedUser, type TestApp } from './helpers/test-app.js';
+import { createRunsService, snapshotTests } from '../src/modules/runs/runs.service.js';
+import { buildTestApp, loginAs, seedModel, seedProvider, seedUser, testRegistry, type TestApp } from './helpers/test-app.js';
 
 const PW = 'motdepasse-solide';
 const KEY = 'sk-test-0123456789abcdef';
@@ -196,6 +198,47 @@ test('créer une série : instantanés, résultats, tâche run_execute unique, s
   const def = await t.post('/api/runs', t.runBody([a], [t.modelA.id]));
   const [defRow] = await t.db.select().from(runs).where(eq(runs.id, def.json().run.id));
   expect(defRow!.weights).toEqual({ quality: 50, speed: 20, cost: 20, reliability: 10 });
+});
+
+test('créer une série : transaction rejouée sur interblocage (1213) ou conflit d\'instantané (1020)', async () => {
+  const t = await setup();
+  const a = await t.makeTest('A');
+  const actor = { userId: t.adminRow.id, role: 'admin' as const, email: t.adminRow.email, name: t.adminRow.name };
+  for (const errno of [1213, 1020]) {
+    let transactions = 0;
+    const flaky = new Proxy(t.db, {
+      get(target, prop, receiver) {
+        if (prop === 'transaction') {
+          return (fn: Parameters<Db['transaction']>[0]) => {
+            if (++transactions === 1) return Promise.reject(Object.assign(new Error('Deadlock found'), { errno }));
+            return target.transaction(fn);
+          };
+        }
+        const value = Reflect.get(target, prop, receiver) as unknown;
+        return typeof value === 'function' ? (value as (...a: unknown[]) => unknown).bind(target) : value;
+      },
+    }) as Db;
+    const service = createRunsService({ db: flaky, clock: () => t.clock.now(), registry: testRegistry(), config: { dataDir: tmpdir() } });
+    const run = await service.create(actor, { name: `Série ${errno}`, testIds: [a], modelIds: [t.modelA.id], repetitions: 1, concurrency: 1 });
+    expect(transactions).toBe(2);
+    expect(run).toMatchObject({ name: `Série ${errno}`, status: 'queued' });
+  }
+  expect(await countOf(t, runs)).toBe(2);
+});
+
+test('série de plus de 5 000 appels (tests × modèles × répétitions) → 400 run_too_large, à l\'estimation comme à la création', async () => {
+  const t = await setup();
+  const ids = (n: number) => Array.from({ length: n }, () => randomUUID());
+  const tooLarge = t.runBody(ids(101), ids(10), { repetitions: 5 }); // 5 050 appels
+  for (const url of ['/api/runs/estimate', '/api/runs']) {
+    const res = await t.post(url, tooLarge);
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error).toMatchObject({ code: 'run_too_large', message: 'Série trop grande : 5 000 appels au plus' });
+  }
+  // 5 000 appels tout juste : la taille passe (les tests inconnus sont refusés ensuite).
+  const limit = await t.post('/api/runs/estimate', t.runBody(ids(100), ids(10), { repetitions: 5 }));
+  expect(limit.json().error.code).toBe('test_not_found');
+  expect(await countOf(t, runs)).toBe(0);
 });
 
 test('série issue d\'une suite : ordre de la suite et nom de la suite', async () => {

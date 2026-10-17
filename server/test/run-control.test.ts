@@ -1,12 +1,15 @@
 import { randomUUID } from 'node:crypto';
 import { tmpdir } from 'node:os';
-import { and, eq, inArray, sql } from 'drizzle-orm';
+import { and, eq, inArray, sql, type SQL } from 'drizzle-orm';
 import { afterEach, expect, test, vi } from 'vitest';
+import type { Db } from '../src/db/client.js';
 import { auditLog } from '../src/db/schema/core.js';
+import { errorEvents } from '../src/db/schema/errors.js';
 import { jobs } from '../src/db/schema/jobs.js';
 import { results, runTests, runs } from '../src/db/schema/runs.js';
 import { enqueue, type JobHandlers } from '../src/modules/jobs/queue.js';
 import { startSchedulerLoop } from '../src/modules/jobs/scheduler-loop.js';
+import type { ScheduleEntry } from '../src/modules/jobs/scheduler.js';
 import { runWorkerOnce } from '../src/modules/jobs/worker.js';
 import { httpError } from '../src/modules/providers/errors.js';
 import { resetFakeCallCounters } from '../src/modules/providers/fake.js';
@@ -60,9 +63,9 @@ async function until(cond: () => Promise<boolean> | boolean, timeoutMs = 10_000)
  * Application de test (faux fournisseur : modèles disponibles sans clé), un Admin et un Utilisateur connectés, des
  * modèles à 0 $ en entrée et 10 $ en sortie par million de tokens : coût maximal d'un appel (1 000 tokens) = 0,01 $.
  */
-async function setup(opts: { models?: number } = {}) {
+async function setup(opts: { models?: number; schedules?: ScheduleEntry[] } = {}) {
   resetFakeCallCounters();
-  const t = await buildTestApp({ now: START, fakeLlm: true });
+  const t = await buildTestApp({ now: START, fakeLlm: true, schedules: opts.schedules ?? [] });
   created.push(t);
   await seedUser(t.db, { email: 'admin@acme.fr', role: 'admin' });
   await seedUser(t.db, { email: 'user@acme.fr', role: 'user' });
@@ -202,11 +205,15 @@ test('plafond : jamais dépassé par les appels lancés, pause budget ; relever 
   const registry = gatedRegistry(gate.promise, (n) => void (started = n));
 
   const worker = t.runOnce(registry);
-  // Trois appels réservent tout le plafond : le quatrième lancement met la série en pause, avant toute réponse.
-  await until(async () => (await t.runRow(runId)).status === 'paused');
+  // Trois appels réservent tout le plafond : le quatrième attend leur fin (pas de pause tant qu'un appel est en vol).
+  await until(() => started === 3);
+  await new Promise((r) => setTimeout(r, 50));
   expect(started).toBe(3);
+  expect((await t.runRow(runId)).status).toBe('running');
+  // Coût réel = coût maximal : une fois les trois appels terminés, le quatrième ne tient plus → pause budget.
   gate.resolve();
   expect(await worker).toBe(true);
+  expect(started).toBe(3);
 
   const run = await t.runRow(runId);
   expect(run.modelsCostUsd).toBeLessThanOrEqual(budget);
@@ -227,9 +234,112 @@ test('plafond : jamais dépassé par les appels lancés, pause budget ; relever 
   expect(await t.auditActions()).toContain('run_updated');
 });
 
+test('plafond : appels réels peu coûteux, coût maximal élevé → la série va plus loin sans dépasser le plafond', async () => {
+  const t = await setup({ models: 4 });
+  // Coût maximal d'un appel : 300 tokens × 10 $/M = 0,003 $ ; coût réel : 100 tokens = 0,001 $ ; plafond = 10 appels réels.
+  const budget = 0.01;
+  const testIds: string[] = [];
+  for (const [i, prompt] of ['Un', 'Deux', 'Trois'].entries()) {
+    const res = await t.post('/api/tests', { name: `Test ${i}`, category: 'Culture', userPrompt: prompt, maxTokens: 300, scoringMethod: 'manual', scoringConfig: {} });
+    testIds.push(res.json().test.id as string);
+  }
+  const created = await t.post('/api/runs', { name: 'Série', testIds, modelIds: t.modelIds, concurrency: 4, budgetUsd: budget });
+  expect(created.statusCode).toBe(201);
+  const runId = created.json().run.id as string;
+  let active = 0;
+  let maxActive = 0;
+  const registry = registryOf(() => ({
+    async *generate() {
+      maxActive = Math.max(maxActive, ++active);
+      try {
+        await new Promise((r) => setTimeout(r, 20));
+        yield { type: 'text', delta: 'ok' };
+        yield { type: 'usage', inputTokens: 5, outputTokens: 100 };
+        yield { type: 'finish', reason: 'stop' };
+      } finally {
+        active--;
+      }
+    },
+    listModels: async () => [],
+  }));
+  await t.drain(registry);
+
+  // Ancienne règle : 3 appels (3 × 0,003 $ réservés) puis pause. Nouvelle règle : la pause n'arrive qu'une fois les appels
+  // en vol terminés, quand dépense réelle + coût maximal du suivant dépasse le plafond (8 × 0,001 + 0,003 > 0,01).
+  const run = await t.runRow(runId);
+  expect(run).toMatchObject({ status: 'paused', pauseReason: 'budget', activeJobId: null });
+  expect(run.modelsCostUsd).toBeLessThanOrEqual(budget);
+  expect(run.modelsCostUsd).toBeCloseTo(0.008, 6);
+  const rows = await t.resultRows(runId);
+  expect(rows.filter((r) => r.status === 'done')).toHaveLength(8);
+  expect(rows.filter((r) => r.status === 'pending')).toHaveLength(4);
+  expect(maxActive).toBeGreaterThan(1);
+  expect(maxActive).toBeLessThanOrEqual(3); // jamais plus d'appels en vol que le plafond n'en couvre
+  // Minimum utile pour reprendre : 0,008 + 0,003 = 0,011 $.
+  expect((await t.get(`/api/runs/${runId}/progress`)).json().progress.nextCallMaxCostUsd).toBeCloseTo(0.003, 6);
+  expect((await t.patch(`/api/runs/${runId}`, { budgetUsd: 0.0109 })).statusCode).toBe(200);
+  expect((await t.post(`/api/runs/${runId}/resume`)).statusCode).toBe(409);
+  expect((await t.patch(`/api/runs/${runId}`, { budgetUsd: 0.011 })).statusCode).toBe(200);
+  expect((await t.post(`/api/runs/${runId}/resume`)).statusCode).toBe(200);
+});
+
+test('plafond : un appel qui se termine pendant la lecture de la série n’est jamais oublié', async () => {
+  const t = await setup();
+  // Coût maximal = coût réel = 0,01 $ ; plafond 0,015 $ : un seul appel tient, le second ne doit jamais partir.
+  const budget = 0.015;
+  const runId = await t.createRun(['Un'], { concurrency: 2, budgetUsd: budget });
+  const gate = deferred();
+  let started = 0;
+  const registry = gatedRegistry(gate.promise, (n) => void (started = n));
+  const firstResultDone = async () => (await t.resultRows(runId)).some((r) => r.status === 'done');
+
+  // Lecture de la série avant chaque lancement : la seconde (lancement du second appel) est faite, puis le premier appel
+  // se termine (coût validé, réservation rendue) avant que la lecture ne rende sa ligne, d'avant ce coût.
+  let budgetReads = 0;
+  const instrumented = new Proxy(t.db, {
+    get(target, prop, receiver) {
+      if (prop === 'select') {
+        return (fields?: Record<string, unknown>) => {
+          const builder = target.select(fields as never);
+          if (!fields || !('budgetUsd' in fields) || ++budgetReads !== 2) return builder;
+          return {
+            from: (table: typeof runs) => ({
+              where: (cond: SQL | undefined) => ({
+                then: (resolve: (rows: unknown) => unknown, reject: (err: unknown) => unknown) =>
+                  (async () => {
+                    const rows = await builder.from(table).where(cond);
+                    gate.resolve();
+                    await until(firstResultDone);
+                    await new Promise((r) => setTimeout(r, 50)); // fin de la tâche de l'appel (réservation rendue)
+                    return rows;
+                  })().then(resolve, reject),
+              }),
+            }),
+          };
+        };
+      }
+      const value = Reflect.get(target, prop, receiver) as unknown;
+      return typeof value === 'function' ? (value as (...a: unknown[]) => unknown).bind(target) : value;
+    },
+  }) as Db;
+  const deps: EngineDeps = { db: instrumented, registry, config: { dataDir: tmpdir() }, sleep: async () => {} };
+  const handlers: JobHandlers = { run_execute: (job, ctx) => executeRunSlice(deps, job, ctx) };
+  expect(await runWorkerOnce({ db: t.db, clock: () => t.clock.now(), workerId: 'w1' }, handlers)).toBe(true);
+
+  expect(budgetReads).toBeGreaterThanOrEqual(2);
+  expect(started).toBe(1);
+  const run = await t.runRow(runId);
+  expect(run).toMatchObject({ status: 'paused', pauseReason: 'budget' });
+  expect(run.modelsCostUsd).toBeLessThanOrEqual(budget);
+  expect(run.modelsCostUsd).toBeCloseTo(0.01, 6);
+});
+
 test('reprendre sans relever le plafond → 409 budget_exceeded', async () => {
   const t = await setup();
-  const runId = await t.createRun(['Un'], { budgetUsd: 0.03 });
+  const runId = await t.createRun(['Un', 'Deux'], { budgetUsd: 0.03 });
+  // Prochain appel le moins cher : « Deux », 500 tokens de sortie au plus (0,005 $).
+  const [, second] = await t.db.select().from(runTests).where(eq(runTests.runId, runId)).orderBy(runTests.position);
+  await t.db.update(runTests).set({ snapshot: { ...second!.snapshot, maxTokens: 500 } }).where(eq(runTests.id, second!.id));
   // Dépense (modèles + juge) égale au plafond ; la tranche s'est retirée.
   await t.db.update(jobs).set({ status: 'done' }).where(eq(jobs.id, (await t.runRow(runId)).activeJobId!));
   await t.db
@@ -241,9 +351,15 @@ test('reprendre sans relever le plafond → 409 budget_exceeded', async () => {
   expect(refused.json().error.code).toBe('budget_exceeded');
   expect(await t.runRow(runId)).toMatchObject({ status: 'paused', pauseReason: 'budget' });
   expect(await t.activeJobs(runId)).toHaveLength(0);
+  // Minimum utile exposé par l'avancement : coût maximal du prochain appel, le moins cher des appels en attente.
+  expect((await t.get(`/api/runs/${runId}/progress`)).json().progress.nextCallMaxCostUsd).toBeCloseTo(0.005, 6);
 
-  // Plafond relevé au-dessus de la dépense : reprise acceptée.
-  expect((await t.patch(`/api/runs/${runId}`, { budgetUsd: 0.0301 })).statusCode).toBe(200);
+  // Plafond relevé au-dessus de la dépense mais sous dépense + coût maximal du prochain appel : toujours refusé.
+  expect((await t.patch(`/api/runs/${runId}`, { budgetUsd: 0.0349 })).statusCode).toBe(200);
+  expect((await t.post(`/api/runs/${runId}/resume`)).json().error.code).toBe('budget_exceeded');
+
+  // Plafond = dépense + coût maximal du prochain appel : le moteur pourrait le lancer, reprise acceptée.
+  expect((await t.patch(`/api/runs/${runId}`, { budgetUsd: 0.035 })).statusCode).toBe(200);
   const ok = await t.post(`/api/runs/${runId}/resume`);
   expect(ok.statusCode).toBe(200);
   expect(ok.json().run.status).toBe('queued');
@@ -304,6 +420,126 @@ test('ajout d’un 7ᵉ modèle à une série terminée : seuls ses résultats s
   expect(ran).toMatchObject({ status: 'done', attempts: 1, startedAt: t.clock.now() });
   expect(await t.runRow(runId)).toMatchObject({ status: 'completed', completedAt: t.clock.now(), activeJobId: null });
   expect(await t.auditActions()).toContain('run_models_added');
+});
+
+/** Résultat du modèle `modelId` passé en erreur définitive (avant toute exécution). */
+async function failResult(t: Awaited<ReturnType<typeof setup>>, runId: string, modelId: string) {
+  await t.db
+    .update(results)
+    .set({ status: 'error', attempts: 1, errorCode: 'auth_invalid', errorMessage: 'Clé refusée' })
+    .where(and(eq(results.runId, runId), eq(results.modelId, modelId)));
+}
+
+test('série en cours : ajout d’un modèle et relance des erreurs gardent la tâche active, puis la série se termine', async () => {
+  const t = await setup({ models: 3 });
+  const [m0, m1, m2] = t.modelIds as [string, string, string];
+  const runId = await t.createRun(['Un'], { modelIds: [m0, m1], concurrency: 1 });
+  await failResult(t, runId, m1);
+  const gate = deferred();
+  const started = deferred();
+  const calls: string[] = [];
+  const registry = gatedRegistry(gate.promise, () => started.resolve(), calls);
+
+  const worker = t.runOnce(registry);
+  await started.promise; // un appel en vol : série running
+  const jobId = (await t.runRow(runId)).activeJobId;
+  const added = await t.post(`/api/runs/${runId}/models`, { modelIds: [m2] });
+  expect(added.statusCode).toBe(200);
+  expect(added.json().run).toMatchObject({ status: 'running', modelCount: 3 });
+  const retried = await t.post(`/api/runs/${runId}/retry-errors`);
+  expect(retried.statusCode).toBe(200);
+  expect(retried.json().run.status).toBe('running');
+  expect((await t.runRow(runId)).activeJobId).toBe(jobId);
+  expect(await t.activeJobs(runId)).toHaveLength(1);
+  const rows = await t.resultRows(runId);
+  expect(rows.find((r) => r.modelId === m1)).toMatchObject({ status: 'pending', attempts: 0, errorCode: null });
+  expect(rows.find((r) => r.modelId === m2)).toMatchObject({ status: 'pending' });
+
+  gate.resolve();
+  expect(await worker).toBe(true);
+  await t.drain(registry);
+  expect(calls).toHaveLength(3);
+  expect((await t.resultRows(runId)).every((r) => r.status === 'done' && r.attempts === 1)).toBe(true);
+  expect(await t.runRow(runId)).toMatchObject({ status: 'completed', activeJobId: null });
+});
+
+test('série en pause (Utilisateur) : relance des erreurs et ajout d’un modèle la reprennent', async () => {
+  const t = await setup({ models: 3 });
+  const [m0, m1, m2] = t.modelIds as [string, string, string];
+  const runId = await t.createRun(['Un'], { modelIds: [m0, m1] });
+  await failResult(t, runId, m1);
+
+  expect((await t.post(`/api/runs/${runId}/pause`)).statusCode).toBe(200);
+  const retried = await t.post(`/api/runs/${runId}/retry-errors`);
+  expect(retried.statusCode).toBe(200);
+  expect(retried.json().run).toMatchObject({ status: 'queued', pauseReason: null });
+  expect(await t.activeJobs(runId)).toHaveLength(1);
+
+  expect((await t.post(`/api/runs/${runId}/pause`)).statusCode).toBe(200);
+  const added = await t.post(`/api/runs/${runId}/models`, { modelIds: [m2] });
+  expect(added.statusCode).toBe(200);
+  expect(added.json().run).toMatchObject({ status: 'queued', pauseReason: null, modelCount: 3 });
+  expect(await t.activeJobs(runId)).toHaveLength(1);
+
+  await t.drain();
+  expect((await t.resultRows(runId)).every((r) => r.status === 'done')).toBe(true);
+  expect(await t.runRow(runId)).toMatchObject({ status: 'completed', activeJobId: null });
+});
+
+test('série en pause budget : relance des erreurs et ajout d’un modèle la remettent en file, le moteur la remet aussitôt en pause', async () => {
+  const t = await setup({ models: 3 });
+  const [m0, m1, m2] = t.modelIds as [string, string, string];
+  const runId = await t.createRun(['Un'], { modelIds: [m0, m1], budgetUsd: 0.01 });
+  await failResult(t, runId, m1);
+  // Dépense égale au plafond : aucun appel (coût maximal 0,01 $) ne tient.
+  await t.db.update(jobs).set({ status: 'done' }).where(eq(jobs.id, (await t.runRow(runId)).activeJobId!));
+  await t.db
+    .update(runs)
+    .set({ status: 'paused', pauseReason: 'budget', modelsCostUsd: 0.01, activeJobId: null })
+    .where(eq(runs.id, runId));
+  const calls: string[] = [];
+  const registry = gatedRegistry(Promise.resolve(), () => {}, calls);
+
+  const retried = await t.post(`/api/runs/${runId}/retry-errors`);
+  expect(retried.statusCode).toBe(200);
+  expect(retried.json().run).toMatchObject({ status: 'queued', pauseReason: null });
+  await t.drain(registry);
+  expect(calls).toHaveLength(0);
+  expect(await t.runRow(runId)).toMatchObject({ status: 'paused', pauseReason: 'budget', activeJobId: null });
+
+  const added = await t.post(`/api/runs/${runId}/models`, { modelIds: [m2] });
+  expect(added.statusCode).toBe(200);
+  expect(added.json().run).toMatchObject({ status: 'queued', modelCount: 3 });
+  await t.drain(registry);
+  expect(calls).toHaveLength(0);
+  expect(await t.runRow(runId)).toMatchObject({ status: 'paused', pauseReason: 'budget', modelsCostUsd: 0.01 });
+
+  // Plafond relevé : la reprise termine la série.
+  expect((await t.patch(`/api/runs/${runId}`, { budgetUsd: 1 })).statusCode).toBe(200);
+  expect((await t.post(`/api/runs/${runId}/resume`)).statusCode).toBe(200);
+  await t.drain(registry);
+  expect(calls).toHaveLength(3);
+  expect(await t.runRow(runId)).toMatchObject({ status: 'completed' });
+});
+
+test('PATCH : corps vide, pondération dont la somme ≠ 100, plafond à 5 décimales → 400, série inchangée', async () => {
+  const t = await setup();
+  const runId = await t.createRun(['Un'], { budgetUsd: 2 });
+  for (const body of [
+    {},
+    { weights: { quality: 50, speed: 20, cost: 20, reliability: 20 } },
+    { weights: { quality: 40, speed: 20, cost: 20, reliability: 10 } },
+    { budgetUsd: 1.23456 },
+    { budgetUsd: 0.00001 },
+  ]) {
+    const res = await t.patch(`/api/runs/${runId}`, body);
+    expect(res.statusCode, JSON.stringify(body)).toBe(400);
+    expect(res.json().error.code).toBe('validation');
+  }
+  expect(await t.runRow(runId)).toMatchObject({ budgetUsd: 2, weights: { quality: 50, speed: 20, cost: 20, reliability: 10 } });
+  expect(await t.auditActions()).not.toContain('run_updated');
+  // Plafond à 4 décimales : accepté.
+  expect((await t.patch(`/api/runs/${runId}`, { budgetUsd: 1.2345 })).json().run.budgetUsd).toBe(1.2345);
 });
 
 test('relancer les erreurs : error et timeout repassent pending avec attempts 0, puis done', async () => {
@@ -401,6 +637,55 @@ test('boucle du planificateur : une série sans tâche active est reprise', asyn
   }
   expect(await t.activeJobs(runId)).toHaveLength(1);
   expect(logger.error).not.toHaveBeenCalled();
+});
+
+/** Tâche planifiée à 09:00 (heure de Paris), échue à START (10:00 à Paris). */
+const demoSchedule: ScheduleEntry = { key: 'demo', times: ['09:00'], build: () => [{ type: 'demo' }] };
+
+/** Deux séries `running` sans tâche active ; la reprise de la première échoue (déclencheur SQL sur `jobs`). */
+async function brokenAndHealthyRuns(t: Awaited<ReturnType<typeof setup>>) {
+  const broken = await t.createRun(['Un']);
+  const healthy = await t.createRun(['Deux']);
+  for (const id of [broken, healthy]) {
+    await t.db.update(jobs).set({ status: 'done' }).where(eq(jobs.id, (await t.runRow(id)).activeJobId!));
+    await t.db.update(runs).set({ status: 'running', activeJobId: null }).where(eq(runs.id, id));
+  }
+  await t.db.execute(
+    sql.raw(
+      `CREATE TRIGGER fail_run_job BEFORE INSERT ON jobs FOR EACH ROW BEGIN ` +
+        `IF JSON_VALUE(NEW.payload, '$.runId') = '${broken}' THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'reprise impossible'; END IF; END`,
+    ),
+  );
+  return { broken, healthy };
+}
+
+test('recoverRuns : une série dont la reprise échoue n’empêche ni les autres séries ni les tâches planifiées (/internal/tick → 200)', async () => {
+  const t = await setup({ schedules: [demoSchedule] });
+  const { broken, healthy } = await brokenAndHealthyRuns(t);
+  const tick = await t.app.inject({ method: 'POST', url: '/internal/tick', headers: { 'x-cron-secret': testConfig().cronSecret } });
+  expect(tick.statusCode).toBe(200);
+  expect(tick.json()).toMatchObject({ scheduled: 1, runsEnqueued: 1 });
+  expect(await t.activeJobs(healthy)).toHaveLength(1);
+  expect(await t.activeJobs(broken)).toHaveLength(0);
+  expect(await t.runRow(broken)).toMatchObject({ status: 'running', activeJobId: null });
+  expect(await t.db.select().from(jobs).where(eq(jobs.type, 'demo'))).toHaveLength(1);
+  // Erreur journalisée (message masqué par le journal), rattachée à la série.
+  const events = await t.db.select().from(errorEvents);
+  expect(events).toHaveLength(1);
+  expect(events[0]).toMatchObject({ source: 'job', origin: 'run_recovery', targetType: 'run', targetId: broken });
+});
+
+test('boucle du planificateur : une série dont la reprise échoue n’arrête ni les autres séries ni les tâches planifiées', async () => {
+  const t = await setup();
+  const { broken, healthy } = await brokenAndHealthyRuns(t);
+  const logger = { info: vi.fn(), error: vi.fn() };
+  const loop = startSchedulerLoop({ db: t.db, schedules: [demoSchedule], clock: () => t.clock.now(), logger }, { intervalMs: 60_000 });
+  await loop.stop(); // attend la fin du premier passage
+  expect(await t.activeJobs(healthy)).toHaveLength(1);
+  expect(await t.activeJobs(broken)).toHaveLength(0);
+  expect(await t.db.select().from(jobs).where(eq(jobs.type, 'demo'))).toHaveLength(1);
+  expect(logger.error).not.toHaveBeenCalled();
+  expect(await t.db.select().from(errorEvents)).toHaveLength(1);
 });
 
 test('deux workers sur la même série : un seul exécute (activeJobId), aucun appel en double', async () => {
