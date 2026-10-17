@@ -10,7 +10,7 @@ const idParams = z.object({ id: z.string().uuid() });
 const attachmentParams = z.object({ id: z.string().uuid(), attachmentId: z.string().uuid() });
 
 /** `Content-Disposition` en pièce jointe : repli ASCII + `filename*` (RFC 5987) pour le nom d'origine. */
-function contentDisposition(name: string): string {
+export function contentDisposition(name: string): string {
   const ascii = name.replace(/[^\x20-\x7e]|["\\]/g, '_');
   const encoded = encodeURIComponent(name).replace(/['()*]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
   return `attachment; filename="${ascii}"; filename*=UTF-8''${encoded}`;

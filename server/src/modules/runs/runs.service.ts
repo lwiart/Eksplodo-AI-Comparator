@@ -18,6 +18,7 @@ import {
   loadPendingJudgements,
   loadRunJudge,
 } from '../scoring/judge-items.js';
+import { incompleteManualQuestions } from '../scoring/manual.service.js';
 import { rescore, type RescoreInput } from '../scoring/rescore.js';
 import type { PublicTest } from '../tests/tests.service.js';
 import type { TestRow } from '../tests/tests.repo.js';
@@ -97,6 +98,8 @@ export type ResultRow = {
   errorMessage: string | null;
   scoreStatus: 'pending' | 'done' | 'awaiting_manual' | 'judge_failed';
   completedAt: string | null;
+  /** Réponse masquée (`responseText` nul) : test manuel dont l'Utilisateur n'a pas encore noté la question. */
+  hiddenUntilScored: boolean;
 };
 
 export type RunsServiceDeps = {
@@ -567,9 +570,13 @@ export function createRunsService(deps: RunsServiceDeps) {
       });
     },
 
-    async results(id: string): Promise<ResultRow[]> {
+    /** Résultats d'une série ; pour un Utilisateur, réponses des tests manuels dont il n'a pas complété la question masquées. */
+    async results(id: string, actor: Actor): Promise<ResultRow[]> {
       await requireRun(id);
-      const rows = await repo.resultsOf(id);
+      const [rows, hidden] = await Promise.all([
+        repo.resultsOf(id),
+        actor.role === 'admin' ? new Set<string>() : incompleteManualQuestions(db, actor.userId, id),
+      ]);
       return rows.map(({ result: r, testName, category, modelName, color }) => ({
         id: r.id,
         runTestId: r.runTestId,
@@ -581,7 +588,7 @@ export function createRunsService(deps: RunsServiceDeps) {
         repetition: r.repetition,
         status: r.status,
         attempts: r.attempts,
-        responseText: r.responseText,
+        responseText: hidden.has(r.runTestId) ? null : r.responseText,
         finishReason: r.finishReason,
         inputTokens: r.inputTokens,
         outputTokens: r.outputTokens,
@@ -596,6 +603,7 @@ export function createRunsService(deps: RunsServiceDeps) {
         errorMessage: r.errorMessage,
         scoreStatus: r.scoreStatus,
         completedAt: r.completedAt?.toISOString() ?? null,
+        hiddenUntilScored: hidden.has(r.runTestId),
       }));
     },
   };

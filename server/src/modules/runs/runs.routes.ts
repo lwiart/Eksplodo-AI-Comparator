@@ -108,6 +108,6 @@ export function registerRunsRoutes(app: FastifyInstance, service: RunsService): 
 
   app.get('/api/runs/:id/results', connected, async (req) => {
     const { id } = idParams.parse(req.params);
-    return { results: await service.results(id) };
+    return { results: await service.results(id, req.actor!) };
   });
 }
