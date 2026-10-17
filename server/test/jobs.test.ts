@@ -1,7 +1,7 @@
 import { eq } from 'drizzle-orm';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { jobs } from '../src/db/schema/jobs.js';
-import { BACKOFF_MS, InterruptedError, enqueue, getJob, recoverStaleJobs, type JobHandlers } from '../src/modules/jobs/queue.js';
+import { BACKOFF_MS, InterruptedError, claimJob, enqueue, getJob, recoverStaleJobs, type JobHandlers } from '../src/modules/jobs/queue.js';
 import { runWorkerOnce, startWorker } from '../src/modules/jobs/worker.js';
 import { createTestClock, type TestClock } from './helpers/test-clock.js';
 import { createTestDb } from './helpers/test-db.js';
@@ -275,5 +275,33 @@ describe('file de tâches', () => {
       expect(await runWorkerOnce(deps(), handlers)).toBe(false);
       clock.advance(60_000);
     }
+  });
+});
+
+describe('voie rapide', () => {
+  test('claimJob filtré par types : la voie rapide ne prend que quick_try', async () => {
+    await enqueue(t.db, { type: 'run_execute' }, clock.now());
+    await enqueue(t.db, { type: 'quick_try' }, clock.now());
+    expect((await claimJob(t.db, 'w', clock.now(), ['quick_try']))!.type).toBe('quick_try');
+    expect(await claimJob(t.db, 'w', clock.now(), ['quick_try'])).toBeNull();
+    expect((await claimJob(t.db, 'w', clock.now()))!.type).toBe('run_execute');
+  });
+
+  test('startWorker avec types : n’exécute que ces types', async () => {
+    await enqueue(t.db, { type: 'autre' }, clock.now());
+    const quickId = (await enqueue(t.db, { type: 'quick_try' }, clock.now()))!;
+    const ran: string[] = [];
+    const handlers: JobHandlers = {
+      quick_try: async (j) => {
+        ran.push(j.type);
+      },
+      autre: async (j) => {
+        ran.push(j.type);
+      },
+    };
+    const w = startWorker(deps(), handlers, { intervalMs: 10, types: ['quick_try'] });
+    await vi.waitFor(async () => expect((await getJob(t.db, quickId))!.status).toBe('done'));
+    await w.stop();
+    expect(ran).toEqual(['quick_try']);
   });
 });

@@ -30,6 +30,8 @@ const RETENTION_MS = 90 * 24 * 60 * 60 * 1000;
 const DUPLICATE_RETRIES = 3;
 /** Plafond de la pile avant masquage (borne le travail de `redact`). */
 const MAX_RAW_STACK = 20_000;
+/** Plafond du message avant masquage. */
+const MAX_RAW_MESSAGE = 20_000;
 
 let graveListener: GraveListener | null = null;
 
@@ -103,8 +105,9 @@ export function redact(text: string): string {
     .replace(JSON_FIELD_RE, `$1$2$1$3$4${MASK_KEY}$4`);
 }
 
-function mask(input: ErrorInput): { message: string; stack: string | null } {
-  const message = redact(input.message ?? '').slice(0, MAX_MESSAGE);
+export function mask(input: ErrorInput): { message: string; stack: string | null } {
+  // Tronqué avant `redact` : le masquage d'un message énorme ne doit pas monopoliser le processus.
+  const message = redact((input.message ?? '').slice(0, MAX_RAW_MESSAGE)).slice(0, MAX_MESSAGE);
   // Pile masquée ligne par ligne : le masquage des textes envoyés n'examine que le début du texte qu'on lui passe.
   const stack = input.stack
     ? input.stack

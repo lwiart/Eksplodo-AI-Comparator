@@ -12,6 +12,8 @@ export type WorkerDeps = {
   clock: Clock;
   workerId: string;
   jobTimeoutMs?: number;
+  /** Types de tâches réservés par ce worker (tous si absent) : voie rapide. */
+  types?: string[];
   /** Arrêt du processus : annule la tâche en cours (combiné au délai de la tâche) et empêche d'en réserver une autre. */
   signal?: AbortSignal;
 };
@@ -28,7 +30,7 @@ function messageOf(err: unknown): string {
 export async function runWorkerOnce(deps: WorkerDeps, handlers: JobHandlers): Promise<boolean> {
   const { db, clock, workerId } = deps;
   if (deps.signal?.aborted) return false;
-  const job = await claimJob(db, workerId, clock());
+  const job = await claimJob(db, workerId, clock(), deps.types);
   if (!job) return false;
 
   const handler = Object.hasOwn(handlers, job.type) ? handlers[job.type] : undefined;
@@ -94,7 +96,7 @@ export async function runWorkerOnce(deps: WorkerDeps, handlers: JobHandlers): Pr
 export function startWorker(
   deps: WorkerDeps,
   handlers: JobHandlers,
-  opts: { intervalMs: number },
+  opts: { intervalMs: number; types?: string[] },
 ): { stop(): Promise<void>; status(): 'running' | 'stopped' } {
   let stopped = false;
   let timer: NodeJS.Timeout | undefined;
@@ -103,7 +105,7 @@ export function startWorker(
   const tick = async (): Promise<void> => {
     let again = false;
     try {
-      again = await runWorkerOnce(deps, handlers);
+      again = await runWorkerOnce(opts.types ? { ...deps, types: opts.types } : deps, handlers);
     } catch (err) {
       console.error('worker : erreur inattendue', err);
     }

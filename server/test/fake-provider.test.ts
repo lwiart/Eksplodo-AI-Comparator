@@ -1,5 +1,5 @@
-import { describe, expect, test } from 'vitest';
-import { createFakeAdapter, FAKE_MODELS } from '../src/modules/providers/fake.js';
+import { afterEach, describe, expect, test } from 'vitest';
+import { createFakeAdapter, FAKE_MODELS, resetFakeCallCounters } from '../src/modules/providers/fake.js';
 import type { GenerateEvent, GenerateRequest, ProviderAdapter } from '../src/modules/providers/types.js';
 
 const sig = new AbortController().signal;
@@ -23,6 +23,8 @@ async function run(adapter: ProviderAdapter, r: GenerateRequest = req, signal: A
 }
 
 describe('faux fournisseur', () => {
+  afterEach(() => resetFakeCallCounters());
+
   test('même graine, même prompt → mêmes événements', async () => {
     const a1 = withSleeps(7).adapter;
     const a2 = withSleeps(7).adapter;
@@ -106,8 +108,43 @@ describe('faux fournisseur', () => {
     expect(firstReasoning).toBeLessThan(firstText);
   });
 
-  test('modèle inconnu → model_not_found', async () => {
-    await expect(run(withSleeps().adapter, { ...req, model: 'gpt-x' })).rejects.toMatchObject({ code: 'model_not_found' });
+  test('modèle inconnu → profil fake-equilibre, pas model_not_found', async () => {
+    const { adapter, sleeps } = withSleeps();
+    const events = await run(adapter, { ...req, model: 'gpt-x' });
+    expect(events.at(-1)).toMatchObject({ type: 'finish' });
+    expect(sleeps[0]).toBeGreaterThanOrEqual(640); // 800 ms ± 20 %
+    expect(sleeps[0]).toBeLessThanOrEqual(960);
+  });
+
+  test('fake-instable : une nouvelle tentative du même appel peut réussir', async () => {
+    const adapter = withSleeps(1).adapter;
+    const instable = (prompt: string): GenerateRequest => ({ ...req, model: 'fake-instable', prompt });
+    let found = false;
+    for (let i = 0; i < 40 && !found; i++) {
+      resetFakeCallCounters();
+      const prompt = `essai ${i}`;
+      try {
+        await run(adapter, instable(prompt));
+      } catch {
+        // 1er appel en échec : l'un des 5 suivants doit réussir
+        for (let k = 0; k < 5 && !found; k++) {
+          try {
+            await run(adapter, instable(prompt));
+            found = true;
+          } catch {
+            /* nouvelle tentative */
+          }
+        }
+        expect(found).toBe(true);
+      }
+    }
+    expect(found).toBe(true);
+  });
+
+  test('les directives restent déterministes malgré le compteur', async () => {
+    const adapter = withSleeps().adapter;
+    const r = { ...req, model: 'fake-instable', prompt: '[[fake:429]]' };
+    for (let i = 0; i < 3; i++) await expect(run(adapter, r)).rejects.toMatchObject({ code: 'rate_limited' });
   });
 
   test('fake-instable échoue parfois (429 ou 500), de façon déterministe', async () => {

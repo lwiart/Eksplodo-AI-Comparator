@@ -17,6 +17,7 @@ import { systemClock } from './lib/clock.js';
 import { prepareDatabase } from './startup.js';
 
 const WORKER_INTERVAL_MS = 2000;
+const QUICK_WORKER_INTERVAL_MS = 1000;
 const SCHEDULER_INTERVAL_MS = 60_000;
 const SHUTDOWN_GRACE_MS = 10_000;
 
@@ -85,6 +86,12 @@ async function main(): Promise<void> {
     intervalMs: WORKER_INTERVAL_MS,
   });
   worker = runningWorker;
+  // Voie rapide : essais rapides servis à part, sans attendre les longues tâches de la voie principale.
+  const quickWorker = startWorker(
+    { db, clock: systemClock, workerId: `${workerId}:rapide`.slice(0, 64), signal: stopping.signal },
+    handlers,
+    { intervalMs: QUICK_WORKER_INTERVAL_MS, types: ['quick_try'] },
+  );
   // Reprise des tâches abandonnées et planification : un passage immédiat puis toutes les 60 s.
   const scheduler = startSchedulerLoop({ db, schedules, clock: systemClock, logger }, { intervalMs: SCHEDULER_INTERVAL_MS });
 
@@ -97,7 +104,7 @@ async function main(): Promise<void> {
       try {
         // Une tâche bloquée ne doit pas empêcher l'arrêt : attente bornée.
         await Promise.race([
-          Promise.all([scheduler.stop(), runningWorker.stop()]),
+          Promise.all([scheduler.stop(), runningWorker.stop(), quickWorker.stop()]),
           new Promise<void>((resolve) => setTimeout(resolve, SHUTDOWN_GRACE_MS)),
         ]);
         await app.close();

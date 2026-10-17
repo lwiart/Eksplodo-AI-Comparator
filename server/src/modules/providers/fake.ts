@@ -13,6 +13,14 @@ const PROFILES: Record<string, Profile> = {
   'fake-vision': { firstTokenMs: 500, tokensPerSecond: 80, errorRate: 0 },
 };
 
+/** Appels déjà reçus par (modèle, prompt) : une nouvelle tentative sur `fake-instable` tire un autre sort. Niveau module, car le registre crée un adaptateur par appel. */
+const callCounters = new Map<string, number>();
+
+/** Remet les compteurs d'appels à zéro (tests). */
+export function resetFakeCallCounters(): void {
+  callCounters.clear();
+}
+
 function fakeModel(id: string, name: string, inputPricePerM: number, outputPricePerM: number, vision = false): RemoteModel {
   return {
     id,
@@ -109,15 +117,20 @@ export function createFakeAdapter(
   const seed = opts.seed ?? 0;
 
   async function* generate(req: GenerateRequest, signal: AbortSignal): AsyncGenerator<GenerateEvent> {
-    const profile = PROFILES[req.model];
-    if (!profile) throw httpError(404, `Modèle factice inconnu : ${req.model}`, {}, []);
+    const profile = PROFILES[req.model] ?? PROFILES['fake-equilibre']!;
 
-    const rng = mulberry32(fnv1a(`${seed}|${req.model}|${req.prompt}`));
+    const key = `${req.model}|${req.prompt}`;
+    const callIndex = callCounters.get(key) ?? 0;
+    callCounters.set(key, callIndex + 1);
+
+    const rng = mulberry32(fnv1a(`${seed}|${key}`));
+    // Seul le tirage d'échec dépend du compteur : le texte reste reproductible d'un appel à l'autre.
+    const failRng = mulberry32(fnv1a(`${seed}|${key}|${callIndex}`));
     // Tirages dans un ordre fixe, quelles que soient les directives, pour garder le flux reproductible.
     const latencyFactor = 1 - JITTER + 2 * JITTER * rng();
     const rateFactor = 1 - JITTER + 2 * JITTER * rng();
-    const failRoll = rng();
-    const failKind = rng();
+    const failRoll = failRng();
+    const failKind = failRng();
     const naturalTokens = 60 + Math.floor(rng() * 60);
     const has = (d: string) => req.prompt.includes(`[[fake:${d}]]`);
 

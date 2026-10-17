@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { and, asc, eq, lt, lte, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, lt, lte, sql } from 'drizzle-orm';
 import type { Db } from '../../db/client.js';
 import { jobs } from '../../db/schema/jobs.js';
 import type { Clock } from '../../lib/clock.js';
@@ -92,11 +92,11 @@ export async function getJob(db: Db, id: string): Promise<Job | null> {
 }
 
 /** Réserve une tâche prête (sans SKIP LOCKED : UPDATE conditionnel, affectedRows = 1 ⇒ réservée). */
-export async function claimJob(db: Db, workerId: string, now: Date): Promise<Job | null> {
+export async function claimJob(db: Db, workerId: string, now: Date, types?: string[]): Promise<Job | null> {
   const candidates = await db
     .select({ id: jobs.id })
     .from(jobs)
-    .where(and(eq(jobs.status, 'queued'), lte(jobs.runAfter, now)))
+    .where(and(eq(jobs.status, 'queued'), lte(jobs.runAfter, now), types ? inArray(jobs.type, types) : undefined))
     .orderBy(asc(jobs.runAfter))
     .limit(CANDIDATES);
   for (const { id } of candidates) {

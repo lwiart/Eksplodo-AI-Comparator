@@ -4,6 +4,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, test, vi } from 'vite
 import { errorEvents } from '../src/db/schema/errors.js';
 import { fingerprintOf, newReference } from '../src/modules/errors/reference.js';
 import {
+  mask,
   markReported,
   purgeErrorEvents,
   reportError,
@@ -372,5 +373,15 @@ describe('redact : formes des fournisseurs', () => {
   });
   test('redact ne touche pas un texte sans secret', () => {
     expect(redact('Modèle claude-opus-5-5 introuvable (404)')).toBe('Modèle claude-opus-5-5 introuvable (404)');
+  });
+});
+
+describe('masquage borné', () => {
+  test('un message de 2 Mo est masqué en moins de 200 ms', () => {
+    const message = `${'a-'.repeat(1_000_000)}key=x`;
+    const t0 = performance.now();
+    const out = mask({ source: 'job', origin: 'o', code: 'internal', message, severity: 'normale' });
+    expect(performance.now() - t0).toBeLessThan(200);
+    expect(out.message.length).toBeLessThanOrEqual(2000);
   });
 });

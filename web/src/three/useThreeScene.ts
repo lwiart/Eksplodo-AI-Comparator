@@ -1,4 +1,4 @@
-import { useEffect, useState, type RefObject } from 'react';
+import { useEffect, useRef, useState, type RefObject } from 'react';
 import { getAnimationsPreference } from '../app/preferences';
 import { cappedPixelRatio, shouldAnimate } from './animation-policy';
 
@@ -10,7 +10,13 @@ export type SceneFactory = (ctx: {
   isMobile: boolean;
   /** Déjà plafonné par le hook : la scène doit l'appliquer au moteur de rendu (setPixelRatio). */
   pixelRatio: number;
-}) => { render(dtSeconds: number): void; resize(width: number, height: number): void; dispose(): void };
+}) => {
+  render(dtSeconds: number): void;
+  resize(width: number, height: number): void;
+  dispose(): void;
+  /** Données de la scène (facultatif) : appelée à la création puis à chaque changement de `data`. */
+  setData?(data: unknown): void;
+};
 
 export type SceneStatus = 'loading' | 'running' | 'paused' | 'fallback';
 
@@ -21,8 +27,25 @@ const MAX_DT = 0.1; // un onglet resté en arrière-plan ne doit pas provoquer u
  * Charge Three.js à la demande (fragment séparé), crée la scène et pilote sa boucle d'animation.
  * Le canevas est dimensionné d'après son parent. Hors animation, une image fixe reste affichée.
  */
-export function useThreeScene(factory: SceneFactory, canvasRef: RefObject<HTMLCanvasElement | null>): { status: SceneStatus } {
+export function useThreeScene(
+  factory: SceneFactory,
+  canvasRef: RefObject<HTMLCanvasElement | null>,
+  data?: unknown,
+): { status: SceneStatus } {
   const [status, setStatus] = useState<SceneStatus>('loading');
+  const sceneRef = useRef<ReturnType<SceneFactory> | null>(null);
+  const dataRef = useRef<unknown>(data);
+  dataRef.current = data;
+  const redrawRef = useRef<() => void>(() => {});
+
+  // Mise à jour des données ; le premier envoi se fait à la création de la scène (ci-dessous).
+  useEffect(() => {
+    const scene = sceneRef.current;
+    if (scene?.setData) {
+      scene.setData(data);
+      redrawRef.current(); // image fixe : la boucle ne repeint pas
+    }
+  }, [data]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -76,6 +99,25 @@ export function useThreeScene(factory: SceneFactory, canvasRef: RefObject<HTMLCa
         const { width, height } = size();
         const isMobile = typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 767px)').matches;
         scene = factory({ THREE, canvas, width, height, isMobile, pixelRatio: cappedPixelRatio(window.devicePixelRatio) });
+        sceneRef.current = scene;
+        redrawRef.current = () => {
+          if (frame === 0) scene?.render(0);
+        };
+        scene.setData?.(dataRef.current);
+
+        // Perte du contexte GPU : la scène est abandonnée au profit du repli 2D.
+        const onContextLost = (e: Event) => {
+          e.preventDefault();
+          if (frame !== 0) cancelAnimationFrame(frame);
+          frame = 0;
+          const lost = scene;
+          scene = null;
+          sceneRef.current = null;
+          lost?.dispose();
+          setStatus('fallback');
+        };
+        canvas.addEventListener('webglcontextlost', onContextLost);
+        cleanups.push(() => canvas.removeEventListener('webglcontextlost', onContextLost));
 
         const onVisibility = () => {
           state.pageVisible = document.visibilityState !== 'hidden';
@@ -137,6 +179,8 @@ export function useThreeScene(factory: SceneFactory, canvasRef: RefObject<HTMLCa
       cleanups.forEach((fn) => fn());
       scene?.dispose();
       scene = null;
+      sceneRef.current = null;
+      redrawRef.current = () => {};
     };
   }, [factory, canvasRef]);
 

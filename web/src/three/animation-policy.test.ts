@@ -1,5 +1,5 @@
-import { expect, test } from 'vitest';
-import { cappedPixelRatio, hasWebGL, shouldAnimate } from './animation-policy';
+import { afterEach, expect, test, vi } from 'vitest';
+import { cappedPixelRatio, hasWebGL, resetWebGLProbe, shouldAnimate } from './animation-policy';
 
 test.each([
   [{ reducedMotion: false, userPreference: true, pageVisible: true, inViewport: true }, true],
@@ -11,8 +11,26 @@ test.each([
   expect(shouldAnimate(s)).toBe(expected);
 });
 
+afterEach(() => {
+  resetWebGLProbe();
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
+
 test('hasWebGL renvoie false sans WebGL (jsdom), sans lever d’erreur', () => {
   expect(hasWebGL()).toBe(false);
+});
+
+test('hasWebGL libère le contexte de sonde et mémorise le résultat', () => {
+  vi.stubGlobal('WebGLRenderingContext', class {});
+  const loseContext = vi.fn();
+  const getContextSpy = vi
+    .spyOn(HTMLCanvasElement.prototype, 'getContext')
+    .mockImplementation((() => ({ getExtension: () => ({ loseContext }) })) as never);
+  expect(hasWebGL()).toBe(true);
+  expect(hasWebGL()).toBe(true);
+  expect(loseContext).toHaveBeenCalledTimes(1);
+  expect(getContextSpy).toHaveBeenCalledTimes(1);
 });
 
 test.each([
