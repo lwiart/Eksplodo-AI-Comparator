@@ -1,0 +1,4 @@
+data: {"id":"b1","object":"chat.completion.chunk","model":"gpt-x","choices":[{"index":0,"delta":{"content":"Salut"},"finish_reason":null}]}
+
+data: ceci n’est pas du JSON
+

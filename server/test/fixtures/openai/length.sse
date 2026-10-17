@@ -1,0 +1,8 @@
+data: {"id":"l1","object":"chat.completion.chunk","model":"gpt-x","choices":[{"index":0,"delta":{"role":"assistant","content":"Un texte tron"},"finish_reason":null}]}
+
+data: {"id":"l1","object":"chat.completion.chunk","model":"gpt-x","choices":[{"index":0,"delta":{},"finish_reason":"length"}]}
+
+data: {"id":"l1","object":"chat.completion.chunk","model":"gpt-x","choices":[],"usage":{"prompt_tokens":5,"completion_tokens":2,"total_tokens":7}}
+
+data: [DONE]
+

@@ -1,0 +1,2 @@
+data: {"id":"k1","object":"chat.completion.chunk","model":"gpt-x","choices":[{"index":0,"delta":{"role":"assistant","content":"Réponse coupée"},"finish_reason":null}]}
+

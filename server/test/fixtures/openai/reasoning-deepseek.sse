@@ -1,0 +1,14 @@
+data: {"id":"d1","object":"chat.completion.chunk","model":"deepseek-reasoner","choices":[{"index":0,"delta":{"role":"assistant","content":null,"reasoning_content":""},"finish_reason":null}]}
+
+data: {"id":"d1","object":"chat.completion.chunk","model":"deepseek-reasoner","choices":[{"index":0,"delta":{"content":null,"reasoning_content":"Je réfléchis"},"finish_reason":null}]}
+
+data: {"id":"d1","object":"chat.completion.chunk","model":"deepseek-reasoner","choices":[{"index":0,"delta":{"content":null,"reasoning_content":" à la question."},"finish_reason":null}]}
+
+data: {"id":"d1","object":"chat.completion.chunk","model":"deepseek-reasoner","choices":[{"index":0,"delta":{"content":"Voici","reasoning_content":null},"finish_reason":null}]}
+
+data: {"id":"d1","object":"chat.completion.chunk","model":"deepseek-reasoner","choices":[{"index":0,"delta":{"content":" la réponse.","reasoning_content":null},"finish_reason":null}]}
+
+data: {"id":"d1","object":"chat.completion.chunk","model":"deepseek-reasoner","choices":[{"index":0,"delta":{"content":""},"finish_reason":"stop"}],"usage":{"prompt_tokens":20,"completion_tokens":30,"total_tokens":50,"completion_tokens_details":{"reasoning_tokens":18}}}
+
+data: [DONE]
+

@@ -1,0 +1,12 @@
+data: {"id":"r1","object":"chat.completion.chunk","model":"gpt-x","choices":[{"index":0,"delta":{"role":"assistant","content":null},"finish_reason":null}]}
+
+data: {"id":"r1","object":"chat.completion.chunk","model":"gpt-x","choices":[{"index":0,"delta":{"refusal":"Je ne peux pas"},"finish_reason":null}]}
+
+data: {"id":"r1","object":"chat.completion.chunk","model":"gpt-x","choices":[{"index":0,"delta":{"refusal":" aider avec cela."},"finish_reason":null}]}
+
+data: {"id":"r1","object":"chat.completion.chunk","model":"gpt-x","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}
+
+data: {"id":"r1","object":"chat.completion.chunk","model":"gpt-x","choices":[],"usage":{"prompt_tokens":9,"completion_tokens":7,"total_tokens":16}}
+
+data: [DONE]
+
