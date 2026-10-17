@@ -20,7 +20,7 @@ export type SideBySideTest = { runTestId: string; testName: string };
 /** Note imposée saisie (virgule ou point) : `undefined` quand elle n'est pas comprise entre 0 et 10 avec une décimale au plus. */
 export function parseOverride(raw: string): number | undefined {
   const text = raw.trim().replace(',', '.');
-  if (!/^\d{1,2}(\.\d)?$/.test(text)) return undefined;
+  if (!/^(\d{1,2}(\.\d?)?|\.\d)$/.test(text)) return undefined;
   const n = Number(text);
   return n >= 0 && n <= 10 ? n : undefined;
 }
@@ -64,7 +64,7 @@ function OverrideEditor({ answer, onSaved }: { answer: Answer; onSaved: () => Pr
             value={raw}
             maxLength={4}
             className="w-28"
-            error={raw !== '' && value === undefined ? '0 à 10, une décimale au plus.' : null}
+            error={raw !== '' && value === undefined ? 'Entre 0 et 10, une décimale au plus (ex. 7,5).' : null}
             onChange={(e) => setRaw(e.target.value)}
           />
           <Button variant="primary" disabled={value === undefined || save.isPending} onClick={() => value !== undefined && save.mutate(value)}>
@@ -101,16 +101,7 @@ function OverrideEditor({ answer, onSaved }: { answer: Answer; onSaved: () => Pr
   );
 }
 
-function AnswerCard({ answer, runTestId, isAdmin, onOverride }: { answer: Answer; runTestId: string; isAdmin: boolean; onOverride: () => Promise<unknown> }) {
-  if (answer.hiddenUntilScored)
-    return (
-      <article aria-label="Réponse masquée" className="flex flex-col gap-3 rounded-2xl border border-line bg-night-0/40 p-3.5 text-[12.5px]">
-        <p className="m-0 text-sm text-mute">Notez cette question pour voir les réponses.</p>
-        <Link to={`/a-noter/${runTestId}`} className="self-start text-sm font-semibold text-peach">
-          Noter cette question
-        </Link>
-      </article>
-    );
+function AnswerCard({ answer, isAdmin, onOverride }: { answer: Answer; isAdmin: boolean; onOverride: () => Promise<unknown> }) {
   const failed = answer.status !== 'done';
   return (
     <article
@@ -205,6 +196,7 @@ export function SideBySide({ runId, tests, isAdmin, judgePending = 0 }: { runId:
   const runTestId = tests.some((t) => t.runTestId === selected) ? selected : (tests[0]?.runTestId ?? '');
   const answers = useQuery({ queryKey: answersKey(runId, runTestId), queryFn: () => getAnswers(runId, runTestId), enabled: runTestId !== '' });
   const tabs: Tab[] = isAdmin ? ['side', 'blind', 'spread'] : ['side', 'blind'];
+  const hiddenCount = answers.data?.answers.filter((a) => a.hiddenUntilScored).length ?? 0;
   const testIndex = tests.findIndex((t) => t.runTestId === runTestId);
 
   // Une note imposée ou une relance change les réponses et le classement (la progression suit le juge en attente).
@@ -256,7 +248,7 @@ export function SideBySide({ runId, tests, isAdmin, judgePending = 0 }: { runId:
       <div role="tabpanel" aria-label={TAB_LABELS[tab]} className="flex flex-col gap-3">
         {tab === 'side' ? (
           <>
-            {isAdmin ? <RescorePanel runId={runId} runTestId={runTestId} onQueued={refresh} /> : null}
+            {isAdmin ? <RescorePanel key={runTestId} runId={runId} runTestId={runTestId} onQueued={refresh} /> : null}
             {answers.isError ? (
               <p role="alert" className="text-sm text-bad">
                 {messageForError(answers.error)}
@@ -265,10 +257,18 @@ export function SideBySide({ runId, tests, isAdmin, judgePending = 0 }: { runId:
               <p className="text-sm text-mute">Chargement des réponses…</p>
             ) : (
               <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                {answers.data.answers.map((a) => (
+                {hiddenCount > 0 ? (
+                  <div className="flex flex-col gap-3 rounded-2xl border border-line bg-night-0/40 p-3.5 md:col-span-2 xl:col-span-3">
+                    <p className="m-0 text-sm text-mute">Notez cette question pour voir les réponses ({hiddenCount} masquée{hiddenCount > 1 ? 's' : ''}).</p>
+                    <Link to={`/a-noter/${runTestId}`} className="self-start text-sm font-semibold text-peach">
+                      Noter cette question
+                    </Link>
+                  </div>
+                ) : null}
+                {answers.data.answers.filter((a) => !a.hiddenUntilScored).map((a) => (
                   <div key={a.resultId} className="flex flex-col gap-1.5">
-                    <AnswerCard answer={a} runTestId={runTestId} isAdmin={isAdmin} onOverride={refresh} />
-                    {isAdmin && !a.hiddenUntilScored && a.status === 'done' ? <ResultRescore runId={runId} resultId={a.resultId} onQueued={refresh} /> : null}
+                    <AnswerCard answer={a} isAdmin={isAdmin} onOverride={refresh} />
+                    {isAdmin && a.status === 'done' ? <ResultRescore runId={runId} resultId={a.resultId} onQueued={refresh} /> : null}
                   </div>
                 ))}
               </div>

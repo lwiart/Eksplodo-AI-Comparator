@@ -6,7 +6,7 @@ import { getRanking, rankingKey } from '../api/results';
 import { RUNS_KEY, getRun, getRunProgress, getRunResults, type RunProgress, type RunStatus, type RunSummary } from '../api/runs';
 import { useAuth } from '../auth/AuthProvider';
 import { ActivityFeed } from '../components/runs/ActivityFeed';
-import { SideBySide } from '../components/results/SideBySide';
+import { SideBySide, type SideBySideTest } from '../components/results/SideBySide';
 import { LiveMatrix } from '../components/runs/LiveMatrix';
 import { PauseNotice, RunControls } from '../components/runs/RunControls';
 import { RunMetricsTable } from '../components/runs/RunMetricsTable';
@@ -132,7 +132,21 @@ function LiveView({ progress }: { progress: RunProgress }) {
 }
 
 /** Podium, pondération, graphes et classement ; la qualité peut être masquée (nulle) pour un Utilisateur qui n'a pas noté. */
-function ResultsSection({ runId, isAdmin, show, active }: { runId: string; isAdmin: boolean; show: boolean; active: boolean }) {
+function ResultsSection({
+  runId,
+  isAdmin,
+  show,
+  active,
+  tests,
+  judgePending,
+}: {
+  runId: string;
+  isAdmin: boolean;
+  show: boolean;
+  active: boolean;
+  tests: SideBySideTest[];
+  judgePending: number;
+}) {
   const ranking = useQuery({
     queryKey: rankingKey(runId),
     queryFn: () => getRanking(runId),
@@ -150,7 +164,10 @@ function ResultsSection({ runId, isAdmin, show, active }: { runId: string; isAdm
   if (!ranking.data) return <p className="text-sm text-mute">Chargement du classement…</p>;
   return (
     <Suspense fallback={<p className="text-sm text-mute">Chargement du classement…</p>}>
-      <ResultsView runId={runId} ranking={ranking.data} isAdmin={isAdmin} />
+      <div className="flex flex-col gap-4">
+        <ResultsView runId={runId} ranking={ranking.data} isAdmin={isAdmin} />
+        <SideBySide runId={runId} tests={tests} isAdmin={isAdmin} judgePending={judgePending} />
+      </div>
     </Suspense>
   );
 }
@@ -218,15 +235,14 @@ export function RunPage() {
               <PauseNotice progress={progress.data} isAdmin={isAdmin} />
               {isAdmin ? <RunControls runId={id} progress={progress.data} /> : null}
               {progress.data.status === 'completed' ? null : <LiveView progress={progress.data} />}
-              <ResultsSection runId={id} isAdmin={isAdmin} show={progress.data.status === 'completed'} active={ACTIVE.includes(progress.data.status)} />
-              {progress.data.status === 'completed' || progress.data.judgePending > 0 ? (
-                <SideBySide
-                  runId={id}
-                  tests={progress.data.matrix.map((m) => ({ runTestId: m.runTestId, testName: m.testName }))}
-                  isAdmin={isAdmin}
-                  judgePending={progress.data.judgePending}
-                />
-              ) : null}
+              <ResultsSection
+                runId={id}
+                isAdmin={isAdmin}
+                show={progress.data.status === 'completed'}
+                active={ACTIVE.includes(progress.data.status)}
+                tests={progress.data.matrix.map((m) => ({ runTestId: m.runTestId, testName: m.testName }))}
+                judgePending={progress.data.judgePending}
+              />
               {progress.data.status === 'completed' ? <CompletedView runId={id} /> : null}
             </div>
           ) : (

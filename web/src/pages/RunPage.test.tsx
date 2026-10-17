@@ -413,6 +413,14 @@ test('série terminée : réponses côte à côte avec les tests de la série', 
 });
 
 test('série en cours avec notes du juge en attente : « Notation en cours »', async () => {
+  ranking = { ...RANKING, models: RANKED_MODELS };
   renderPage('user', { ...PROGRESS, judgePending: 2 });
   expect(await screen.findByText('Notation en cours · 2 en attente')).toBeInTheDocument();
+});
+
+test('série en pause avec une qualité : réponses côte à côte accessibles, sans badge si rien n’est en attente', async () => {
+  ranking = { ...RANKING, models: RANKED_MODELS };
+  renderPage('admin', { ...PROGRESS, status: 'paused', pauseReason: 'user' });
+  expect(await screen.findByRole('article', { name: 'Claude Opus, répétition 1' })).toBeInTheDocument();
+  expect(screen.queryByText(/Notation en cours/)).toBeNull();
 });

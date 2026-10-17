@@ -121,12 +121,36 @@ test('réponse masquée pour l’Utilisateur qui n’a pas noté, avec lien vers
     answers: [answer({ responseText: null, hiddenUntilScored: true, finalScore: null, judgeRationale: null })],
   };
   renderBlock(false);
-  const card = await screen.findByRole('article', { name: 'Réponse masquée' });
-  expect(within(card).getByText('Notez cette question pour voir les réponses.')).toBeInTheDocument();
-  expect(within(card).getByRole('link', { name: 'Noter cette question' })).toHaveAttribute('href', '/a-noter/rt1');
-  expect(screen.queryByText('Claude Opus')).toBeNull();
+  expect(await screen.findByText(/Notez cette question pour voir les réponses/)).toBeInTheDocument();
+  expect(screen.getAllByRole('link', { name: 'Noter cette question' })).toHaveLength(1);
+  expect(screen.getByRole('link', { name: 'Noter cette question' })).toHaveAttribute('href', '/a-noter/rt1');
+  expect(screen.queryByRole('article')).toBeNull();
   await user.click(screen.getByRole('tab', { name: 'À l’aveugle' }));
   expect(screen.getByRole('link', { name: 'Noter à l’aveugle' })).toHaveAttribute('href', '/a-noter/rt1');
+});
+
+test('réponses masquées : même si le serveur renvoie texte, note ou modèle, rien n’apparaît', async () => {
+  answersBody = {
+    test: TEST_INFO,
+    answers: [
+      answer({ hiddenUntilScored: true, responseText: 'TEXTE SECRET', finalScore: 6.3, autoScore: 6.3, judgeRationale: 'RAISON SECRETE' }),
+      answer({ resultId: 'a2', modelName: 'GPT Secret', hiddenUntilScored: true, responseText: 'AUTRE SECRET', finalScore: 4.1 }),
+    ],
+  };
+  renderBlock(false);
+  expect(await screen.findByText(/2 masquées/)).toBeInTheDocument();
+  const html = document.body.textContent ?? '';
+  for (const secret of ['TEXTE SECRET', 'AUTRE SECRET', 'RAISON SECRETE', 'GPT Secret', 'Claude Opus', '6,3', '4,1']) expect(html).not.toContain(secret);
+});
+
+test('changer de test efface le message de relance', async () => {
+  const user = userEvent.setup();
+  renderBlock(true);
+  await screen.findByRole('article', { name: 'Claude Opus, répétition 1' });
+  await user.click(screen.getByRole('button', { name: 'Relancer le juge sur ce test' }));
+  expect(await screen.findByText('2 notation(s) relancée(s).')).toBeInTheDocument();
+  await user.selectOptions(screen.getByLabelText('Test'), 'rt2');
+  expect(screen.queryByText('2 notation(s) relancée(s).')).toBeNull();
 });
 
 test('Admin : imposer une note 7,5 puis la retirer ; relancer le juge sur un test avec un autre juge', async () => {
@@ -137,7 +161,7 @@ test('Admin : imposer une note 7,5 puis la retirer ; relancer le juge sur un tes
   await user.click(within(card).getByRole('button', { name: 'Imposer une note' }));
   const input = within(card).getByLabelText('Note imposée (0 à 10)');
   await user.type(input, '10,5');
-  expect(within(card).getByText('0 à 10, une décimale au plus.')).toBeInTheDocument();
+  expect(within(card).getByText('Entre 0 et 10, une décimale au plus (ex. 7,5).')).toBeInTheDocument();
   expect(within(card).getByRole('button', { name: 'Enregistrer' })).toBeDisabled();
   await user.clear(input);
   await user.type(input, '7,5');
@@ -191,6 +215,8 @@ test('analyse de la note imposée', () => {
   expect(parseOverride('7,5')).toBe(7.5);
   expect(parseOverride('10')).toBe(10);
   expect(parseOverride('0')).toBe(0);
+  expect(parseOverride(',5')).toBe(0.5);
+  expect(parseOverride('.5')).toBe(0.5);
   expect(parseOverride('10,5')).toBeUndefined();
   expect(parseOverride('7,55')).toBeUndefined();
   expect(parseOverride('-1')).toBeUndefined();
