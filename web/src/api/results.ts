@@ -66,6 +66,9 @@ export type RescoreBody = {
 export type OverrideResult = { id: string; overrideScore: number | null; overrideBy: string | null };
 
 export const rankingKey = (runId: string) => ['runs', runId, 'ranking'] as const;
+export const answersKey = (runId: string, runTestId: string) => ['runs', runId, 'answers', runTestId] as const;
+/** Préfixe des réponses de tous les tests d'une série. */
+export const answersPrefix = (runId: string) => ['runs', runId, 'answers'] as const;
 
 const enc = encodeURIComponent;
 

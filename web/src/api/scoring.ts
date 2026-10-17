@@ -34,6 +34,8 @@ export type SpreadItem = {
 export const TODO_KEY = ['scoring', 'todo'] as const;
 export const questionKey = (runTestId: string) => ['scoring', 'question', runTestId] as const;
 
+export const spreadKey = (runId: string) => ['scoring', 'runs', runId, 'spread'] as const;
+
 const enc = encodeURIComponent;
 
 export async function getTodo(): Promise<TodoItem[]> {

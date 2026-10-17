@@ -6,6 +6,7 @@ import { getRanking, rankingKey } from '../api/results';
 import { RUNS_KEY, getRun, getRunProgress, getRunResults, type RunProgress, type RunStatus, type RunSummary } from '../api/runs';
 import { useAuth } from '../auth/AuthProvider';
 import { ActivityFeed } from '../components/runs/ActivityFeed';
+import { SideBySide } from '../components/results/SideBySide';
 import { LiveMatrix } from '../components/runs/LiveMatrix';
 import { PauseNotice, RunControls } from '../components/runs/RunControls';
 import { RunMetricsTable } from '../components/runs/RunMetricsTable';
@@ -218,6 +219,14 @@ export function RunPage() {
               {isAdmin ? <RunControls runId={id} progress={progress.data} /> : null}
               {progress.data.status === 'completed' ? null : <LiveView progress={progress.data} />}
               <ResultsSection runId={id} isAdmin={isAdmin} show={progress.data.status === 'completed'} active={ACTIVE.includes(progress.data.status)} />
+              {progress.data.status === 'completed' || progress.data.judgePending > 0 ? (
+                <SideBySide
+                  runId={id}
+                  tests={progress.data.matrix.map((m) => ({ runTestId: m.runTestId, testName: m.testName }))}
+                  isAdmin={isAdmin}
+                  judgePending={progress.data.judgePending}
+                />
+              ) : null}
               {progress.data.status === 'completed' ? <CompletedView runId={id} /> : null}
             </div>
           ) : (

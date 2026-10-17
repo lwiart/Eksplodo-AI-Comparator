@@ -48,6 +48,7 @@ const PROGRESS = {
   judgeCostUsd: 0,
   budgetUsd: 5,
   nextCallMaxCostUsd: null,
+  judgePending: 0,
   startedAt: '2026-10-17T12:30:02.000Z',
   elapsedMs: 60_000,
   etaSeconds: 125,
@@ -139,6 +140,11 @@ beforeEach(() => {
     }
     if (path === '/api/runs/r1/ranking') return Promise.resolve(ranking);
     if (path === '/api/runs/r1/results') return Promise.resolve({ results: RESULTS });
+    if (path.startsWith('/api/runs/r1/answers/'))
+      return Promise.resolve({
+        test: { name: 'Résumer', category: 'Rédaction', userPrompt: 'Résume.' },
+        answers: [{ resultId: 'a1', modelName: 'Claude Opus', color: '#F0631F', repetition: 1, status: 'done', responseText: 'Texte', hiddenUntilScored: false, finalScore: 8, autoScore: 8, manualAvg: null, overrideScore: null, judgeRationale: null, ttftMs: 400, tokensPerS: 50, costUsd: 0.002, errorMessage: null }],
+      });
     if (path === '/api/models') return Promise.resolve({ models: CATALOG });
     if (init?.method) return Promise.resolve({ run: summary });
     return Promise.reject(new Error(`appel inattendu ${path}`));
@@ -395,4 +401,18 @@ test('sans WebGL : repli SVG de la scène', async () => {
   const fallback = await screen.findByTestId('live-flow-fallback');
   expect(within(fallback as unknown as HTMLElement).getAllByTestId('live-flow-node')).toHaveLength(2);
   expect(document.querySelector('canvas')).toBeNull();
+});
+
+test('série terminée : réponses côte à côte avec les tests de la série', async () => {
+  summary = { ...SUMMARY, status: 'completed', completedAt: '2026-10-17T12:40:00.000Z' };
+  renderPage('admin', { ...PROGRESS, status: 'completed', etaSeconds: 0, running: [] });
+  expect(await screen.findByRole('heading', { name: /Réponses côte à côte/ })).toBeInTheDocument();
+  expect(await screen.findByRole('article', { name: 'Claude Opus, répétition 1' })).toBeInTheDocument();
+  expect(apiFetch).toHaveBeenCalledWith('/api/runs/r1/answers/rt1');
+  expect(screen.getByRole('option', { name: 'Traduire' })).toBeInTheDocument();
+});
+
+test('série en cours avec notes du juge en attente : « Notation en cours »', async () => {
+  renderPage('user', { ...PROGRESS, judgePending: 2 });
+  expect(await screen.findByText('Notation en cours · 2 en attente')).toBeInTheDocument();
 });
