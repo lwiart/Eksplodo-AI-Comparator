@@ -157,7 +157,7 @@ function ProviderCard({ provider }: { provider: PublicProvider }) {
         />
       ) : null}
       {dialog === 'edit' ? <ProviderDialog provider={provider} open onOpenChange={(o) => !o && setDialog(null)} /> : null}
-      {dialog === 'models' ? <RemoteModelsDialog providerId={provider.id} open onOpenChange={(o) => !o && setDialog(null)} /> : null}
+      {dialog === 'models' ? <RemoteModelsDialog providerId={provider.id} providerBaseUrl={provider.baseUrl} open onOpenChange={(o) => !o && setDialog(null)} /> : null}
     </section>
   );
 }

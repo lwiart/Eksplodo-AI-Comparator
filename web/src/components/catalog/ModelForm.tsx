@@ -1,4 +1,4 @@
-import type { ModelInput, PublicModel, RemoteModelView } from '../../api/catalog';
+import type { ModelInput, PriceSource, PublicModel, RemoteModelView } from '../../api/catalog';
 import { Field } from '../ui/Field';
 
 /** Brouillon de modèle : les nombres restent en texte tant que le formulaire est ouvert (saisie libre). */
@@ -57,6 +57,19 @@ export function draftFromModel(m: PublicModel): ModelDraft {
   };
 }
 
+/** Prix valide : nombre fini ≥ 0 avec 4 décimales au plus (jamais un prix vide lu comme « gratuit »). */
+export function parsePrice(v: string): number | null {
+  const t = v.trim().replace(',', '.');
+  if (t === '') return null;
+  const n = Number(t);
+  if (!Number.isFinite(n) || n < 0 || n > 100_000) return null;
+  return Math.abs(n * 10_000 - Math.round(n * 10_000)) < 1e-6 ? n : null;
+}
+
+export function hasValidPrices(d: ModelDraft): boolean {
+  return parsePrice(d.inputPricePerM) !== null && parsePrice(d.outputPricePerM) !== null;
+}
+
 function numberOrUndefined(v: string): number | undefined {
   const t = v.trim().replace(',', '.');
   if (t === '') return undefined;
@@ -65,7 +78,7 @@ function numberOrUndefined(v: string): number | undefined {
 }
 
 /** Corps de création de modèle ; les champs vides sont omis (le serveur applique ses valeurs par défaut). */
-export function draftToInput(providerId: string, d: ModelDraft): ModelInput {
+export function draftToInput(providerId: string, d: ModelDraft, priceSource?: PriceSource): ModelInput {
   const input = numberOrUndefined(d.inputPricePerM);
   const output = numberOrUndefined(d.outputPricePerM);
   const context = numberOrUndefined(d.contextWindow);
@@ -76,6 +89,7 @@ export function draftToInput(providerId: string, d: ModelDraft): ModelInput {
     color: d.color,
     ...(input !== undefined ? { inputPricePerM: input } : {}),
     ...(output !== undefined ? { outputPricePerM: output } : {}),
+    ...(priceSource ? { priceSource } : {}),
     supportsVision: d.supportsVision,
     supportsPdf: d.supportsPdf,
     ...(context !== undefined ? { contextWindow: Math.round(context) } : {}),
@@ -116,6 +130,9 @@ export function ModelForm({ value, onChange, idEditable = false }: Props) {
       <Field label="Prix entrée ($/M)" inputMode="decimal" value={value.inputPricePerM} onChange={(e) => set('inputPricePerM', e.target.value)} />
       <Field label="Prix sortie ($/M)" inputMode="decimal" value={value.outputPricePerM} onChange={(e) => set('outputPricePerM', e.target.value)} />
       <Field label="Contexte (tokens)" inputMode="numeric" value={value.contextWindow} onChange={(e) => set('contextWindow', e.target.value)} />
+      {!hasValidPrices(value) ? (
+        <p className="col-span-full m-0 text-xs text-peach">Prix d&apos;entrée et de sortie requis</p>
+      ) : null}
       <label className="flex items-center gap-2 self-end pb-2.5 text-[13px] text-ink">
         <input type="checkbox" checked={value.supportsVision} onChange={(e) => set('supportsVision', e.target.checked)} />
         Vision (images)

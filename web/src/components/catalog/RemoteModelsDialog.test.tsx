@@ -30,11 +30,11 @@ beforeEach(() => {
 });
 afterEach(() => vi.clearAllMocks());
 
-function renderDialog() {
+function renderDialog(baseUrl?: string) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
     <QueryClientProvider client={client}>
-      <RemoteModelsDialog providerId="p1" open onOpenChange={() => undefined} />
+      <RemoteModelsDialog providerId="p1" providerBaseUrl={baseUrl} open onOpenChange={() => undefined} />
     </QueryClientProvider>,
   );
 }
@@ -98,7 +98,46 @@ test('/models en échec : message du fournisseur et « Ajouter un modèle à la 
   await user.click(screen.getByRole('button', { name: 'Ajouter un modèle à la main' }));
   await user.type(screen.getByLabelText('Identifiant API'), 'mon-modele');
   await user.type(screen.getByLabelText('Nom affiché'), 'Mon modèle');
+  expect(screen.getByText("Prix d'entrée et de sortie requis")).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Ajouter 1 modèle' })).toBeDisabled();
+  await user.type(screen.getByLabelText('Prix entrée ($/M)'), '1,5');
+  await user.type(screen.getByLabelText('Prix sortie ($/M)'), '0');
   await user.click(screen.getByRole('button', { name: 'Ajouter 1 modèle' }));
   await vi.waitFor(() => expect(posts()).toHaveLength(1));
   expect(posts()[0]![1].body).toMatchObject({ providerId: 'p1', apiModelId: 'mon-modele', displayName: 'Mon modèle' });
+});
+
+const OR = 'https://openrouter.ai/api/v1';
+
+test('OpenRouter : prix intacts -> priceSource openrouter ; prix modifié -> omis ; autre fournisseur -> omis', async () => {
+  const user = userEvent.setup();
+  renderDialog(OR);
+  await user.click(await screen.findByRole('checkbox', { name: /Claude Sonnet 5\.5/ }));
+  await user.click(screen.getByRole('checkbox', { name: /Claude Sonnet 4/ }));
+  await user.clear(screen.getAllByLabelText('Prix entrée ($/M)')[1]!);
+  await user.type(screen.getAllByLabelText('Prix entrée ($/M)')[1]!, '3,5');
+  await user.click(screen.getByRole('button', { name: 'Ajouter 2 modèles' }));
+  await vi.waitFor(() => expect(posts()).toHaveLength(2));
+  expect(posts()[0]![1].body).toMatchObject({ apiModelId: 'claude-sonnet-5-5', priceSource: 'openrouter' });
+  expect(posts()[1]![1].body).not.toHaveProperty('priceSource');
+});
+
+test('fournisseur hors OpenRouter : prix préremplis jamais marqués openrouter', async () => {
+  const user = userEvent.setup();
+  renderDialog('https://api.anthropic.com');
+  await user.click(await screen.findByRole('checkbox', { name: /Claude Sonnet 5\.5/ }));
+  await user.click(screen.getByRole('button', { name: 'Ajouter 1 modèle' }));
+  await vi.waitFor(() => expect(posts()).toHaveLength(1));
+  expect(posts()[0]![1].body).not.toHaveProperty('priceSource');
+});
+
+test('prix manquant : « Ajouter » désactivé avec le message par ligne', async () => {
+  const user = userEvent.setup();
+  renderDialog(OR);
+  await user.click(await screen.findByRole('checkbox', { name: /GPT X/ }));
+  expect(screen.getByText("Prix d'entrée et de sortie requis")).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Ajouter 1 modèle' })).toBeDisabled();
+  await user.type(screen.getByLabelText('Prix entrée ($/M)'), '1');
+  await user.type(screen.getByLabelText('Prix sortie ($/M)'), '2,00001');
+  expect(screen.getByRole('button', { name: 'Ajouter 1 modèle' })).toBeDisabled();
 });

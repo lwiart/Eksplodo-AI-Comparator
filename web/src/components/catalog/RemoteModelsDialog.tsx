@@ -6,11 +6,34 @@ import { messageForError } from '../../api/messages';
 import { Button } from '../ui/Button';
 import { Chip } from '../ui/Chip';
 import { Dialog } from '../ui/Dialog';
-import { ModelForm, draftFromRemote, draftToInput, emptyDraft, type ModelDraft } from './ModelForm';
+import { ModelForm, draftFromRemote, draftToInput, emptyDraft, hasValidPrices, parsePrice, type ModelDraft } from './ModelForm';
 
-type Props = { providerId: string; open: boolean; onOpenChange(open: boolean): void; initialSearch?: string };
+type Props = { providerId: string; providerBaseUrl?: string; open: boolean; onOpenChange(open: boolean): void; initialSearch?: string };
 
-type Entry = { key: string; draft: ModelDraft; manual: boolean };
+type Entry = {
+  key: string;
+  draft: ModelDraft;
+  manual: boolean;
+  /** Prix fournis par le fournisseur (les deux connus) : sert à savoir si l'Admin les a modifiés. */
+  remote: { input: number; output: number } | null;
+};
+
+/** Même critère que le serveur (`isOpenRouter`) : seul l'hôte openrouter.ai alimente la synchronisation des prix. */
+function isOpenRouter(baseUrl: string | undefined): boolean {
+  try {
+    return baseUrl !== undefined && new URL(baseUrl).hostname === 'openrouter.ai';
+  } catch {
+    return false;
+  }
+}
+
+/** `openrouter` seulement si le fournisseur est OpenRouter et que les deux prix sont ceux d'origine, inchangés. */
+function priceSourceFor(entry: Entry, openRouter: boolean) {
+  if (!openRouter || !entry.remote) return undefined;
+  const input = parsePrice(entry.draft.inputPricePerM);
+  const output = parsePrice(entry.draft.outputPricePerM);
+  return input === entry.remote.input && output === entry.remote.output ? ('openrouter' as const) : undefined;
+}
 
 /** Message d'une erreur : celui du fournisseur quand c'est lui qui refuse, sinon le texte français du code. */
 function describe(err: unknown): string {
@@ -18,7 +41,7 @@ function describe(err: unknown): string {
 }
 
 /** Assistant d'ajout : interroge `/models` du fournisseur, filtre, puis crée les modèles cochés un par un. */
-export function RemoteModelsDialog({ providerId, open, onOpenChange, initialSearch = '' }: Props) {
+export function RemoteModelsDialog({ providerId, providerBaseUrl, open, onOpenChange, initialSearch = '' }: Props) {
   const client = useQueryClient();
   const remote = useQuery({
     queryKey: ['providers', providerId, 'remote-models'],
@@ -41,12 +64,18 @@ export function RemoteModelsDialog({ providerId, open, onOpenChange, initialSear
 
   function toggle(m: RemoteModelView, checked: boolean) {
     setEntries((list) =>
-      checked ? [...list, { key: m.id, draft: draftFromRemote(m, list.length), manual: false }] : list.filter((e) => e.key !== m.id),
+      checked ? [...list, {
+              key: m.id,
+              draft: draftFromRemote(m, list.length),
+              manual: false,
+              remote:
+                m.inputPricePerM !== null && m.outputPricePerM !== null ? { input: m.inputPricePerM, output: m.outputPricePerM } : null,
+            }] : list.filter((e) => e.key !== m.id),
     );
   }
 
   function addManual() {
-    setEntries((list) => [...list, { key: `manual-${manualCount}`, draft: emptyDraft(list.length), manual: true }]);
+    setEntries((list) => [...list, { key: `manual-${manualCount}`, draft: emptyDraft(list.length), manual: true, remote: null }]);
     setManualCount((n) => n + 1);
   }
 
@@ -60,7 +89,7 @@ export function RemoteModelsDialog({ providerId, open, onOpenChange, initialSear
     const done = new Set<string>();
     for (const entry of entries) {
       try {
-        await createModel(draftToInput(providerId, entry.draft));
+        await createModel(draftToInput(providerId, entry.draft, priceSourceFor(entry, isOpenRouter(providerBaseUrl))));
         done.add(entry.key);
       } catch (err) {
         next[entry.key] = describe(err);
@@ -173,7 +202,7 @@ export function RemoteModelsDialog({ providerId, open, onOpenChange, initialSear
           <Button variant="ghost" onClick={() => onOpenChange(false)}>
             Fermer
           </Button>
-          <Button variant="primary" disabled={busy || count === 0} onClick={() => void submit()}>
+          <Button variant="primary" disabled={busy || count === 0 || !entries.every((e) => hasValidPrices(e.draft))} onClick={() => void submit()}>
             {count > 1 ? `Ajouter ${count} modèles` : `Ajouter ${count} modèle`}
           </Button>
         </span>
