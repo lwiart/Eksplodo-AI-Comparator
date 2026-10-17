@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { messageForError } from '../api/messages';
+import { messageForScoreError } from '../api/messages';
 import { TODO_KEY, attachmentUrl, getQuestion, questionKey, saveQuestionScores, type BlindQuestion } from '../api/scoring';
 import { Markdown } from '../components/results/Markdown';
 import { Button } from '../components/ui/Button';
@@ -22,7 +22,7 @@ export function BlindScoringPage() {
       </Link>
       {question.isError ? (
         <p role="alert" className="mt-4 text-sm text-bad">
-          {messageForError(question.error)}
+          {messageForScoreError(question.error)}
         </p>
       ) : question.isPending ? (
         <p className="mt-4 text-sm text-mute">Chargement de la question…</p>
@@ -57,7 +57,7 @@ function QuestionForm({ question }: { question: BlindQuestion }) {
     },
   });
 
-  const allScored = question.answers.every((a) => scores[a.letter] != null);
+  const allScored = question.answers.length > 0 && question.answers.every((a) => scores[a.letter] != null);
   const reveal = new Map((question.reveal ?? []).map((r) => [r.letter, r]));
   const revealed = question.complete && reveal.size > 0;
   const scored = question.answers.filter((a) => scores[a.letter] != null).length;
@@ -155,7 +155,10 @@ function QuestionForm({ question }: { question: BlindQuestion }) {
               </div>
               <div role="radiogroup" aria-label={`Note de la réponse ${a.letter}`} className="mt-3 flex gap-[3px]">
                 {SCORES.map((n) => {
-                  const on = scores[a.letter] === n;
+                  const current = scores[a.letter];
+                  const on = current === n;
+                  // Tabindex itinérant : un seul arrêt de tabulation par réponse (la note choisie, sinon 0).
+                  const tabStop = current == null ? n === 0 : on;
                   return (
                     <button
                       key={n}
@@ -163,8 +166,17 @@ function QuestionForm({ question }: { question: BlindQuestion }) {
                       role="radio"
                       aria-checked={on}
                       aria-label={`${n}`}
+                      tabIndex={tabStop ? 0 : -1}
                       onClick={() => setScores((s) => ({ ...s, [a.letter]: n }))}
-                      className={`flex-1 cursor-pointer rounded-lg border py-[7px] text-center font-mono text-xs font-bold ${
+                      onKeyDown={(e) => {
+                        const step = e.key === 'ArrowRight' || e.key === 'ArrowUp' ? 1 : e.key === 'ArrowLeft' || e.key === 'ArrowDown' ? -1 : 0;
+                        if (step === 0) return;
+                        e.preventDefault();
+                        const next = Math.min(10, Math.max(0, n + step));
+                        setScores((s) => ({ ...s, [a.letter]: next }));
+                        (e.currentTarget.parentElement?.children[next] as HTMLElement | undefined)?.focus();
+                      }}
+                      className={`flex-1 cursor-pointer rounded-lg border py-[7px] text-center font-mono text-xs font-bold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky ${
                         on ? 'border-orange bg-orange text-white' : 'border-line bg-transparent text-mute hover:text-white'
                       }`}
                     >
@@ -189,7 +201,7 @@ function QuestionForm({ question }: { question: BlindQuestion }) {
 
       {save.isError ? (
         <p role="alert" className="mt-3 mb-0 text-sm text-bad">
-          {messageForError(save.error)}
+          {messageForScoreError(save.error)}
         </p>
       ) : null}
       <div className="mt-4 flex justify-end gap-2">

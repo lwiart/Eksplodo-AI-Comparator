@@ -3,6 +3,8 @@ import ReactMarkdown, { type Components } from 'react-markdown';
 const isExternal = (href: string | undefined) => href !== undefined && /^(https?:)?\/\//i.test(href);
 
 const COMPONENTS: Components = {
+  // Aucune image distante : une réponse de modèle ne doit pas déclencher de requête vers un tiers.
+  img: ({ alt }) => (alt ? <span>{alt}</span> : null),
   a: ({ href, children }) =>
     isExternal(href) ? (
       <a href={href} target="_blank" rel="noopener noreferrer">

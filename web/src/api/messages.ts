@@ -50,6 +50,16 @@ export function messageForKeyError(err: unknown): string {
   return messageForError(err);
 }
 
+/**
+ * Erreur d'une notation manuelle : les refus de validation du serveur (« Notez toutes les réponses de la question »,
+ * « Lettre inconnue : X ») sont déjà en français et précis, on les garde.
+ */
+export function messageForScoreError(err: unknown): string {
+  const { code, message } = (err ?? {}) as { code?: unknown; message?: unknown };
+  if (code === 'validation' && typeof message === 'string' && message !== '') return message;
+  return messageForError(err);
+}
+
 /** Message à afficher pour une erreur quelconque (ApiError ou autre). */
 export function messageForError(err: unknown): string {
   const { code, reference } = (err ?? {}) as { code?: unknown; reference?: unknown };

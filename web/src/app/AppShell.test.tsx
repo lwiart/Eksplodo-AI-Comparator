@@ -153,5 +153,23 @@ test('EXPLORER : « À noter » avec compteur des questions non terminées', asy
 test('EXPLORER : pas de badge « À noter » quand il n’y a rien à noter', async () => {
   renderShell('user');
   const link = await screen.findByRole('link', { name: 'À noter' });
-  expect(within(link).queryByLabelText(/questions à noter/)).toBeNull();
+  expect(within(link).queryByLabelText(/à noter/)).toBeNull();
+});
+
+test('EXPLORER : le compteur « À noter » est rafraîchi toutes les 60 s', async () => {
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+  try {
+    let items: unknown[] = [];
+    apiFetch.mockImplementation((path: string) =>
+      Promise.resolve(path === '/api/scoring/todo' ? { items, count: items.length } : summary(0)),
+    );
+    renderShell('user');
+    const link = await screen.findByRole('link', { name: 'À noter' });
+    expect(within(link).queryByLabelText(/à noter/)).toBeNull();
+    items = [{ runTestId: 'q1', runId: 'r1', runName: 'S', testName: 'T', answers: 2, scoredByMe: 0 }];
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(await within(link).findByLabelText('1 question à noter')).toBeInTheDocument();
+  } finally {
+    vi.useRealTimers();
+  }
 });

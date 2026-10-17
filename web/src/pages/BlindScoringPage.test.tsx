@@ -28,8 +28,9 @@ const question = (over: Record<string, unknown> = {}) => ({
 });
 
 function renderPage() {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
-    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+    <QueryClientProvider client={client}>
       <MemoryRouter initialEntries={['/a-noter/q1']}>
         <Routes>
           <Route path="/a-noter/:runTestId" element={<BlindScoringPage />} />
@@ -37,7 +38,13 @@ function renderPage() {
       </MemoryRouter>
     </QueryClientProvider>,
   );
+  return client;
 }
+
+const REVEAL = [
+  { letter: 'A', modelName: 'Mistral Large', color: '#f06' },
+  { letter: 'B', modelName: 'Claude Sonnet', color: '#09f' },
+];
 
 const rate = async (letter: string, n: number) => {
   const group = screen.getByRole('radiogroup', { name: `Note de la réponse ${letter}` });
@@ -60,11 +67,59 @@ test('question : prompt, pièces jointes, réponses A, B sans nom de modèle ; n
     Array.from({ length: 11 }, (_, i) => String(i)),
   );
   expect(screen.getByLabelText('Commentaire sur la réponse A')).toBeInTheDocument();
-  expect(screen.queryByText(/Mistral|Claude/)).toBeNull();
 });
 
-test('« Enregistrer » désactivé tant que tout n’est pas noté ; après enregistrement, modèles révélés', async () => {
+test('sans question complète, aucun nom de modèle ni pastille, même si des données de révélation traînent', async () => {
+  apiFetch.mockResolvedValue(question({ complete: false, reveal: REVEAL }));
   renderPage();
+  await screen.findByText(/Rédige une réponse empathique/);
+  expect(screen.queryByText('Mistral Large')).toBeNull();
+  expect(screen.queryByText('Claude Sonnet')).toBeNull();
+  expect(document.querySelector('.reveal-in')).toBeNull();
+});
+
+test('question déjà complète : modèles révélés d’emblée et notes préremplies', async () => {
+  apiFetch.mockResolvedValue(
+    question({
+      complete: true,
+      answers: [
+        { letter: 'A', responseText: 'Réponse un', myScore: 7, myComment: null },
+        { letter: 'B', responseText: 'Réponse deux', myScore: 3, myComment: null },
+      ],
+      reveal: REVEAL,
+    }),
+  );
+  renderPage();
+  expect(await screen.findByText('Mistral Large')).toBeInTheDocument();
+  expect(screen.getByText('Claude Sonnet')).toBeInTheDocument();
+  const group = screen.getByRole('radiogroup', { name: 'Note de la réponse A' });
+  expect(within(group).getByRole('radio', { name: '7' })).toHaveAttribute('aria-checked', 'true');
+});
+
+test('aucune réponse : « Enregistrer » reste désactivé', async () => {
+  apiFetch.mockResolvedValue(question({ answers: [], attachments: [] }));
+  renderPage();
+  expect(await screen.findByRole('button', { name: 'Enregistrer et révéler' })).toBeDisabled();
+});
+
+test('flèches : changent la note, un seul arrêt de tabulation par réponse', async () => {
+  renderPage();
+  await screen.findByText(/Rédige une réponse empathique/);
+  const group = screen.getByRole('radiogroup', { name: 'Note de la réponse A' });
+  const radios = within(group).getAllByRole('radio');
+  expect(radios.filter((r) => r.tabIndex === 0)).toHaveLength(1);
+  await userEvent.click(radios[4]!);
+  await userEvent.keyboard('{ArrowRight}');
+  expect(within(group).getByRole('radio', { name: '5' })).toHaveAttribute('aria-checked', 'true');
+  expect(within(group).getByRole('radio', { name: '5' })).toHaveFocus();
+  await userEvent.keyboard('{ArrowLeft}{ArrowLeft}');
+  expect(within(group).getByRole('radio', { name: '3' })).toHaveAttribute('aria-checked', 'true');
+  expect(radios.filter((r) => r.tabIndex === 0)).toHaveLength(1);
+});
+
+test('« Enregistrer » désactivé tant que tout n’est pas noté ; après enregistrement, modèles révélés et compteur invalidé', async () => {
+  const client = renderPage();
+  const invalidate = vi.spyOn(client, 'invalidateQueries');
   const save = await screen.findByRole('button', { name: 'Enregistrer et révéler' });
   expect(save).toBeDisabled();
   await rate('A', 7);
@@ -80,16 +135,14 @@ test('« Enregistrer » désactivé tant que tout n’est pas noté ; après enr
         { letter: 'A', responseText: 'Réponse **un**', myScore: 7, myComment: null },
         { letter: 'B', responseText: 'Réponse deux', myScore: 3, myComment: 'trop court' },
       ],
-      reveal: [
-        { letter: 'A', modelName: 'Mistral Large', color: '#f06' },
-        { letter: 'B', modelName: 'Claude Sonnet', color: '#09f' },
-      ],
+      reveal: REVEAL,
     }),
   );
   await userEvent.click(save);
 
   expect(await screen.findByText('Mistral Large')).toBeInTheDocument();
   expect(screen.getByText('Claude Sonnet')).toBeInTheDocument();
+  expect(invalidate).toHaveBeenCalledWith({ queryKey: ['scoring', 'todo'] });
   const put = apiFetch.mock.calls.find(([, init]) => init?.method === 'PUT');
   expect(put?.[0]).toBe('/api/scoring/questions/q1/manual');
   expect(put?.[1].body).toEqual({

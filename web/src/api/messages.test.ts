@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { messageFor, messageForError } from './messages';
+import { messageFor, messageForError, messageForScoreError } from './messages';
 
 const CODES = [
   'unauthorized', 'forbidden', 'validation', 'rate_limited', 'invitation_invalid', 'invalid_password', 'weak_password',
@@ -18,4 +18,12 @@ test('chaque code d’erreur de l’API a un message français dédié', () => {
 
 test('une erreur interne affiche la référence', () => {
   expect(messageForError({ code: 'internal', reference: 'E-1' })).toContain('E-1');
+});
+
+test('notation manuelle : le refus de validation du serveur est conservé, le reste retombe sur le message du code', () => {
+  expect(messageForScoreError({ code: 'validation', message: 'Notez toutes les réponses de la question' })).toBe(
+    'Notez toutes les réponses de la question',
+  );
+  expect(messageForScoreError({ code: 'not_found', message: 'Question introuvable' })).toBe(messageFor('not_found'));
+  expect(messageForScoreError(new Error('x'))).toBe(messageForError(new Error('x')));
 });

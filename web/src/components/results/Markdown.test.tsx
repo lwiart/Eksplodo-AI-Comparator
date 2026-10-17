@@ -18,3 +18,15 @@ test('Markdown : liens externes en nouvel onglet avec rel="noopener noreferrer"'
   expect(link).toHaveAttribute('target', '_blank');
   expect(link).toHaveAttribute('rel', 'noopener noreferrer');
 });
+
+test('Markdown : une image distante n’est pas rendue en <img> (texte alternatif à la place)', () => {
+  const { container } = render(<Markdown text="![schéma](https://tiers.example/pixel.png)" />);
+  expect(container.querySelector('img')).toBeNull();
+  expect(container.innerHTML).not.toContain('tiers.example');
+  expect(screen.getByText('schéma')).toBeInTheDocument();
+});
+
+test('Markdown : un lien javascript: n’aboutit pas à un href exécutable', () => {
+  const { container } = render(<Markdown text="[clic](javascript:alert(1))" />);
+  expect(container.innerHTML.toLowerCase()).not.toContain('javascript:');
+});

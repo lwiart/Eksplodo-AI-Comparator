@@ -169,7 +169,7 @@ function AdminSection({ onNavigate }: { onNavigate?: () => void }) {
 function ExploreSection({ onNavigate }: { onNavigate?: () => void }) {
   const todo = useQuery({ queryKey: TODO_KEY, queryFn: getTodo, refetchInterval: 60_000 });
   const pending = countToScore(todo.data ?? []);
-  const items = [...EXPLORE, pending > 0 ? { ...TO_SCORE, badge: pending, badgeLabel: 'questions à noter' } : TO_SCORE];
+  const items = [...EXPLORE, pending > 0 ? { ...TO_SCORE, badge: pending, badgeLabel: pending > 1 ? 'questions à noter' : 'question à noter' } : TO_SCORE];
   return <NavSection title="EXPLORER" items={items} onNavigate={onNavigate} />;
 }
 
