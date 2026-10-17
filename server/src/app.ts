@@ -16,6 +16,8 @@ import { registerTickRoutes } from './modules/jobs/tick.routes.js';
 import { registerCatalogRoutes } from './modules/catalog/catalog.routes.js';
 import { createCatalogService } from './modules/catalog/catalog.service.js';
 import { registerManualScoringRoutes } from './modules/scoring/manual.routes.js';
+import { registerResultsRoutes } from './modules/scoring/results.routes.js';
+import { createResultsService } from './modules/scoring/results.service.js';
 import { createManualScoringService } from './modules/scoring/manual.service.js';
 import { registerScoringRoutes } from './modules/scoring/scoring.routes.js';
 import { registerRunsRoutes } from './modules/runs/runs.routes.js';
@@ -190,6 +192,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   registerRunsRoutes(app, createRunsService(deps));
   registerScoringRoutes(app, deps);
   registerManualScoringRoutes(app, createManualScoringService(deps));
+  registerResultsRoutes(app, createResultsService(deps));
   registerTickRoutes(app, deps);
   registerErrorRoutes(app, deps);
 

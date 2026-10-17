@@ -102,6 +102,45 @@ export type ResultRow = {
   hiddenUntilScored: boolean;
 };
 
+/** Ligne de résultat (non masquée) à partir de la ligne `results` et des noms du test et du modèle. */
+export function resultRowOf(input: {
+  result: typeof results.$inferSelect;
+  testName: string;
+  category: string;
+  modelName: string;
+  color: string;
+}): ResultRow {
+  const { result: r, testName, category, modelName, color } = input;
+  return {
+    id: r.id,
+    runTestId: r.runTestId,
+    testName,
+    category,
+    modelId: r.modelId,
+    modelName,
+    color,
+    repetition: r.repetition,
+    status: r.status,
+    attempts: r.attempts,
+    responseText: r.responseText,
+    finishReason: r.finishReason,
+    inputTokens: r.inputTokens,
+    outputTokens: r.outputTokens,
+    reasoningTokens: r.reasoningTokens,
+    tokensEstimated: r.tokensEstimated,
+    ttftMs: r.ttftMs,
+    totalMs: r.totalMs,
+    tokensPerS: r.tokensPerS,
+    costUsd: r.costUsd,
+    costSource: r.costSource,
+    errorCode: r.errorCode,
+    errorMessage: r.errorMessage,
+    scoreStatus: r.scoreStatus,
+    completedAt: r.completedAt?.toISOString() ?? null,
+    hiddenUntilScored: false,
+  };
+}
+
 /**
  * Ligne masquée à un Utilisateur qui n'a pas noté la question manuelle : ni texte ni métrique (longueur, durées, coût
  * permettraient de rapprocher une réponse à l'aveugle de son modèle) ; restent l'identité, le statut et la notation.
@@ -607,36 +646,9 @@ export function createRunsService(deps: RunsServiceDeps) {
         repo.resultsOf(id),
         actor.role === 'admin' ? new Set<string>() : incompleteManualQuestions(db, actor.userId, id),
       ]);
-      return rows.map(({ result: r, testName, category, modelName, color }) => {
-        const row: ResultRow = {
-          id: r.id,
-          runTestId: r.runTestId,
-          testName,
-          category,
-          modelId: r.modelId,
-          modelName,
-          color,
-          repetition: r.repetition,
-          status: r.status,
-          attempts: r.attempts,
-          responseText: r.responseText,
-          finishReason: r.finishReason,
-          inputTokens: r.inputTokens,
-          outputTokens: r.outputTokens,
-          reasoningTokens: r.reasoningTokens,
-          tokensEstimated: r.tokensEstimated,
-          ttftMs: r.ttftMs,
-          totalMs: r.totalMs,
-          tokensPerS: r.tokensPerS,
-          costUsd: r.costUsd,
-          costSource: r.costSource,
-          errorCode: r.errorCode,
-          errorMessage: r.errorMessage,
-          scoreStatus: r.scoreStatus,
-          completedAt: r.completedAt?.toISOString() ?? null,
-          hiddenUntilScored: false,
-        };
-        return hidden.has(r.runTestId) ? maskHiddenRow(row) : row;
+      return rows.map((r) => {
+        const row = resultRowOf(r);
+        return hidden.has(row.runTestId) ? maskHiddenRow(row) : row;
       });
     },
   };
