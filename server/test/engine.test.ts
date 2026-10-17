@@ -518,6 +518,20 @@ test('erreur pendant les lancements : les appels en cours se terminent et sont e
   expect(await runRow(runId)).toMatchObject({ status: 'running', activeJobId: job.id });
 });
 
+test('note par réponse attendue restée en attente sur un résultat done : reprise au début de la tranche suivante', async () => {
+  const { runId } = await seedRun({
+    prompts: ['Capitale ?'],
+    scoring: { method: 'expected', config: { mode: 'exact', expected: 'Paris', ignoreCase: false, ignoreAccents: false } },
+  });
+  // Arrêt du processus entre la fin du résultat et sa notation : `done`, note toujours en attente.
+  const [stuck] = await resultRows(runId);
+  await t.db.update(results).set({ status: 'done', attempts: 1, responseText: 'Paris', scoreStatus: 'pending' }).where(eq(results.id, stuck!.id));
+  await drain(engineDeps({ onResultFinished: createOnResultFinished({ db: t.db }) }));
+  const [row] = await t.db.select().from(results).where(eq(results.id, stuck!.id));
+  expect(row).toMatchObject({ scoreStatus: 'done', autoScore: 10, judgeRationale: 'Réponse identique à la réponse attendue.' });
+  expect((await resultRows(runId)).every((r) => r.scoreStatus === 'done')).toBe(true);
+});
+
 test('onResultFinished en échec : erreur journalisée, résultat done, la tranche continue', async () => {
   let calls = 0;
   const { runId } = await seedRun({ prompts: ['Un', 'Deux'] });

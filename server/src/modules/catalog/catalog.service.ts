@@ -321,7 +321,7 @@ export function createCatalogService(deps: CatalogServiceDeps) {
     /** Chiffres de la fiche modèle : mêmes règles de visibilité que `getModel`. */
     async modelStats(actor: Actor, id: string): Promise<ModelStats> {
       await this.getModel(actor, id);
-      return computeModelStats(db, id);
+      return computeModelStats(db, id, actor);
     },
 
     async createModel(actor: Actor, input: ModelInput): Promise<PublicModel> {

@@ -43,3 +43,8 @@ test('regex testée sur les 50 000 premiers caractères seulement', () => {
   expect(scoreExpected({ mode: 'regex', pattern: 'paris', flags: '' }, text).score).toBe(0);
   expect(scoreExpected({ mode: 'regex', pattern: 'paris', flags: '' }, `${'x'.repeat(49_990)}paris`).score).toBe(10);
 });
+
+test('regex refusée par le moteur (motif invalide dans un instantané) : 0, « Expression invalide », sans exception', () => {
+  const config = { mode: 'regex', pattern: '(', flags: '' } as ExpectedConfig;
+  expect(scoreExpected(config, 'texte')).toEqual({ score: 0, rationale: 'Expression invalide' });
+});

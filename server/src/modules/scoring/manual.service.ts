@@ -5,7 +5,7 @@ import type { Db } from '../../db/client.js';
 import { models } from '../../db/schema/catalog.js';
 import { users } from '../../db/schema/core.js';
 import { manualScores, results, runModels, runTests, runs } from '../../db/schema/runs.js';
-import { NotFoundError, ValidationError } from '../../errors.js';
+import { ConflictError, NotFoundError, ValidationError } from '../../errors.js';
 import type { Actor } from '../auth/actor.js';
 import type { DbOrTx } from '../jobs/queue.js';
 import { withTxRetry } from '../runs/run-job.js';
@@ -89,24 +89,44 @@ function stats(scores: number[]): { mean: number | null; stdDev: number | null }
  * écrits en entier (Drizzle omet le nom de table quand la requête externe n'a qu'une table, d'où des colonnes ambiguës).
  */
 const answersCount = sql<number>`(SELECT COUNT(*) FROM results r WHERE r.run_test_id = run_tests.id AND r.status = 'done')`;
+/** Réponses encore attendues (en attente ou en cours) d'une question : tant qu'il en reste, elle n'est ni proposée ni notable. */
+const openCount = sql<number>`(SELECT COUNT(*) FROM results r WHERE r.run_test_id = run_tests.id AND r.status IN ('pending', 'running'))`;
+const isSettled = sql`NOT EXISTS (SELECT 1 FROM results r WHERE r.run_test_id = run_tests.id AND r.status IN ('pending', 'running'))`;
 const scoredBy = (userId: string) =>
   sql<number>`(SELECT COUNT(*) FROM results r INNER JOIN manual_scores m ON m.result_id = r.id
     WHERE r.run_test_id = run_tests.id AND r.status = 'done' AND m.user_id = ${userId})`;
 
-/** Une question est complète pour un compte quand il a noté toutes ses réponses terminées (au moins une). */
-const isComplete = (p: { answers: number; scoredByMe: number }) => p.answers > 0 && p.scoredByMe >= p.answers;
+/**
+ * Une question est complète pour un compte quand toutes ses réponses sont arrivées (aucune en attente ou en cours) et qu'il
+ * a noté toutes ses réponses terminées (au moins une).
+ */
+const isComplete = (p: { answers: number; open: number; scoredByMe: number }) => p.open === 0 && p.answers > 0 && p.scoredByMe >= p.answers;
 
 /**
- * Tests manuels de la série dont ce compte n'a pas complété la question : leurs réponses lui restent masquées
- * (`GET /api/runs/:id/results`, export CSV).
+ * Tests manuels des séries données dont ce compte n'a pas complété la question : leurs réponses et leurs notes lui restent
+ * masquées (`GET /api/runs/:id/results`, réponses côte à côte, classement, export CSV, fiche modèle).
  */
-export async function incompleteManualQuestions(conn: DbOrTx, userId: string, runId: string): Promise<Set<string>> {
+export async function incompleteManualQuestionsIn(conn: DbOrTx, userId: string, runIds: string[]): Promise<Set<string>> {
+  if (runIds.length === 0) return new Set();
   const rows = await conn
-    .select({ runTestId: runTests.id, answers: answersCount.mapWith(Number), scoredByMe: scoredBy(userId).mapWith(Number) })
+    .select({
+      runTestId: runTests.id,
+      answers: answersCount.mapWith(Number),
+      open: openCount.mapWith(Number),
+      scoredByMe: scoredBy(userId).mapWith(Number),
+    })
     .from(runTests)
-    .where(and(eq(runTests.runId, runId), isManualTest));
+    .where(and(inArray(runTests.runId, runIds), isManualTest));
   return new Set(rows.filter((r) => !isComplete(r)).map((r) => r.runTestId));
 }
+
+/** `incompleteManualQuestionsIn` pour une seule série. */
+export const incompleteManualQuestions = (conn: DbOrTx, userId: string, runId: string): Promise<Set<string>> =>
+  incompleteManualQuestionsIn(conn, userId, [runId]);
+
+/** Question dont toutes les réponses ne sont pas encore arrivées : ni affichée, ni notable. */
+const questionNotReady = () =>
+  new ConflictError('question_not_ready', 'Toutes les réponses de cette question ne sont pas encore arrivées. Réessayez plus tard.');
 
 type AnswerRow = { id: string; responseText: string | null; modelName: string; color: string; myScore: number | null; myComment: string | null };
 
@@ -154,6 +174,11 @@ export function createManualScoringService(deps: ManualScoringDeps) {
 
   async function question(actor: Actor, runTestId: string): Promise<BlindQuestion> {
     const rt = await manualRunTest(db, runTestId);
+    const [open] = await db
+      .select({ n: sql<number>`COUNT(*)`.mapWith(Number) })
+      .from(results)
+      .where(and(eq(results.runTestId, runTestId), inArray(results.status, ['pending', 'running'])));
+    if ((open?.n ?? 0) > 0) throw questionNotReady();
     const rows = await db
       .select({
         id: results.id,
@@ -171,7 +196,7 @@ export function createManualScoringService(deps: ManualScoringDeps) {
   }
 
   return {
-    /** Questions manuelles ayant au moins une réponse terminée et non complètes pour ce compte. */
+    /** Questions manuelles dont toutes les réponses sont arrivées (au moins une terminée) et non complètes pour ce compte. */
     async todo(actor: Actor): Promise<{ items: TodoItem[]; count: number }> {
       const rows = await db
         .select({
@@ -184,28 +209,31 @@ export function createManualScoringService(deps: ManualScoringDeps) {
         })
         .from(runTests)
         .innerJoin(runs, eq(runs.id, runTests.runId))
-        .where(isManualTest)
+        .where(and(isManualTest, isSettled))
         .orderBy(desc(runs.createdAt), asc(runs.id), asc(runTests.position));
-      const items = rows.filter((r) => r.answers > 0 && !isComplete(r));
+      const items = rows.filter((r) => r.answers > 0 && !isComplete({ ...r, open: 0 }));
       return { items, count: items.length };
     },
 
     question,
 
     /**
-     * Enregistre les notes de toutes les réponses de la question : l'ordre du compte est recalculé sur les réponses
-     * terminées (verrouillées), chaque note est insérée ou remplacée, puis le statut de notation des résultats touchés est
-     * mis à jour (`done` dès une note, sinon `awaiting_manual`).
+     * Enregistre les notes de toutes les réponses de la question : les résultats du test sont verrouillés, la question est
+     * refusée tant qu'une réponse est attendue, l'ordre du compte est recalculé sur les réponses terminées, chaque note est
+     * insérée ou remplacée, puis le statut de notation des résultats touchés est mis à jour (`done` dès une note, sinon
+     * `awaiting_manual`).
      */
     async save(actor: Actor, runTestId: string, scores: ManualScoreInput[]): Promise<BlindQuestion> {
       await withTxRetry(() =>
         db.transaction(async (tx) => {
           await manualRunTest(tx, runTestId);
-          const done = await tx
-            .select({ id: results.id })
+          const all = await tx
+            .select({ id: results.id, status: results.status })
             .from(results)
-            .where(and(eq(results.runTestId, runTestId), eq(results.status, 'done')))
+            .where(eq(results.runTestId, runTestId))
             .for('update');
+          if (all.some((r) => r.status === 'pending' || r.status === 'running')) throw questionNotReady();
+          const done = all.filter((r) => r.status === 'done');
           const idOf = new Map(blindOrder(orderKey, actor.userId, done.map((r) => r.id)).map((id, i) => [letterOf(i), id]));
           const unknown = scores.find((s) => !idOf.has(s.letter));
           if (unknown) throw new ValidationError('validation', `Lettre inconnue : ${unknown.letter}`);

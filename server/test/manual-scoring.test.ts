@@ -301,6 +301,29 @@ test('À noter : compte et liste par compte, question complète retirée', async
   expect(await todo(s.admin)).toEqual({ items: [], count: 0 });
 });
 
+test('question dont une réponse est en attente ou en cours : ni proposée, ni affichée, ni enregistrable (409)', async () => {
+  const s = await setup();
+  const todo = () => s.get('/api/scoring/todo', s.user).then((r) => r.json());
+  const scores = ['A', 'B', 'C'].map((letter) => ({ letter, score: 5 }));
+  const last = s.manualResults[3]!.id;
+  for (const status of ['pending', 'running'] as const) {
+    await s.db.update(results).set({ status, responseText: null }).where(eq(results.id, last));
+    expect(await todo()).toEqual({ items: [], count: 0 });
+    const q = await s.get(`/api/scoring/questions/${s.rt}`, s.user);
+    expect(q.statusCode).toBe(409);
+    expect(q.json().error.code).toBe('question_not_ready');
+    const saved = await s.put(`/api/scoring/questions/${s.rt}/manual`, { scores }, s.user);
+    expect(saved.statusCode).toBe(409);
+    expect(saved.json().error.code).toBe('question_not_ready');
+  }
+  expect(await s.db.select().from(manualScores)).toEqual([]);
+
+  // Toutes les réponses arrivées : la question est proposée et se note normalement.
+  await s.db.update(results).set({ status: 'done', responseText: 'Texte numéro 3' }).where(eq(results.id, last));
+  expect((await todo()).count).toBe(1);
+  expect((await scoreAll(s, s.user, () => 6)).statusCode).toBe(200);
+});
+
 test('résultats d’une série : réponses d’un test manuel masquées à l’Utilisateur qui n’a pas noté, visibles après', async () => {
   const s = await setup();
   type Row = { id: string; runTestId: string; responseText: string | null; hiddenUntilScored: boolean; ttftMs: number | null };

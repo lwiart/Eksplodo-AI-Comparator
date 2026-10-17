@@ -1,7 +1,8 @@
+import { randomUUID } from 'node:crypto';
 import { and, eq } from 'drizzle-orm';
 import { afterEach, expect, test } from 'vitest';
 import { models } from '../src/db/schema/catalog.js';
-import { results, runs } from '../src/db/schema/runs.js';
+import { manualScores, results, runs } from '../src/db/schema/runs.js';
 import { buildTestApp, loginAs, seedModel, seedProvider, seedUser, type TestApp } from './helpers/test-app.js';
 
 const PW = 'motdepasse-solide';
@@ -14,8 +15,8 @@ afterEach(async () => {
 async function setup() {
   const t = await buildTestApp({ fakeLlm: true });
   created.push(t);
-  await seedUser(t.db, { email: 'admin@acme.fr', role: 'admin', name: 'Alice Admin' });
-  await seedUser(t.db, { email: 'user@acme.fr', role: 'user', name: 'Ulysse Util' });
+  const adminRow = await seedUser(t.db, { email: 'admin@acme.fr', role: 'admin', name: 'Alice Admin' });
+  const userRow = await seedUser(t.db, { email: 'user@acme.fr', role: 'user', name: 'Ulysse Util' });
   const admin = await loginAs(t.app, 'admin@acme.fr', PW);
   const user = await loginAs(t.app, 'user@acme.fr', PW);
   type Session = typeof admin;
@@ -54,7 +55,7 @@ async function setup() {
       .where(eq(runs.id, runId));
     return runId;
   };
-  return { t, admin, user, call, mA, mB, mC, makeTest, makeRun };
+  return { t, admin, user, call, mA, mB, mC, makeTest, makeRun, adminId: adminRow.id, userId: userRow.id };
 }
 
 test('modèle sans série : tout nul, historique vide', async () => {
@@ -109,4 +110,42 @@ test('Utilisateur : modèle désactivé → 404 ; Admin : accès', async () => {
   expect(asUser.statusCode).toBe(404);
   const asAdmin = await call('GET', `/api/models/${mA.id}/stats`, admin);
   expect(asAdmin.statusCode).toBe(200);
+});
+
+test('Utilisateur : notes des questions manuelles qu’il n’a pas notées retirées, série par série ; Admin : toutes', async () => {
+  const { t, admin, user, call, mA, mB, makeRun, adminId, userId } = await setup();
+  const created = await call('POST', '/api/tests', admin, { name: 'Poème', category: 'Écriture', userPrompt: 'Écris un poème', scoringMethod: 'manual', scoringConfig: {} });
+  expect(created.statusCode).toBe(201);
+  const manualId = created.json().test.id as string;
+  const may = await makeRun('Poèmes de mai', manualId, [[mA, 0, 100, 50], [mB, 0, 200, 100]], { completedAt: new Date('2026-05-01T10:00:00.000Z') });
+  const june = await makeRun('Poèmes de juin', manualId, [[mA, 0, 100, 50], [mB, 0, 200, 100]], { completedAt: new Date('2026-06-01T10:00:00.000Z') });
+  const rate = async (runId: string, modelId: string, raterId: string, score: number) => {
+    const [r] = await t.db.select({ id: results.id }).from(results).where(and(eq(results.runId, runId), eq(results.modelId, modelId)));
+    await t.db.insert(manualScores).values({ id: randomUUID(), resultId: r!.id, userId: raterId, score });
+  };
+  // L'Admin a noté les deux séries (A 8, B 2) ; l'Utilisateur seulement celle de mai (A 4, B 4).
+  for (const runId of [may, june]) {
+    await rate(runId, mA.id, adminId, 8);
+    await rate(runId, mB.id, adminId, 2);
+  }
+  await rate(may, mA.id, userId, 4);
+  await rate(may, mB.id, userId, 4);
+
+  // Admin : toutes les notes (mai : (8 + 4) / 2 = 6 ; juin : 8).
+  const asAdmin = (await call('GET', `/api/models/${mA.id}/stats`, admin)).json().stats;
+  expect(asAdmin.quality).toBe(7);
+  expect(asAdmin.radar).toEqual([{ category: 'Écriture', model: 7, average: 4.75 }]);
+  expect(asAdmin.history).toEqual([
+    expect.objectContaining({ runId: june, quality: 8 }),
+    expect.objectContaining({ runId: may, quality: 6 }),
+  ]);
+
+  // Juin : question non notée par l'Utilisateur, aucune note ; mai : moyenne des deux évaluateurs ((8 + 4) / 2 = 6).
+  const asUser = (await call('GET', `/api/models/${mA.id}/stats`, user)).json().stats;
+  expect(asUser.quality).toBe(6);
+  expect(asUser.radar).toEqual([{ category: 'Écriture', model: 6, average: 4.5 }]);
+  expect(asUser.history).toEqual([
+    expect.objectContaining({ runId: june, quality: null }),
+    expect.objectContaining({ runId: may, quality: 6 }),
+  ]);
 });

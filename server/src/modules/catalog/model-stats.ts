@@ -2,8 +2,9 @@
 import { and, desc, eq } from 'drizzle-orm';
 import type { Db } from '../../db/client.js';
 import { runModels, runs } from '../../db/schema/runs.js';
+import type { Actor } from '../auth/actor.js';
 import { aggregateRun, rankModels, type AggregateInputRow } from '../scoring/aggregate.js';
-import { loadAggregateRows } from '../scoring/results.service.js';
+import { hiddenQuestionsFor, loadAggregateRows, withoutHiddenScores } from '../scoring/results.service.js';
 
 /** Au plus les 50 séries terminées les plus récentes où figure le modèle. */
 const MAX_RUNS = 50;
@@ -80,9 +81,10 @@ const push = <T>(map: Map<string, T[]>, key: string, value: T) => map.set(key, [
 /**
  * Chiffres du modèle sur ses séries `completed` (50 au plus, les plus récentes) : qualité = moyenne de sa qualité par série,
  * médianes sur toutes ses réponses réussies, rangs parmi les modèles ayant au moins une réponse réussie dans ces séries.
- * Un seul chargement de résultats pour l'ensemble des séries.
+ * Un seul chargement de résultats pour l'ensemble des séries. Pour un Utilisateur, comme sur le classement d'une série, les
+ * notes des questions manuelles qu'il n'a pas complétées sont retirées, série par série.
  */
-export async function computeModelStats(db: Db, modelId: string): Promise<ModelStats> {
+export async function computeModelStats(db: Db, modelId: string, actor: Actor): Promise<ModelStats> {
   const runRows = await db
     .select({ id: runs.id, name: runs.name, weights: runs.weights, completedAt: runs.completedAt, createdAt: runs.createdAt })
     .from(runs)
@@ -92,10 +94,9 @@ export async function computeModelStats(db: Db, modelId: string): Promise<ModelS
     .limit(MAX_RUNS);
   if (runRows.length === 0) return EMPTY;
 
-  const rows = await loadAggregateRows(
-    db,
-    runRows.map((r) => r.id),
-  );
+  const runIds = runRows.map((r) => r.id);
+  const [loaded, hidden] = await Promise.all([loadAggregateRows(db, runIds), hiddenQuestionsFor(db, actor, runIds)]);
+  const rows = withoutHiddenScores(loaded, hidden);
   const byRun = new Map<string, AggregateInputRow[]>();
   for (const r of rows) push(byRun, r.runId, r);
 

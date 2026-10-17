@@ -36,6 +36,7 @@ import {
   type JudgeVerdict,
   type PendingJudgement,
 } from '../scoring/judge-items.js';
+import { pendingExpectedScores } from '../scoring/expected.js';
 import { parseJudgeReply } from '../scoring/judge-parse.js';
 import { recordUsage } from '../usage/usage.js';
 import { buildRequest, measureCall, type CallOutcome, type ModelPrices } from './call.js';
@@ -227,6 +228,34 @@ export async function executeRunSlice(deps: EngineDeps, job: Job, ctx: JobContex
     }),
   );
   if (!run) return;
+
+  /** Crochet de notation d'un résultat terminé ; une erreur est journalisée, le résultat reste `done` et la tranche continue. */
+  async function notifyFinished(resultId: string): Promise<void> {
+    if (!deps.onResultFinished) return;
+    await deps.onResultFinished(resultId).catch(async (err: unknown) => {
+      // Journal des erreurs (message masqué par le journal).
+      const d = describeError(err);
+      await reportError(
+        db,
+        {
+          source: 'job',
+          origin: RUN_EXECUTE,
+          code: d.name,
+          message: d.message,
+          stack: d.stack,
+          severity: 'normale',
+          target: { type: 'result', id: resultId },
+        },
+        ctx.now(),
+      );
+    });
+  }
+
+  // Notes par réponse attendue restées en attente après la fin de leur résultat (arrêt du processus, erreur) : reprises
+  // avant tout lancement. Aucun verrou n'est tenu ici : chaque note est une écriture conditionnée d'une seule ligne.
+  if (deps.onResultFinished) {
+    for (const resultId of await pendingExpectedScores(db, runId)) await notifyFinished(resultId);
+  }
 
   // 3. File de lancement de la tranche : appels de génération, puis notes du juge en attente.
   const queue: WorkItem[] = await loadQueue(db, runId);
@@ -443,25 +472,7 @@ export async function executeRunSlice(deps: EngineDeps, job: Job, ctx: JobContex
     if (item.snapshot.scoringMethod === 'judge') {
       await addJudgements([{ resultId: item.resultId, snapshot: item.snapshot, responseChars: o.text.length }]);
     }
-    if (deps.onResultFinished) {
-      await deps.onResultFinished(item.resultId).catch(async (err: unknown) => {
-        // Journal des erreurs (message masqué par le journal) ; le résultat reste `done` et la tranche continue.
-        const d = describeError(err);
-        await reportError(
-          db,
-          {
-            source: 'job',
-            origin: RUN_EXECUTE,
-            code: d.name,
-            message: d.message,
-            stack: d.stack,
-            severity: 'normale',
-            target: { type: 'result', id: item.resultId },
-          },
-          ctx.now(),
-        );
-      });
-    }
+    await notifyFinished(item.resultId);
   }
 
   async function finishFailed(item: GenerateItem, o: CallOutcome): Promise<void> {

@@ -11,7 +11,7 @@ export function registerResultsRoutes(app: FastifyInstance, service: ResultsServ
 
   app.get('/api/runs/:id/ranking', connected, async (req) => {
     const { id } = idParams.parse(req.params);
-    return service.ranking(id);
+    return service.ranking(id, req.actor!);
   });
 
   app.get('/api/runs/:id/answers/:runTestId', connected, async (req) => {

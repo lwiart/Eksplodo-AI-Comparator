@@ -9,7 +9,7 @@ import { maskHiddenRow, resultRowOf, type ResultRow, type Weights } from '../run
 import type { ScoringMethod } from '../tests/scoring-config.js';
 import { aggregateRun, rankModels, type AggregateInputRow, type ModelAggregate } from './aggregate.js';
 import { csvDocument, csvFileName, type CsvValue } from './csv.js';
-import { incompleteManualQuestions } from './manual.service.js';
+import { incompleteManualQuestions, incompleteManualQuestionsIn } from './manual.service.js';
 import { finalScore } from './override.js';
 
 export type RankingModel = ModelAggregate & { name: string; color: string; providerName: string };
@@ -41,7 +41,8 @@ export type Answer = {
   errorMessage: string | null;
 };
 
-export type Answers = { test: { name: string; category: string; userPrompt: string }; answers: Answer[] };
+/** `scoringMethod` : le client ne propose la relance du juge que sur un test noté par le juge. */
+export type Answers = { test: { name: string; category: string; userPrompt: string; scoringMethod: ScoringMethod }; answers: Answer[] };
 
 const snapshotName = sql<string>`JSON_UNQUOTE(JSON_EXTRACT(${runTests.snapshot}, '$.name'))`;
 const snapshotCategory = sql<string>`JSON_UNQUOTE(JSON_EXTRACT(${runTests.snapshot}, '$.category'))`;
@@ -105,6 +106,26 @@ export async function loadAggregateRows(db: Db, runIds: string[]): Promise<(Aggr
     .from(results)
     .innerJoin(runTests, eq(runTests.id, results.runTestId))
     .where(inArray(results.runId, runIds));
+}
+
+/**
+ * Questions manuelles masquées à ce compte dans ces séries (aucune pour l'Admin) : celles qu'il n'a pas encore complétées.
+ * Les identifiants de `run_tests` étant propres à une série, un seul ensemble couvre plusieurs séries.
+ */
+export function hiddenQuestionsFor(conn: Db, actor: Actor, runIds: string[]): Promise<Set<string>> {
+  return actor.role === 'admin' ? Promise.resolve(new Set<string>()) : incompleteManualQuestionsIn(conn, actor.userId, runIds);
+}
+
+/**
+ * Lignes d'agrégation vues par un compte : sur une question manuelle masquée, moyenne des évaluateurs et note imposée
+ * retirées (test non noté pour lui), sans quoi un agrégat par catégorie révélerait les notes des autres évaluateurs.
+ */
+export function withoutHiddenScores<T extends { runTestId: string; manualAvg: number | null; overrideScore: number | null }>(
+  rows: T[],
+  hidden: Set<string>,
+): T[] {
+  if (hidden.size === 0) return rows;
+  return rows.map((r) => (hidden.has(r.runTestId) ? { ...r, manualAvg: null, overrideScore: null } : r));
 }
 
 const runNotFound = () => new NotFoundError('Série introuvable');
@@ -179,9 +200,13 @@ export function createResultsService(deps: { db: Db }) {
   };
 
   return {
-    /** Agrégats par modèle sur toutes les réponses de la série (aucun masquage : un agrégat ne relie aucune lettre à un modèle). */
-    async ranking(runId: string): Promise<Ranking> {
-      const [run, rows, modelRows, categoryRows] = await Promise.all([
+    /**
+     * Agrégats par modèle sur toutes les réponses de la série. Pour un Utilisateur, les notes des questions manuelles qu'il
+     * n'a pas complétées sont retirées : la qualité par catégorie d'un test manuel seul dans sa catégorie serait sinon la
+     * moyenne des autres évaluateurs pour ce modèle.
+     */
+    async ranking(runId: string, actor: Actor): Promise<Ranking> {
+      const [run, rows, modelRows, categoryRows, hidden] = await Promise.all([
         requireRun(runId),
         loadAggregateRows(db, [runId]),
         db
@@ -192,9 +217,10 @@ export function createResultsService(deps: { db: Db }) {
           .where(eq(runModels.runId, runId))
           .orderBy(asc(runModels.addedAt), asc(models.displayName)),
         db.select({ category: snapshotCategory }).from(runTests).where(eq(runTests.runId, runId)).orderBy(asc(runTests.position)),
+        hiddenFor(actor, runId),
       ]);
       const categories = [...new Set(categoryRows.map((r) => r.category))];
-      const aggs = new Map(aggregateRun(rows).map((a) => [a.modelId, a]));
+      const aggs = new Map(aggregateRun(withoutHiddenScores(rows, hidden)).map((a) => [a.modelId, a]));
       const ordered = modelRows.flatMap((m) => {
         const a = aggs.get(m.modelId);
         return a ? [{ ...a, ...m }] : [];
@@ -220,7 +246,7 @@ export function createResultsService(deps: { db: Db }) {
       ]);
       if (!rt) throw new NotFoundError('Test introuvable dans cette série');
       return {
-        test: { name: rt.snapshot.name, category: rt.snapshot.category, userPrompt: rt.snapshot.userPrompt },
+        test: { name: rt.snapshot.name, category: rt.snapshot.category, userPrompt: rt.snapshot.userPrompt, scoringMethod: rt.snapshot.scoringMethod },
         answers: rows.map((r) => {
           const { row, scores } = visibleRow(r, hidden);
           return {

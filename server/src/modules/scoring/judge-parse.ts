@@ -1,4 +1,4 @@
-// Lecture stricte de la réponse du juge : premier objet JSON équilibré, validé par Zod.
+// Lecture stricte de la réponse du juge : objets JSON équilibrés, le dernier validé par Zod l'emporte.
 import { z } from 'zod';
 
 const RATIONALE_MAX = 2_000;
@@ -10,8 +10,11 @@ const replySchema = z.object({
 
 export type JudgeReply = { ok: true; score: number; rationale: string } | { ok: false; reason: string };
 
-/** Premier objet `{…}` équilibré du texte ; les accolades à l'intérieur des chaînes JSON sont ignorées. */
-function firstBalancedObject(text: string): string | null {
+type Candidate = { start: number; end: number; raw: string };
+
+/** Objets `{…}` équilibrés du texte, un par accolade ouvrante ; les accolades à l'intérieur des chaînes JSON sont ignorées. */
+function balancedObjects(text: string): Candidate[] {
+  const out: Candidate[] = [];
   for (let start = text.indexOf('{'); start !== -1; start = text.indexOf('{', start + 1)) {
     let depth = 0;
     let inString = false;
@@ -24,29 +27,43 @@ function firstBalancedObject(text: string): string | null {
         else if (c === '"') inString = false;
       } else if (c === '"') inString = true;
       else if (c === '{') depth++;
-      else if (c === '}' && --depth === 0) return text.slice(start, i + 1);
+      else if (c === '}' && --depth === 0) {
+        out.push({ start, end: i + 1, raw: text.slice(start, i + 1) });
+        break;
+      }
     }
   }
-  return null;
+  return out;
 }
 
+/**
+ * Verdict du juge : chaque objet équilibré est essayé, du dernier terminé au premier (à fin égale, le plus englobant) ; le
+ * premier qui passe le schéma l'emporte. Un juge qui cite la réponse évaluée (où un modèle aurait glissé un faux
+ * `{"score": 10, …}`) avant de rendre son verdict est donc noté sur son verdict, non sur la citation.
+ */
 export function parseJudgeReply(text: string): JudgeReply {
-  const raw = firstBalancedObject(text);
-  if (raw === null) return { ok: false, reason: 'Aucun objet JSON dans la réponse du juge' };
-  let json: unknown;
-  try {
-    json = JSON.parse(raw);
-  } catch {
-    return { ok: false, reason: 'JSON invalide dans la réponse du juge' };
+  const candidates = balancedObjects(text).sort((a, b) => b.end - a.end || a.start - b.start);
+  if (candidates.length === 0) return { ok: false, reason: 'Aucun objet JSON dans la réponse du juge' };
+  let schemaFailure: string | null = null;
+  for (const { raw } of candidates) {
+    let json: unknown;
+    try {
+      json = JSON.parse(raw);
+    } catch {
+      continue;
+    }
+    const parsed = replySchema.safeParse(json);
+    if (!parsed.success) {
+      schemaFailure ??= parsed.error.issues.map((i) => `${i.path.join('.') || 'racine'} : ${i.message}`).join('; ');
+      continue;
+    }
+    return {
+      ok: true,
+      score: Math.round(parsed.data.score * 10) / 10,
+      rationale: parsed.data.rationale.slice(0, RATIONALE_MAX),
+    };
   }
-  const parsed = replySchema.safeParse(json);
-  if (!parsed.success) {
-    const detail = parsed.error.issues.map((i) => `${i.path.join('.') || 'racine'} : ${i.message}`).join('; ');
-    return { ok: false, reason: `Réponse du juge invalide (${detail})` };
-  }
-  return {
-    ok: true,
-    score: Math.round(parsed.data.score * 10) / 10,
-    rationale: parsed.data.rationale.slice(0, RATIONALE_MAX),
-  };
+  return schemaFailure === null
+    ? { ok: false, reason: 'JSON invalide dans la réponse du juge' }
+    : { ok: false, reason: `Réponse du juge invalide (${schemaFailure})` };
 }

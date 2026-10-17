@@ -113,8 +113,8 @@ async function setup() {
 test('API ranking et answers ; Utilisateur : réponses manuelles masquées tant que la question n’est pas notée', async () => {
   const { admin, user, get, runId, rtExpected, rtManual, ids, mA, mB, userRow, rate, createOtherRun } = await setup();
 
-  // Classement : mêmes agrégats pour tous les comptes connectés ; modèles du meilleur au moins bon (pondération de la série).
-  const ranking = await get(`/api/runs/${runId}/ranking`, user);
+  // Classement de l'Admin : toutes les notes ; modèles du meilleur au moins bon (pondération de la série).
+  const ranking = await get(`/api/runs/${runId}/ranking`, admin);
   expect(ranking.statusCode).toBe(200);
   const body = ranking.json();
   expect(body.weights).toEqual({ quality: 50, speed: 20, cost: 20, reliability: 10 });
@@ -136,12 +136,11 @@ test('API ranking et answers ; Utilisateur : réponses manuelles masquées tant 
   });
   // B : qualité (0 + 6) / 2 = 3 ; coût moyen 0,003 $ (le double de A) → 2.
   expect(body.models[1]).toMatchObject({ modelId: mB.id, name: 'Modèle B', quality: 3, speed: 6, cost: 2, reliability: 10, byCategory: { Culture: 0, Écriture: 6 } });
-  expect((await get(`/api/runs/${runId}/ranking`, admin)).json()).toEqual(body);
 
   // Réponses côte à côte d'un test à réponse attendue : visibles, avec notes et justification du juge.
   const expected = await get(`/api/runs/${runId}/answers/${rtExpected}`, user);
   expect(expected.statusCode).toBe(200);
-  expect(expected.json().test).toEqual({ name: 'Capitale', category: 'Culture', userPrompt: 'Capitale de la France ?' });
+  expect(expected.json().test).toEqual({ name: 'Capitale', category: 'Culture', userPrompt: 'Capitale de la France ?', scoringMethod: 'expected' });
   expect(expected.json().answers).toEqual([
     {
       resultId: ids.expA,
@@ -185,6 +184,7 @@ test('API ranking et answers ; Utilisateur : réponses manuelles masquées tant 
     errorMessage: null,
   });
   const hidden = await get(`/api/runs/${runId}/answers/${rtManual}`, user);
+  expect(hidden.json().test.scoringMethod).toBe('manual');
   expect(hidden.json().answers).toEqual([hiddenAnswer(ids.manA, 'Modèle A', '#aa0001'), hiddenAnswer(ids.manB, 'Modèle B', '#aa0002')]);
   const asAdmin = await get(`/api/runs/${runId}/answers/${rtManual}`, admin);
   expect(asAdmin.json().answers[0]).toMatchObject({
@@ -204,6 +204,8 @@ test('API ranking et answers ; Utilisateur : réponses manuelles masquées tant 
     expect.objectContaining({ responseText: 'Haïku de A\nsur deux lignes', hiddenUntilScored: false, manualAvg: 6, finalScore: 6, autoScore: null }),
     expect.objectContaining({ responseText: 'Haïku de B', hiddenUntilScored: false, manualAvg: 6.5, finalScore: 6.5 }),
   ]);
+  // Son classement compte alors la question manuelle, comme celui de l'Admin.
+  expect((await get(`/api/runs/${runId}/ranking`, user)).json()).toEqual((await get(`/api/runs/${runId}/ranking`, admin)).json());
 
   // Introuvables : série inconnue, test d'une autre série ; non connecté : 401.
   expect((await get(`/api/runs/${randomUUID()}/ranking`)).statusCode).toBe(404);
@@ -216,6 +218,29 @@ test('API ranking et answers ; Utilisateur : réponses manuelles masquées tant 
   expect((await get(`/api/runs/${runId}/ranking`, null)).statusCode).toBe(401);
   expect((await get(`/api/runs/${runId}/answers/${rtExpected}`, null)).statusCode).toBe(401);
   expect((await get(`/api/runs/${runId}/export.csv`, null)).statusCode).toBe(401);
+});
+
+test('classement : notes d’une question manuelle non notée retirées pour l’Utilisateur (moyenne et note imposée), visibles après notation', async () => {
+  const { t, admin, user, get, runId, ids, mA, mB, userRow, rate } = await setup();
+  // Note imposée sur une réponse manuelle : elle aussi orienterait la notation à l'aveugle.
+  await t.db.update(results).set({ overrideScore: 1 }).where(eq(results.id, ids.manB));
+  const asAdmin = (await get(`/api/runs/${runId}/ranking`, admin)).json();
+  expect(asAdmin.models.find((m: { modelId: string }) => m.modelId === mB.id)).toMatchObject({ byCategory: { Culture: 0, Écriture: 1 } });
+
+  // Utilisateur qui n'a pas noté la question : test manuel non noté pour lui (qualité sur le seul test à réponse attendue).
+  const before = (await get(`/api/runs/${runId}/ranking`, user)).json();
+  expect(before.models).toEqual([
+    expect.objectContaining({ modelId: mA.id, quality: 10, byCategory: { Culture: 10, Écriture: null }, raw: expect.objectContaining({ scoredTests: 1 }) }),
+    expect.objectContaining({ modelId: mB.id, quality: 0, byCategory: { Culture: 0, Écriture: null }, raw: expect.objectContaining({ scoredTests: 1 }) }),
+  ]);
+
+  // Après sa notation : moyenne des deux évaluateurs pour A ((8 + 4) / 2 = 6), note imposée pour B.
+  await rate(ids.manA, userRow.id, 4);
+  await rate(ids.manB, userRow.id, 7);
+  const after = (await get(`/api/runs/${runId}/ranking`, user)).json();
+  expect(after.models.find((m: { modelId: string }) => m.modelId === mA.id)).toMatchObject({ quality: 8, byCategory: { Culture: 10, Écriture: 6 } });
+  expect(after.models.find((m: { modelId: string }) => m.modelId === mB.id)).toMatchObject({ byCategory: { Culture: 0, Écriture: 1 } });
+  expect(after).toEqual((await get(`/api/runs/${runId}/ranking`, admin)).json());
 });
 
 test('le coût du juge n’entre jamais dans le coût moyen du modèle', async () => {
