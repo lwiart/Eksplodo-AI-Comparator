@@ -5,6 +5,8 @@ import { AccountPage } from '../pages/AccountPage';
 import { DashboardPage } from '../pages/DashboardPage';
 import { InvitationPage } from '../pages/InvitationPage';
 import { LoginPage } from '../pages/LoginPage';
+import { ModelPage } from '../pages/ModelPage';
+import { ModelsPage } from '../pages/ModelsPage';
 import { ErrorLogPage } from '../pages/admin/ErrorLogPage';
 import { ProvidersPage } from '../pages/admin/ProvidersPage';
 import { UsersPage } from '../pages/admin/UsersPage';
@@ -54,6 +56,8 @@ export function AppRoutes() {
       <Route element={<RequireAuth />}>
         <Route element={<AppShell />}>
           <Route index element={<DashboardPage />} />
+          <Route path="/modeles" element={<ModelsPage />} />
+          <Route path="/modeles/:id" element={<ModelPage />} />
           <Route path="/compte" element={<AccountPage />} />
           <Route element={<RequireRole roles={['admin']} />}>
             <Route path="/admin/utilisateurs" element={<UsersPage />} />

@@ -121,8 +121,8 @@ export async function listModels(): Promise<PublicModel[]> {
   return (await apiFetch<{ models: PublicModel[] }>('/api/models')).models;
 }
 
-export async function getModel(id: string): Promise<PublicModel> {
-  return (await apiFetch<{ model: PublicModel }>(`/api/models/${enc(id)}`)).model;
+export async function getModel(id: string): Promise<PublicModel & { provider: PublicProvider }> {
+  return (await apiFetch<{ model: PublicModel & { provider: PublicProvider } }>(`/api/models/${enc(id)}`)).model;
 }
 
 export async function createModel(body: ModelInput): Promise<PublicModel> {

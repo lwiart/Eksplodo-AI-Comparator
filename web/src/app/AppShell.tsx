@@ -10,8 +10,11 @@ import { applyAnimationsPreference, getAnimationsPreference, setAnimationsPrefer
 
 type NavItem = { to: string; label: string; icon: string; end?: boolean; badge?: number };
 
-// Les entrées Séries, Modèles et À noter sont ajoutées par les plans 2 à 4.
-const EXPLORE: NavItem[] = [{ to: '/', label: 'Tableau de bord', icon: '◎', end: true }];
+// Les entrées Séries et À noter sont ajoutées par les plans 3 et 4.
+const EXPLORE: NavItem[] = [
+  { to: '/', label: 'Tableau de bord', icon: '◎', end: true },
+  { to: '/modeles', label: 'Modèles', icon: '✦' },
+];
 const ADMIN: NavItem[] = [
   { to: '/admin/utilisateurs', label: 'Utilisateurs', icon: '☻' },
   { to: '/admin/fournisseurs', label: 'Fournisseurs', icon: '⌁' },
