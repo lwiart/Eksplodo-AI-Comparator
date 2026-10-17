@@ -25,6 +25,8 @@ export function testConfig(): AppConfig {
     cronSecret: 'x'.repeat(32),
     smtp: null,
     bootstrapAdmin: null,
+    fakeLlm: false,
+    fakeLlmIgnored: false,
   };
 }
 

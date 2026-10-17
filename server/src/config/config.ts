@@ -10,6 +10,10 @@ export type AppConfig = {
   smtp: { host: string; port: number; user: string; pass: string; from: string } | null;
   /** Premier administrateur créé au démarrage (e-mail normalisé) ; ne jamais journaliser le mot de passe. */
   bootstrapAdmin: { email: string; password: string } | null;
+  /** Faux fournisseur (`AIC_FAKE_LLM=1`), jamais actif en production. */
+  fakeLlm: boolean;
+  /** `AIC_FAKE_LLM=1` demandée en production : ignorée, avec avertissement. */
+  fakeLlmIgnored: boolean;
 };
 
 const MIN_PASSWORD_LENGTH = 12;
@@ -28,6 +32,7 @@ const schema = z.object({
   SMTP_FROM: z.string().optional(),
   BOOTSTRAP_ADMIN_EMAIL: z.string().optional(),
   BOOTSTRAP_ADMIN_PASSWORD: z.string().optional(),
+  AIC_FAKE_LLM: z.string().optional(),
 });
 
 const SMTP_KEYS = ['SMTP_HOST', 'SMTP_PORT', 'SMTP_USER', 'SMTP_PASS', 'SMTP_FROM'] as const;
@@ -77,6 +82,8 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
     bootstrapAdmin = { email: bootstrapEmail, password: bootstrapPassword };
   }
 
+  const fakeRequested = e.AIC_FAKE_LLM === '1';
+
   return {
     nodeEnv: e.NODE_ENV,
     port: e.PORT,
@@ -86,16 +93,19 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
     cronSecret: e.CRON_SECRET,
     smtp,
     bootstrapAdmin,
+    fakeLlm: fakeRequested && e.NODE_ENV !== 'production',
+    fakeLlmIgnored: fakeRequested && e.NODE_ENV === 'production',
   };
 }
 
 /** Avertissements de démarrage (configuration acceptée mais probablement erronée). */
-export function configWarnings(config: Pick<AppConfig, 'nodeEnv' | 'appBaseUrl'>): string[] {
+export function configWarnings(config: Pick<AppConfig, 'nodeEnv' | 'appBaseUrl' | 'fakeLlmIgnored'>): string[] {
   const warnings: string[] = [];
   if (config.appBaseUrl.startsWith('https:') && config.nodeEnv !== 'production') {
     warnings.push(
       `APP_BASE_URL est en HTTPS mais NODE_ENV vaut « ${config.nodeEnv} » : cookies non sécurisés et HSTS désactivé — NODE_ENV=production oublié ?`,
     );
   }
+  if (config.fakeLlmIgnored) warnings.push('AIC_FAKE_LLM est ignorée en production');
   return warnings;
 }

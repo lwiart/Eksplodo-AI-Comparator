@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { loadConfig } from '../src/config/config.js';
+import { configWarnings, loadConfig } from '../src/config/config.js';
 
 const base = {
   NODE_ENV: 'test',
@@ -39,4 +39,14 @@ test('amorçage : e-mail normalisé', () => {
 });
 test('APP_ENCRYPTION_KEY n’est plus exigée', () => {
   expect(() => loadConfig(base)).not.toThrow();
+});
+test('AIC_FAKE_LLM=1 active le faux fournisseur hors production', () => { expect(loadConfig({ ...base, AIC_FAKE_LLM: '1' }).fakeLlm).toBe(true); });
+test('AIC_FAKE_LLM absente : faux fournisseur inactif', () => {
+  const c = loadConfig(base);
+  expect(c.fakeLlm).toBe(false); expect(c.fakeLlmIgnored).toBe(false);
+});
+test('AIC_FAKE_LLM ignorée en production, avec avertissement', () => {
+  const c = loadConfig({ ...base, NODE_ENV: 'production', AIC_FAKE_LLM: '1' });
+  expect(c.fakeLlm).toBe(false); expect(c.fakeLlmIgnored).toBe(true);
+  expect(configWarnings(c).join()).toMatch(/AIC_FAKE_LLM est ignorée en production/);
 });
