@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { createReadStream } from 'node:fs';
 import { AppError } from '../../errors.js';
 import { addAttachment, findAttachment, removeAttachment, resolveAttachmentPath, type AttachmentsDeps } from './attachments.js';
+import type { QuickTryService } from './quick-try.js';
 import type { TestsService } from './tests.service.js';
 
 const idParams = z.object({ id: z.string().uuid() });
@@ -39,7 +40,15 @@ const testBody = z
   })
   .strict();
 
-export function registerTestsRoutes(app: FastifyInstance, service: TestsService, attachments: AttachmentsDeps): void {
+const tryBody = z.object({ testId: z.string().uuid(), modelId: z.string().uuid() }).strict();
+const tryParams = z.object({ jobId: z.string().uuid() });
+
+export function registerTestsRoutes(
+  app: FastifyInstance,
+  service: TestsService,
+  attachments: AttachmentsDeps,
+  quickTry: QuickTryService,
+): void {
   const admin = { preHandler: app.requireAdmin };
 
   app.get('/api/tests', admin, async (req) => {
@@ -52,6 +61,17 @@ export function registerTestsRoutes(app: FastifyInstance, service: TestsService,
   app.get('/api/tests/meta', admin, async () => {
     const [categories, tags] = await Promise.all([service.categories(), service.tags()]);
     return { categories, tags };
+  });
+
+  // Essai rapide : tâche de la voie rapide, interrogée par l'interface (réponse immédiate, jamais d'attente du résultat).
+  app.post('/api/tests/try', admin, async (req, reply) => {
+    const body = tryBody.parse(req.body);
+    return reply.status(202).send({ jobId: await quickTry.start(req.actor!.userId, body) });
+  });
+
+  app.get('/api/tests/try/:jobId', admin, async (req) => {
+    const { jobId } = tryParams.parse(req.params);
+    return quickTry.status(jobId);
   });
 
   app.get('/api/tests/:id', admin, async (req) => {

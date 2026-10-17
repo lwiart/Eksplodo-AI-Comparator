@@ -8,6 +8,7 @@ import type { Mailer } from '../mail/mailer.js';
 import type { Registry } from '../providers/registry.js';
 import { executeRunSlice } from '../runs/engine.js';
 import { RUN_EXECUTE } from '../runs/run-job.js';
+import { QUICK_TRY, createQuickTryHandler } from '../tests/quick-try.js';
 import type { JobHandlers } from './queue.js';
 
 type LogFn = (obj: object, msg: string) => void;
@@ -31,6 +32,7 @@ export function createJobHandlers(deps: JobHandlersDeps): JobHandlers {
     error_alert: createErrorAlertHandler(deps),
     error_digest: createErrorDigestHandler(deps),
     catalog_refresh: createCatalogRefreshHandler({ ...(deps.fetch ? { fetch: deps.fetch } : {}) }),
+    [QUICK_TRY]: createQuickTryHandler({ db: deps.db, registry: deps.registry, config: deps.config }),
     [RUN_EXECUTE]: (job, ctx) => executeRunSlice({ db: deps.db, registry: deps.registry, config: deps.config }, job, ctx),
   };
 }

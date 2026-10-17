@@ -95,7 +95,7 @@ export type RunsServiceDeps = {
   config: Pick<AppConfig, 'dataDir'>;
 };
 
-type CandidateModel = Omit<ModelForEstimate, 'medianTotalMs'> & { available: boolean };
+export type CandidateModel = Omit<ModelForEstimate, 'medianTotalMs'> & { available: boolean };
 
 const runNotFound = () => new NotFoundError('Série introuvable');
 const testNotFound = () => new ValidationError('test_not_found', 'Un des tests demandés est introuvable ou archivé');
@@ -185,6 +185,34 @@ export async function snapshotTests(conn: DbOrTx, testIds: string[], lock: boole
   );
 }
 
+/** Modèles demandés avec leur disponibilité (modèle et fournisseur actifs, clé utilisable). */
+export async function candidateModelsOf(
+  conn: DbOrTx,
+  registry: Pick<Registry, 'keyStatus'>,
+  ids: string[],
+): Promise<Map<string, CandidateModel>> {
+  if (ids.length === 0) return new Map();
+  const rows = await conn
+    .select({ model: models, provider: providers })
+    .from(models)
+    .innerJoin(providers, eq(providers.id, models.providerId))
+    .where(inArray(models.id, ids));
+  return new Map(
+    rows.map(({ model: m, provider: p }) => [
+      m.id,
+      {
+        id: m.id,
+        name: m.displayName,
+        inputPricePerM: m.inputPricePerM,
+        outputPricePerM: m.outputPricePerM,
+        supportsVision: m.supportsVision,
+        supportsPdf: m.supportsPdf,
+        available: m.enabled && p.enabled && registry.keyStatus(p).usable,
+      },
+    ]),
+  );
+}
+
 export function createRunsService(deps: RunsServiceDeps) {
   const { db, registry } = deps;
   const repo = createRunsRepo(db);
@@ -205,28 +233,7 @@ export function createRunsService(deps: RunsServiceDeps) {
       .map((x) => x.id);
   }
 
-  async function candidateModels(conn: DbOrTx, ids: string[]): Promise<Map<string, CandidateModel>> {
-    if (ids.length === 0) return new Map();
-    const rows = await conn
-      .select({ model: models, provider: providers })
-      .from(models)
-      .innerJoin(providers, eq(providers.id, models.providerId))
-      .where(inArray(models.id, ids));
-    return new Map(
-      rows.map(({ model: m, provider: p }) => [
-        m.id,
-        {
-          id: m.id,
-          name: m.displayName,
-          inputPricePerM: m.inputPricePerM,
-          outputPricePerM: m.outputPricePerM,
-          supportsVision: m.supportsVision,
-          supportsPdf: m.supportsPdf,
-          available: m.enabled && p.enabled && registry.keyStatus(p).usable,
-        },
-      ]),
-    );
-  }
+  const candidateModels = (conn: DbOrTx, ids: string[]) => candidateModelsOf(conn, registry, ids);
 
   /** Valide la demande : tests actifs, modèles disponibles, juge requis et disponible. */
   async function resolve(conn: DbOrTx, input: RunInput, lock: boolean) {
