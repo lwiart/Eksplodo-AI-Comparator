@@ -6,14 +6,14 @@ import { shareLinks } from '../../db/schema/sharing.js';
 import { NotFoundError } from '../../errors.js';
 import { roundUsd } from '../../lib/money.js';
 import type { Weights } from '../runs/runs.service.js';
-import { aggregateRun, rankModels } from '../scoring/aggregate.js';
+import { aggregateRun, rankModels, type AggregateInputRow } from '../scoring/aggregate.js';
 import { finalScore } from '../scoring/override.js';
-import { loadAggregateRows, manualAvg, type RankingModel } from '../scoring/results.service.js';
+import { manualAvg, type RankingModel } from '../scoring/results.service.js';
 import { getAuditUrl } from './share-links.service.js';
 import { hashShareToken } from './token.js';
 
 /** Modèle de la page publique : même forme que le classement, mais désigné par une clé opaque (`m1`, `m2`…). */
-export type PublicModel = RankingModel & { modelId: `m${number}` };
+export type PublicModel = RankingModel & { modelId: `m${number}`; rank: number | null; global: number | null };
 
 export type PublicShare = {
   title: string;
@@ -43,7 +43,8 @@ export type PublicShare = {
     | null;
 };
 
-const notFound = () => new NotFoundError('Lien introuvable ou désactivé');
+export const shareNotFound = () => new NotFoundError('Lien introuvable ou désactivé');
+const notFound = shareNotFound;
 
 /**
  * Page publique d'un lien : liste blanche construite champ par champ (aucun identifiant interne, aucune note individuelle).
@@ -56,11 +57,6 @@ export async function loadPublicShare(db: Db, token: string): Promise<PublicShar
     .from(shareLinks)
     .where(and(eq(shareLinks.tokenHash, hashShareToken(token)), eq(shareLinks.active, true)));
   if (!link) throw notFound();
-
-  await db
-    .update(shareLinks)
-    .set({ viewCount: sql`${shareLinks.viewCount} + 1` })
-    .where(eq(shareLinks.id, link.id));
 
   const runId = link.runId;
   const [[run], rows, modelRows, testRows, auditUrl] = await Promise.all([
@@ -77,7 +73,25 @@ export async function loadPublicShare(db: Db, token: string): Promise<PublicShar
       .from(runs)
       .leftJoin(models, eq(models.id, runs.judgeModelId))
       .where(eq(runs.id, runId)),
-    loadAggregateRows(db, [runId]),
+    db
+      .select({
+        runTestId: results.runTestId,
+        modelId: results.modelId,
+        repetition: results.repetition,
+        status: results.status,
+        scoreStatus: results.scoreStatus,
+        overrideScore: results.overrideScore,
+        autoScore: results.autoScore,
+        manualAvg,
+        ttftMs: results.ttftMs,
+        tokensPerS: results.tokensPerS,
+        costUsd: results.costUsd,
+        // Les textes ne sont lus que si le lien publie les réponses.
+        text: link.showResponses ? results.responseText : sql<string | null>`NULL`,
+        judgeRationale: link.showResponses ? results.judgeRationale : sql<string | null>`NULL`,
+      })
+      .from(results)
+      .where(eq(results.runId, runId)),
     db
       .select({ modelId: runModels.modelId, name: models.displayName, color: models.color, providerName: providers.name })
       .from(runModels)
@@ -93,18 +107,44 @@ export async function loadPublicShare(db: Db, token: string): Promise<PublicShar
   const showCosts = link.showCosts;
   const categories = [...new Set(testRows.map((t) => t.snapshot.category))];
 
+  // Une seule lecture des résultats : agrégats et réponses en sont tirés ; la note finale n'est calculée qu'une fois.
+  const snapshotOf = new Map(testRows.map((t) => [t.id, t.snapshot]));
+  const scored = rows.map((r) => {
+    const snap = snapshotOf.get(r.runTestId)!;
+    const score = finalScore({ overrideScore: r.overrideScore, autoScore: r.autoScore, manualAvg: r.manualAvg, method: snap.scoringMethod });
+    return { row: r, score };
+  });
+  const aggRows: AggregateInputRow[] = scored.map(({ row: r }) => ({
+    modelId: r.modelId,
+    runTestId: r.runTestId,
+    category: snapshotOf.get(r.runTestId)!.category,
+    scoringMethod: snapshotOf.get(r.runTestId)!.scoringMethod,
+    status: r.status,
+    overrideScore: r.overrideScore,
+    autoScore: r.autoScore,
+    manualAvg: r.manualAvg,
+    ttftMs: r.ttftMs,
+    tokensPerS: r.tokensPerS,
+    costUsd: r.costUsd,
+  }));
+
   // Classement de la série (pondération enregistrée sur la série) ; la clé opaque suit cet ordre.
-  const aggs = new Map(aggregateRun(rows).map((a) => [a.modelId, a]));
+  const aggs = new Map(aggregateRun(aggRows).map((a) => [a.modelId, a]));
   const ordered = modelRows.flatMap((m) => {
     const a = aggs.get(m.modelId);
     return a ? [{ ...a, ...m }] : [];
   });
-  const position = new Map(rankModels(ordered, run.weights).map((r, i) => [r.modelId, i]));
+  // Rang et score global avec la pondération complète de la série (coût compris, même masqué).
+  const ranked = rankModels(ordered, run.weights);
+  const position = new Map(ranked.map((r, i) => [r.modelId, i]));
+  const rankOf = new Map(ranked.map((r) => [r.modelId, r]));
   ordered.sort((a, b) => position.get(a.modelId)! - position.get(b.modelId)!);
   const keyOf = new Map(ordered.map((m, i) => [m.modelId, `m${i + 1}` as const]));
 
   const publicModels: PublicModel[] = ordered.map((m) => ({
     modelId: keyOf.get(m.modelId)!,
+    rank: rankOf.get(m.modelId)!.rank,
+    global: rankOf.get(m.modelId)!.global,
     quality: m.quality,
     speed: m.speed,
     cost: showCosts ? m.cost : null,
@@ -136,38 +176,38 @@ export async function loadPublicShare(db: Db, token: string): Promise<PublicShar
 
   let responses: PublicShare['responses'] = null;
   if (link.showResponses) {
-    const answerRows = await db
-      .select({
-        runTestId: results.runTestId,
-        modelId: results.modelId,
-        repetition: results.repetition,
-        text: results.responseText,
-        overrideScore: results.overrideScore,
-        autoScore: results.autoScore,
-        judgeRationale: results.judgeRationale,
-        manualAvg,
-      })
-      .from(results)
-      .innerJoin(runTests, eq(runTests.id, results.runTestId))
-      .innerJoin(runModels, and(eq(runModels.runId, results.runId), eq(runModels.modelId, results.modelId)))
-      .innerJoin(models, eq(models.id, results.modelId))
-      .where(and(eq(results.runId, runId), eq(results.status, 'done')))
-      .orderBy(asc(runTests.position), asc(runModels.addedAt), asc(models.displayName), asc(results.repetition), asc(results.id));
+    type PublicAnswer = NonNullable<PublicShare['responses']>[number]['answers'][number] & { order: number };
+    const byTest = new Map<string, PublicAnswer[]>();
+    for (const { row: r, score } of scored) {
+      const key = keyOf.get(r.modelId);
+      if (r.status !== 'done' || key === undefined) continue;
+      const list = byTest.get(r.runTestId) ?? [];
+      list.push({
+        order: Number(key.slice(1)),
+        modelKey: key,
+        repetition: r.repetition,
+        text: r.text,
+        finalScore: score,
+        // Hors note réussie, ce champ peut contenir le message d'échec du juge : jamais publié.
+        judgeRationale: r.scoreStatus === 'done' ? r.judgeRationale : null,
+      });
+      byTest.set(r.runTestId, list);
+    }
     responses = testRows.map((t) => ({
       testName: t.snapshot.name,
       category: t.snapshot.category,
       userPrompt: t.snapshot.userPrompt,
-      answers: answerRows
-        .filter((a) => a.runTestId === t.id && keyOf.has(a.modelId))
-        .map((a) => ({
-          modelKey: keyOf.get(a.modelId)!,
-          repetition: a.repetition,
-          text: a.text,
-          finalScore: finalScore({ overrideScore: a.overrideScore, autoScore: a.autoScore, manualAvg: a.manualAvg, method: t.snapshot.scoringMethod }),
-          judgeRationale: a.judgeRationale,
-        })),
+      answers: (byTest.get(t.id) ?? [])
+        .sort((a, b) => a.order - b.order || a.repetition - b.repetition)
+        .map((a) => ({ modelKey: a.modelKey, repetition: a.repetition, text: a.text, finalScore: a.finalScore, judgeRationale: a.judgeRationale })),
     }));
   }
+
+  // Vue comptée seulement une fois la page construite.
+  await db
+    .update(shareLinks)
+    .set({ viewCount: sql`${shareLinks.viewCount} + 1` })
+    .where(eq(shareLinks.id, link.id));
 
   return {
     title: link.title,

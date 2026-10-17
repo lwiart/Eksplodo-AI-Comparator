@@ -114,7 +114,7 @@ test('lien actif : 200 sans session ; clés de premier niveau exactement celles 
   const json = res.json();
   expect(Object.keys(json).sort()).toEqual(['auditUrl', 'categories', 'intro', 'models', 'responses', 'run', 'showCosts', 'title', 'verdicts', 'weights']);
   expect(Object.keys(json.run).sort()).toEqual(['completedAt', 'judgeName', 'modelCount', 'name', 'repetitions', 'testCount', 'totalCostUsd']);
-  expect(Object.keys(json.models[0]).sort()).toEqual(['byCategory', 'color', 'cost', 'modelId', 'name', 'providerName', 'quality', 'raw', 'reliability', 'speed']);
+  expect(Object.keys(json.models[0]).sort()).toEqual(['byCategory', 'color', 'cost', 'global', 'modelId', 'name', 'providerName', 'quality', 'rank', 'raw', 'reliability', 'speed']);
   expect(Object.keys(json.models[0].raw).sort()).toEqual(['done', 'failed', 'meanCostUsd', 'medianTokensPerS', 'medianTtftMs', 'scoredTests', 'unsupported']);
   expect(Object.keys(json.verdicts[0]).sort()).toEqual(['label', 'model', 'text']);
   expect(Object.keys(json.verdicts[0].model).sort()).toEqual(['color', 'key', 'name']);
@@ -129,6 +129,8 @@ test('lien actif : 200 sans session ; clés de premier niveau exactement celles 
     run: { name: 'Polyvalence d’octobre', completedAt: '2026-01-15T11:00:00.000Z', modelCount: 2, testCount: 2, repetitions: 1, judgeName: 'Juge' },
     categories: ['Culture', 'Écriture'],
   });
+  expect(json.models.map((m: { rank: number }) => m.rank)).toEqual([1, 2]);
+  expect(json.models[0].global).toBeGreaterThan(json.models[1].global);
   // A (qualité 8) devant B (qualité 3) : clés dans l'ordre du classement.
   expect(json.models.map((m: { modelId: string; name: string }) => [m.modelId, m.name])).toEqual([
     ['m1', 'Modèle A'],
@@ -237,4 +239,64 @@ test('verdict dont le modèle a été retiré : model null, sans erreur', async 
   expect(json.verdicts[0].model).toBeNull();
   expect(json.models.map((m: { name: string }) => m.name)).toEqual(['Modèle B']);
   expect(json.models[0].modelId).toBe('m1');
+});
+
+test('score global et rang : pondération complète de la série, coût compris même si showCosts est faux', async () => {
+  const s = await setup();
+  const hidden = (await s.pub((await s.create({ showCosts: false })).token)).json();
+  const shown = (await s.pub((await s.create({ showCosts: true })).token)).json();
+  expect(hidden.models.map((m: { global: number }) => m.global)).toEqual(shown.models.map((m: { global: number }) => m.global));
+  expect(hidden.models[0].global).not.toBeNull();
+  expect(hidden.models[0].cost).toBeNull();
+});
+
+test('judgeRationale : jamais publié si la notation du juge a échoué', async () => {
+  const s = await setup();
+  await s.t.db
+    .update(results)
+    .set({ scoreStatus: 'judge_failed', judgeRationale: 'Erreur interne du fournisseur : clé sk-123' })
+    .where(eq(results.id, s.ids.expB));
+  const res = await s.pub((await s.create({ showResponses: true })).token);
+  expect(res.body).not.toContain('sk-123');
+  const answers = res.json().responses[0].answers;
+  expect(answers.find((a: { modelKey: string }) => a.modelKey === 'm2').judgeRationale).toBeNull();
+  expect(answers.find((a: { modelKey: string }) => a.modelKey === 'm1').judgeRationale).toBe('Réponse exacte');
+});
+
+test('showCosts faux et showResponses vrai : aucun montant ni clé de coût dans le corps brut', async () => {
+  const s = await setup();
+  const res = await s.pub((await s.create({ showCosts: false, showResponses: true })).token);
+  for (const forbidden of ['0.002', '0.004', '0.75', '0.5,', '"costUsd"']) expect(res.body).not.toContain(forbidden);
+  const json = res.json();
+  expect(json.run.totalCostUsd).toBeNull();
+  for (const m of json.models) expect([m.cost, m.raw.meanCostUsd]).toEqual([null, null]);
+});
+
+test('en-têtes no-store et noindex sur 200, 404 (inconnu, jeton malformé ou trop long) et 429', async () => {
+  const s = await setup();
+  const { token } = await s.create();
+  const ok = await s.pub(token);
+  expect(ok.headers['x-robots-tag']).toBe('noindex');
+  for (const bad of ['inconnu', 'a'.repeat(90), 'jeton%20invalide', 'a.b']) {
+    const res = await s.pub(bad);
+    expect(res.statusCode).toBe(404);
+    expect(res.json()).toEqual(NOT_FOUND);
+    expect(res.headers['cache-control']).toBe('no-store');
+  }
+  for (let i = 0; i < 60; i++) await s.pub('inconnu');
+  const limited = await s.pub(token);
+  expect(limited.statusCode).toBe(429);
+  expect(limited.headers['cache-control']).toBe('no-store');
+});
+
+test('série sans résultat : 200 avec models vides et responses sans réponse, sans plantage', async () => {
+  const s = await setup();
+  const { token } = await s.create({ showResponses: true });
+  await s.t.db.delete(results).where(eq(results.runId, s.runId));
+  const res = await s.pub(token);
+  expect(res.statusCode).toBe(200);
+  const json = res.json();
+  expect(json.models).toEqual([]);
+  expect(json.verdicts[0].model).toBeNull();
+  expect(json.responses.every((r: { answers: unknown[] }) => r.answers.length === 0)).toBe(true);
 });
