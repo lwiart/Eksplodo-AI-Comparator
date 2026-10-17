@@ -116,6 +116,8 @@ export const results = mysqlTable(
     autoScore: score('auto_score'),
     judgeRationale: text('judge_rationale'),
     judgeCostUsd: money('judge_cost_usd'),
+    /** Tâche `run_execute` qui note ce résultat avec le juge (prise exclusive) ; nul hors appel du juge en cours. */
+    judgeClaimedBy: char('judge_claimed_by', { length: 36 }),
     overrideScore: score('override_score'),
     overrideBy: char('override_by', { length: 36 }),
     startedAt: date('started_at'),

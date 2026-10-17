@@ -1,5 +1,6 @@
 // Moteur d'exécution des séries (tâche `run_execute`, spec §8.2) : une tranche de 10 minutes au plus, appels mesurés en
-// parallèle (concurrence de la série et de chaque fournisseur), nouvelles tentatives, coût cumulé, puis tranche suivante.
+// parallèle (concurrence de la série et de chaque fournisseur), nouvelles tentatives, coût cumulé, notes du juge (mêmes
+// concurrence et plafond), puis tranche suivante.
 import { and, asc, eq, inArray, sql } from 'drizzle-orm';
 import type { MySqlUpdateSetSource } from 'drizzle-orm/mysql-core';
 import type { AppConfig } from '../../config/config.js';
@@ -12,6 +13,27 @@ import { redact, reportError } from '../errors/report.js';
 import { InterruptedError, affectedRows, type Job, type JobContext } from '../jobs/queue.js';
 import type { ProviderLike, Registry } from '../providers/registry.js';
 import { readAttachment } from '../tests/attachments.js';
+import {
+  MAX_INVALID_REPLIES,
+  UNREADABLE_REPLY,
+  claimJudgement,
+  commitJudgeCall,
+  countPendingJudgements,
+  failJudgements,
+  judgeCallMaxCostUsd,
+  judgeInputTokens,
+  loadPendingJudgements,
+  loadRunJudge,
+  readJudgeAttachments,
+  readResponse,
+  releaseJudgement,
+  resetJudgeClaims,
+  type JudgeModel,
+  type JudgeVerdict,
+  type PendingJudgement,
+} from '../scoring/judge-items.js';
+import { parseJudgeReply } from '../scoring/judge-parse.js';
+import { buildJudgeRequest } from '../scoring/judge-prompt.js';
 import { recordUsage } from '../usage/usage.js';
 import { buildRequest, measureCall, type CallOutcome, type ModelPrices } from './call.js';
 import { estimateInputTokens, maxCallCostUsd } from './estimate.js';
@@ -38,18 +60,39 @@ export type EngineDeps = {
   onResultFinished?: (resultId: string) => Promise<void>;
 };
 
-type WorkItem = {
+type BaseItem = {
+  /** Clé de l'élément et de sa réservation (un résultat peut être généré puis noté dans la même tranche). */
+  key: string;
   resultId: string;
-  modelId: string;
-  apiModelId: string;
-  prices: ModelPrices;
+  /** Fournisseur appelé : celui du modèle évalué, ou celui du juge (son plafond de concurrence s'applique). */
   provider: ProviderLike;
   maxConcurrency: number;
   snapshot: TestSnapshot;
-  attempts: number;
-  /** Coût maximal estimé d'un appel, réservé sur le plafond tant que le résultat est en vol. */
+  /** Coût maximal estimé d'un appel, réservé sur le plafond tant que l'élément est en vol. */
   maxCostUsd: number;
 };
+
+/** Appel de génération d'un résultat `pending`. */
+type GenerateItem = BaseItem & {
+  kind: 'generate';
+  modelId: string;
+  apiModelId: string;
+  prices: ModelPrices;
+  attempts: number;
+};
+
+/** Note du juge d'un résultat `done` ; compteurs gardés en mémoire le temps de la tranche. */
+type JudgeItem = BaseItem & {
+  kind: 'judge';
+  judge: JudgeModel;
+  inputTokens: number;
+  /** Nouvelles tentatives après une erreur réessayable. */
+  retries: number;
+  /** Réponses illisibles déjà reçues. */
+  invalidReplies: number;
+};
+
+type WorkItem = GenerateItem | JudgeItem;
 
 /** Contrôle avant un lancement ; `inFlightUsd` : réservations comptées, `fits` : un appel de ce coût maximal tiendrait. */
 type LaunchCheck = { verdict: 'ok' | 'stopped' | 'over_budget'; inFlightUsd: number; fits(costUsd: number): boolean };
@@ -116,7 +159,7 @@ function runIdOf(job: Job): string {
 }
 
 /** Résultats en attente : par répétition, position du test, puis modèles en alternance (ordre d'ajout à la série). */
-async function loadQueue(db: Db, runId: string): Promise<WorkItem[]> {
+async function loadQueue(db: Db, runId: string): Promise<GenerateItem[]> {
   const [pending, snapshots, modelRows] = await Promise.all([
     db
       .select({ id: results.id, runTestId: results.runTestId, modelId: results.modelId, attempts: results.attempts })
@@ -141,6 +184,8 @@ async function loadQueue(db: Db, runId: string): Promise<WorkItem[]> {
     const prices = { inputPricePerM: model.inputPricePerM, outputPricePerM: model.outputPricePerM };
     const snapshot = snapshotOf.get(r.runTestId)!;
     return {
+      kind: 'generate' as const,
+      key: `generate:${r.id}`,
       resultId: r.id,
       modelId: r.modelId,
       apiModelId: model.apiModelId,
@@ -176,13 +221,45 @@ export async function executeRunSlice(deps: EngineDeps, job: Job, ctx: JobContex
         .update(results)
         .set({ status: 'pending', attempts: sql`GREATEST(${results.attempts} - 1, 0)` })
         .where(and(eq(results.runId, runId), eq(results.status, 'running')));
+      await resetJudgeClaims(tx, runId);
       return row;
     }),
   );
   if (!run) return;
 
-  // 3. File de lancement de la tranche.
-  const queue = await loadQueue(db, runId);
+  // 3. File de lancement de la tranche : appels de génération, puis notes du juge en attente.
+  const queue: WorkItem[] = await loadQueue(db, runId);
+  const runJudge = await loadRunJudge(db, run.judgeModelId);
+
+  /** Notes du juge ajoutées en fin de file ; juge indisponible : mises en échec aussitôt (aucune tranche sans fin). */
+  async function addJudgements(pending: PendingJudgement[]): Promise<void> {
+    if (pending.length === 0) return;
+    const { judge } = runJudge;
+    if (judge === null) {
+      return failJudgements(
+        db,
+        pending.map((p) => p.resultId),
+        runJudge.unavailable,
+      );
+    }
+    for (const p of pending) {
+      const inputTokens = judgeInputTokens(p.snapshot, p.responseChars, judge);
+      queue.push({
+        kind: 'judge',
+        key: `judge:${p.resultId}`,
+        resultId: p.resultId,
+        provider: judge.provider,
+        maxConcurrency: Math.max(1, judge.provider.maxConcurrency),
+        snapshot: p.snapshot,
+        maxCostUsd: judgeCallMaxCostUsd(inputTokens, judge.prices),
+        judge,
+        inputTokens,
+        retries: 0,
+        invalidReplies: 0,
+      });
+    }
+  }
+  await addJudgements(await loadPendingJudgements(db, runId));
   const counts = await db
     .select({ status: results.status, n: sql<number>`COUNT(*)` })
     .from(results)
@@ -267,13 +344,13 @@ export async function executeRunSlice(deps: EngineDeps, job: Job, ctx: JobContex
     );
 
   /** Remet le résultat en attente : tentative gardée (tranche échue, pause) ou rendue (arrêt du processus). */
-  const backToPending = (item: WorkItem, giveBack: boolean) =>
+  const backToPending = (item: GenerateItem, giveBack: boolean) =>
     updateRunning(item.resultId, {
       status: 'pending',
       ...(giveBack ? { attempts: sql`GREATEST(${results.attempts} - 1, 0)` } : {}),
     });
 
-  async function callOnce(item: WorkItem): Promise<CallOutcome> {
+  async function callOnce(item: GenerateItem): Promise<CallOutcome> {
     let adapter;
     try {
       adapter = deps.registry.adapterFor(item.provider);
@@ -297,7 +374,7 @@ export async function executeRunSlice(deps: EngineDeps, job: Job, ctx: JobContex
     });
   }
 
-  async function finishDone(item: WorkItem, o: CallOutcome): Promise<void> {
+  async function finishDone(item: GenerateItem, o: CallOutcome): Promise<void> {
     const costUsd = roundUsd(o.costUsd ?? 0);
     const committed = await withTxRetry(() =>
       db.transaction(async (tx) => {
@@ -341,6 +418,10 @@ export async function executeRunSlice(deps: EngineDeps, job: Job, ctx: JobContex
     );
     if (!committed) return;
     finished++;
+    // Test noté par le juge : sa note rejoint la file de la tranche (même concurrence, même plafond).
+    if (item.snapshot.scoringMethod === 'judge') {
+      await addJudgements([{ resultId: item.resultId, snapshot: item.snapshot, responseChars: o.text.length }]);
+    }
     if (deps.onResultFinished) {
       await deps.onResultFinished(item.resultId).catch(async (err: unknown) => {
         // Journal des erreurs (message masqué par le journal) ; le résultat reste `done` et la tranche continue.
@@ -362,7 +443,7 @@ export async function executeRunSlice(deps: EngineDeps, job: Job, ctx: JobContex
     }
   }
 
-  async function finishFailed(item: WorkItem, o: CallOutcome): Promise<void> {
+  async function finishFailed(item: GenerateItem, o: CallOutcome): Promise<void> {
     const changed = await updateRunning(item.resultId, {
       status: o.status,
       responseText: o.text === '' ? null : o.text,
@@ -383,8 +464,30 @@ export async function executeRunSlice(deps: EngineDeps, job: Job, ctx: JobContex
     if (changed) finished++;
   }
 
+  /**
+   * 5. Avant un nouvel appel du même élément (nouvelle tentative, ou nouvel appel du juge après une réponse illisible) :
+   * attente éventuelle, puis mêmes contrôles qu'un lancement. `later` : la tranche est échue, ou le serait pendant
+   * l'attente ; `interrupted` : arrêt du processus pendant l'attente ; `over_budget` : élément à rendre à la file de la
+   * tranche (la boucle de lancement attend la fin d'autres appels, ou met la série en pause).
+   */
+  async function beforeNextCall(item: WorkItem, delay: number): Promise<'go' | 'later' | 'stopped' | 'over_budget' | 'interrupted'> {
+    if (delay > 0) {
+      if (nowMs() + delay >= deadline) return 'later';
+      try {
+        await sleep(delay, ctx.signal);
+      } catch (err) {
+        if (!ctx.signal.aborted) throw err;
+        interrupted = true;
+        return 'interrupted';
+      }
+    }
+    if (expired()) return 'later';
+    const { verdict } = await checkLaunch(item, true);
+    return verdict === 'ok' ? 'go' : verdict;
+  }
+
   /** Appel puis nouvelles tentatives ; ne rejette jamais (une erreur inattendue arrête la tranche). */
-  async function work(item: WorkItem): Promise<void> {
+  async function work(item: GenerateItem): Promise<void> {
     try {
       for (;;) {
         let outcome: CallOutcome;
@@ -399,25 +502,13 @@ export async function executeRunSlice(deps: EngineDeps, job: Job, ctx: JobContex
         if (outcome.status === 'done') return await finishDone(item, outcome);
         if (!outcome.retryable || item.attempts > MAX_RETRIES) return await finishFailed(item, outcome);
 
-        // 5. Nouvelle tentative, si elle tient dans la tranche.
-        const delay = retryDelayMs(outcome, item.attempts);
-        if (nowMs() + delay >= deadline) return void (await backToPending(item, false));
-        try {
-          await sleep(delay, ctx.signal);
-        } catch (err) {
-          if (!ctx.signal.aborted) throw err;
-          interrupted = true;
-          await backToPending(item, false); // l'appel a eu lieu : la tentative reste comptée
-          return;
-        }
-        if (expired()) return void (await backToPending(item, false));
-        const { verdict } = await checkLaunch(item, true);
-        if (verdict === 'stopped') return void (await backToPending(item, false));
-        if (verdict === 'over_budget') {
-          // Rendu à la file de la tranche : la boucle de lancement attend la fin d'autres appels, ou met la série en pause.
+        const next = await beforeNextCall(item, retryDelayMs(outcome, item.attempts));
+        if (next === 'over_budget') {
           if (await backToPending(item, false)) queue.unshift(item);
           return;
         }
+        // L'appel a eu lieu : la tentative reste comptée.
+        if (next !== 'go') return void (await backToPending(item, false));
         if (!(await updateRunning(item.resultId, { attempts: sql`${results.attempts} + 1`, startedAt: ctx.now() }))) return;
         item.attempts++;
       }
@@ -425,6 +516,112 @@ export async function executeRunSlice(deps: EngineDeps, job: Job, ctx: JobContex
       unexpected ??= err;
       stopLaunching = true;
     }
+  }
+
+  async function callJudge(item: JudgeItem): Promise<CallOutcome> {
+    let adapter;
+    try {
+      adapter = deps.registry.adapterFor(item.provider);
+    } catch (err) {
+      if (err instanceof AppError) return failedBeforeCall(err.code, err.message);
+      throw err;
+    }
+    let attachments;
+    try {
+      attachments = await readJudgeAttachments(item.snapshot, item.judge, (a) => readAttachment(deps.config, a));
+    } catch (err) {
+      const code = attachmentErrorCode(err);
+      console.warn('run_execute : pièce jointe illisible (juge)', { resultId: item.resultId, code });
+      return failedBeforeCall('attachment_unreadable', `Pièce jointe illisible (${code}) : le fichier n'a pas pu être lu`);
+    }
+    const req = buildJudgeRequest({
+      snapshot: item.snapshot,
+      response: await readResponse(db, item.resultId),
+      judgeApiModelId: item.judge.apiModelId,
+      judgeSupports: { vision: item.judge.supportsVision, pdf: item.judge.supportsPdf },
+      attachments,
+    });
+    return measureCall(adapter, req, item.judge.prices, { now: nowMs, signal: ctx.signal, estimatedInputTokens: item.inputTokens });
+  }
+
+  /** Appel du juge écrit : coût s'il est facturé (réponse reçue), puis la note ou l'échec (`null` : un appel suit). */
+  const commitJudge = (item: JudgeItem, o: CallOutcome, verdict: JudgeVerdict | null) =>
+    commitJudgeCall(db, {
+      runId,
+      resultId: item.resultId,
+      jobId: job.id,
+      judgeModelId: item.judge.id,
+      billed:
+        o.status === 'done'
+          ? {
+              costUsd: roundUsd(o.costUsd ?? 0),
+              inputTokens: o.inputTokens,
+              outputTokens: o.outputTokens,
+              reasoningTokens: o.reasoningTokens ?? 0,
+            }
+          : null,
+      verdict,
+      now: ctx.now(),
+    });
+
+  /**
+   * Note du juge : appel, lecture stricte de la réponse (illisible → un seul nouvel appel, facturé lui aussi), nouvelles
+   * tentatives sur erreur réessayable comme la génération ; ne rejette jamais (une erreur inattendue arrête la tranche).
+   */
+  async function judgeWork(item: JudgeItem): Promise<void> {
+    try {
+      for (;;) {
+        let outcome: CallOutcome;
+        try {
+          outcome = await callJudge(item);
+        } catch (err) {
+          if (!ctx.signal.aborted) throw err;
+          interrupted = true;
+          await releaseJudgement(db, item.resultId, job.id);
+          return;
+        }
+        let delay = 0;
+        if (outcome.status === 'done') {
+          const reply = parseJudgeReply(outcome.text);
+          if (reply.ok) return await commitJudge(item, outcome, { score: reply.score, rationale: reply.rationale });
+          if (item.invalidReplies >= MAX_INVALID_REPLIES) return await commitJudge(item, outcome, { failed: UNREADABLE_REPLY });
+          item.invalidReplies++;
+          await commitJudge(item, outcome, null);
+        } else {
+          if (!outcome.retryable || item.retries >= MAX_RETRIES) {
+            return await commitJudge(item, outcome, { failed: `Juge indisponible : ${outcome.errorMessage ?? outcome.errorCode}` });
+          }
+          item.retries++;
+          delay = retryDelayMs(outcome, item.retries);
+        }
+        const next = await beforeNextCall(item, delay);
+        if (next === 'go') continue;
+        // Note rendue, toujours en attente : relancée par la boucle de lancement (plafond) ou par la tranche suivante.
+        if ((await releaseJudgement(db, item.resultId, job.id)) && next === 'over_budget') queue.unshift(item);
+        return;
+      }
+    } catch (err) {
+      unexpected ??= err;
+      stopLaunching = true;
+    }
+  }
+
+  /** Prise de l'élément avant son lancement : résultat `pending` → `running`, ou note du juge prise par cette tâche. */
+  async function claim(item: WorkItem): Promise<boolean> {
+    if (item.kind === 'judge') {
+      return claimJudgement(db, { runId, resultId: item.resultId, judgeModelId: item.judge.id, jobId: job.id });
+    }
+    const claimed = await withTxRetry(async () =>
+      affectedRows(
+        await db
+          .update(results)
+          .set({ status: 'running', attempts: sql`${results.attempts} + 1`, startedAt: ctx.now() })
+          .where(and(eq(results.id, item.resultId), eq(results.status, 'pending'))),
+      ),
+    );
+    if (claimed !== 1) return false;
+    item.attempts++;
+    return true;
   }
 
   try {
@@ -463,25 +660,17 @@ export async function executeRunSlice(deps: EngineDeps, job: Job, ctx: JobContex
         const at = queue.indexOf(item);
         if (at === -1) continue;
         queue.splice(at, 1);
-        // Réservation prise avant la prise du résultat, rendue à la fin de l'appel (coût alors compté dans la série).
-        reservations.set(item.resultId, item.maxCostUsd);
-        const claimed = await withTxRetry(async () =>
-          affectedRows(
-            await db
-              .update(results)
-              .set({ status: 'running', attempts: sql`${results.attempts} + 1`, startedAt: ctx.now() })
-              .where(and(eq(results.id, item.resultId), eq(results.status, 'pending'))),
-          ),
-        );
-        if (claimed !== 1) {
-          reservations.delete(item.resultId);
+        // Réservation prise avant la prise de l'élément, rendue à la fin de l'appel (coût alors compté dans la série).
+        const { key } = item;
+        reservations.set(key, item.maxCostUsd);
+        if (!(await claim(item))) {
+          reservations.delete(key);
           continue;
         }
-        item.attempts++;
         const providerId = item.provider.id;
         perProvider.set(providerId, (perProvider.get(providerId) ?? 0) + 1);
-        const task: Promise<void> = work(item).finally(() => {
-          reservations.delete(item.resultId);
+        const task: Promise<void> = (item.kind === 'generate' ? work(item) : judgeWork(item)).finally(() => {
+          reservations.delete(key);
           perProvider.set(providerId, perProvider.get(providerId)! - 1);
           inFlight.delete(task);
         });
@@ -510,11 +699,12 @@ export async function executeRunSlice(deps: EngineDeps, job: Job, ctx: JobContex
         await tx.update(runs).set({ activeJobId: null }).where(eq(runs.id, runId));
         return;
       }
+      // Fin seulement sans résultat à exécuter ni note du juge en attente (les notes manuelles n'empêchent pas la fin).
       const [left] = await tx
         .select({ n: sql<number>`COUNT(*)` })
         .from(results)
         .where(and(eq(results.runId, runId), inArray(results.status, ['pending', 'running'])));
-      if (Number(left?.n ?? 0) > 0) {
+      if (Number(left?.n ?? 0) + (await countPendingJudgements(tx, runId)) > 0) {
         await tx.update(runs).set({ activeJobId: null }).where(eq(runs.id, runId));
         await enqueueRunJob(tx, runId, ctx.now());
       } else {

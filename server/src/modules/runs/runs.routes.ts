@@ -38,6 +38,16 @@ const runBody = z
   .strict();
 
 const addModelsBody = z.object({ modelIds }).strict();
+const rescoreBody = z
+  .object({
+    scope: z.enum(['run', 'test', 'result']),
+    runTestId: z.string().uuid().optional(),
+    resultId: z.string().uuid().optional(),
+    judgeModelId: z.string().uuid().optional(),
+  })
+  .strict()
+  .refine((b) => b.scope !== 'test' || b.runTestId !== undefined, { message: 'runTestId requis pour recalculer un test', path: ['runTestId'] })
+  .refine((b) => b.scope !== 'result' || b.resultId !== undefined, { message: 'resultId requis pour recalculer un résultat', path: ['resultId'] });
 const patchBody = z
   .object({ budgetUsd, weights })
   .strict()
@@ -84,6 +94,11 @@ export function registerRunsRoutes(app: FastifyInstance, service: RunsService): 
   app.post('/api/runs/:id/models', admin, async (req) => {
     const { id } = idParams.parse(req.params);
     return { run: await service.addModels(req.actor!, id, addModelsBody.parse(req.body).modelIds) };
+  });
+
+  app.post('/api/runs/:id/rescore', admin, async (req) => {
+    const { id } = idParams.parse(req.params);
+    return service.rescore(req.actor!, id, rescoreBody.parse(req.body));
   });
 
   app.get('/api/runs/:id/progress', connected, async (req) => {

@@ -110,6 +110,27 @@ function inputTokens(req: GenerateRequest): number {
   return tokens;
 }
 
+/** `[[fake:judge=<texte>]]`, n'importe où dans le prompt : le texte s'arrête au premier `]]`. */
+const JUDGE_DIRECTIVE = /\[\[fake:judge=([\s\S]*?)\]\]/;
+
+async function* imposedReply(
+  text: string,
+  req: GenerateRequest,
+  profile: Profile,
+  latencyFactor: number,
+  sleep: (ms: number, signal: AbortSignal) => Promise<void>,
+  signal: AbortSignal,
+): AsyncGenerator<GenerateEvent> {
+  await sleep(Math.round(profile.firstTokenMs * latencyFactor), signal);
+  const chunkChars = CHUNK_TOKENS * CHARS_PER_TOKEN;
+  for (let offset = 0; offset < text.length; offset += chunkChars) {
+    if (signal.aborted) throw signal.reason;
+    yield { type: 'text', delta: text.slice(offset, offset + chunkChars) };
+  }
+  yield { type: 'usage', inputTokens: inputTokens(req), outputTokens: Math.ceil(text.length / CHARS_PER_TOKEN) };
+  yield { type: 'finish', reason: 'stop' };
+}
+
 export function createFakeAdapter(
   opts: { sleep?: (ms: number, signal: AbortSignal) => Promise<void>; seed?: number } = {},
 ): ProviderAdapter {
@@ -133,6 +154,13 @@ export function createFakeAdapter(
     const failKind = failRng();
     const naturalTokens = 60 + Math.floor(rng() * 60);
     const has = (d: string) => req.prompt.includes(`[[fake:${d}]]`);
+
+    // Réponse imposée (faux juge des tests) : texte renvoyé tel quel, sans panne tirée au sort ni autre directive.
+    const imposed = JUDGE_DIRECTIVE.exec(req.prompt);
+    if (imposed) {
+      yield* imposedReply(imposed[1]!, req, profile, latencyFactor, sleep, signal);
+      return;
+    }
 
     if (has('429')) throw httpError(429, 'Limite de débit factice', {}, []);
     if (has('500')) throw httpError(500, 'Erreur serveur factice', {}, []);

@@ -11,6 +11,14 @@ import { audit } from '../audit/audit.js';
 import type { Actor } from '../auth/actor.js';
 import { affectedRows, type DbOrTx } from '../jobs/queue.js';
 import type { Registry } from '../providers/registry.js';
+import {
+  countPendingJudgements,
+  judgeCallMaxCostUsd,
+  judgeInputTokens,
+  loadPendingJudgements,
+  loadRunJudge,
+} from '../scoring/judge-items.js';
+import { rescore, type RescoreInput } from '../scoring/rescore.js';
 import type { PublicTest } from '../tests/tests.service.js';
 import type { TestRow } from '../tests/tests.repo.js';
 import { roundUsd } from './engine.js';
@@ -115,8 +123,28 @@ const budgetExceeded = () =>
     'Plafond de dépense insuffisant : relevez-le au moins à la dépense plus le coût maximal du prochain appel avant de reprendre',
   );
 
-/** Coût maximal du prochain appel : le moins cher des résultats en attente ; `null` sans résultat en attente. */
+/** Coût maximal du prochain appel du juge : la moins chère des notes du juge en attente ; `null` sans note à rendre. */
+async function nextJudgeCallMaxCostUsd(conn: DbOrTx, runId: string): Promise<number | null> {
+  const [run] = await conn.select({ judgeModelId: runs.judgeModelId }).from(runs).where(eq(runs.id, runId));
+  const pending = await loadPendingJudgements(conn, runId);
+  if (!run || pending.length === 0) return null;
+  const { judge } = await loadRunJudge(conn, run.judgeModelId);
+  if (judge === null) return null; // juge indisponible : notes mises en échec par le moteur, sans appel
+  return Math.min(...pending.map((p) => judgeCallMaxCostUsd(judgeInputTokens(p.snapshot, p.responseChars, judge), judge.prices)));
+}
+
+/**
+ * Coût maximal du prochain appel : le moins cher des résultats en attente et des notes du juge en attente (même règle que
+ * le moteur, qui lance le premier appel qui tient) ; `null` sans appel restant.
+ */
 export async function nextCallMaxCostUsd(conn: DbOrTx, runId: string): Promise<number | null> {
+  const [generation, judge] = await Promise.all([nextGenerationMaxCostUsd(conn, runId), nextJudgeCallMaxCostUsd(conn, runId)]);
+  if (generation === null) return judge;
+  return judge === null ? generation : Math.min(generation, judge);
+}
+
+/** Coût maximal du prochain appel de génération : le moins cher des résultats en attente ; `null` sans résultat en attente. */
+async function nextGenerationMaxCostUsd(conn: DbOrTx, runId: string): Promise<number | null> {
   const pending = await conn
     .selectDistinct({ runTestId: results.runTestId, modelId: results.modelId })
     .from(results)
@@ -509,10 +537,13 @@ export function createRunsService(deps: RunsServiceDeps) {
       return summaryOf(id);
     },
 
+    /** Recalcul des notes du juge (série, test ou résultat), éventuellement avec un autre juge. */
+    rescore: (actor: Actor, id: string, input: RescoreInput) => rescore(db, actor, id, input, { registry, now: deps.clock() }),
+
     async progress(id: string): Promise<RunProgress> {
       const run = await requireRun(id);
       const budgetPause = run.status === 'paused' && run.pauseReason === 'budget';
-      const [runModelRows, runTestRows, cells, running, activity, averageTotalMs, nextUsd] = await Promise.all([
+      const [runModelRows, runTestRows, cells, running, activity, averageTotalMs, nextUsd, judgePending] = await Promise.all([
         repo.runModelsOf(id),
         repo.runTestsOf(id),
         repo.cellCounts(id),
@@ -520,6 +551,7 @@ export function createRunsService(deps: RunsServiceDeps) {
         repo.recentActivity(id, ACTIVITY_LIMIT),
         repo.averageTotalMs(id),
         budgetPause ? nextCallMaxCostUsd(db, id) : null,
+        countPendingJudgements(db, id),
       ]);
       return buildProgress({
         run,
@@ -531,6 +563,7 @@ export function createRunsService(deps: RunsServiceDeps) {
         activity,
         averageTotalMs,
         nextCallMaxCostUsd: nextUsd,
+        judgePending,
       });
     },
 

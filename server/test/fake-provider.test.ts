@@ -174,4 +174,22 @@ describe('faux fournisseur', () => {
     expect(models.filter((m) => m.supportsVision).map((m) => m.id)).toEqual(['fake-vision']);
     expect(models.filter((m) => m.supportsPdf).map((m) => m.id)).toEqual(['fake-vision']);
   });
+
+  test('[[fake:judge=<texte>]] : le texte est renvoyé tel quel, où que soit la directive, sans échec aléatoire', async () => {
+    const reply = '{"score": 8, "rationale": "Réponse correcte, {détails} inclus."}';
+    const prompt = `Critères :\nExactitude [[fake:judge=${reply}]] et clarté.\n<reponse_a_evaluer>\nParis\n</reponse_a_evaluer>`;
+    for (let i = 0; i < 5; i++) {
+      // fake-instable : aucune panne tirée au sort quand la directive est présente.
+      const events = await run(withSleeps().adapter, { ...req, model: 'fake-instable', system: 'Tu es un évaluateur.', prompt, maxTokens: 800 });
+      const text = events.filter((e) => e.type === 'text').map((e) => (e as { delta: string }).delta).join('');
+      expect(text).toBe(reply);
+      const usage = events.find((e) => e.type === 'usage') as Extract<GenerateEvent, { type: 'usage' }>;
+      expect(usage.outputTokens).toBe(Math.ceil(reply.length / 4));
+      expect(usage.inputTokens).toBeGreaterThan(0);
+      expect(events.at(-1)).toEqual({ type: 'finish', reason: 'stop' });
+    }
+    // Texte quelconque (JSON invalide compris) : renvoyé tel quel.
+    const raw = await run(withSleeps().adapter, { ...req, prompt: 'x [[fake:judge=pas du JSON]] y' });
+    expect(raw.filter((e) => e.type === 'text').map((e) => (e as { delta: string }).delta).join('')).toBe('pas du JSON');
+  });
 });

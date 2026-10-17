@@ -1,0 +1,1 @@
+ALTER TABLE `results` ADD `judge_claimed_by` char(36);

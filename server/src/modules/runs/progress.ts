@@ -16,6 +16,8 @@ export type RunProgress = {
   status: RunRow['status'];
   pauseReason: RunRow['pauseReason'];
   counts: StatusCounts;
+  /** Notes du juge en attente (résultats `done` de tests notés par le juge) : « Notation en cours » sans appel restant. */
+  judgePending: number;
   modelsCostUsd: number;
   judgeCostUsd: number;
   budgetUsd: number | null;
@@ -68,6 +70,7 @@ export type ProgressInput = {
   /** Moyenne observée de `total_ms` des résultats `done` ; `null` sans mesure. */
   averageTotalMs: number | null;
   nextCallMaxCostUsd: number | null;
+  judgePending: number;
 };
 
 /** Assemble l'avancement d'une série à partir des lectures du dépôt. */
@@ -99,6 +102,7 @@ export function buildProgress(input: ProgressInput): RunProgress {
     status: run.status,
     pauseReason: run.pauseReason,
     counts,
+    judgePending: input.judgePending,
     modelsCostUsd: run.modelsCostUsd,
     judgeCostUsd: run.judgeCostUsd,
     budgetUsd: run.budgetUsd,
