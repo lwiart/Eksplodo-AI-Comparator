@@ -88,6 +88,9 @@ test('liste : désactiver, régénérer (confirmation, nouveau lien), supprimer 
   const shown = within(await screen.findByRole('dialog', { name: 'Nouveau lien de partage' }));
   expect((shown.getByLabelText('Lien de la page publique') as HTMLInputElement).value).toBe(`${location.origin}/p/${NEW_TOKEN}`);
   expect(shown.getByRole('button', { name: 'Copier' })).toBeInTheDocument();
+  // Échap ne ferme pas la fenêtre du lien (affiché une seule fois) ; seul « Fermer » le fait.
+  await user.keyboard('{Escape}');
+  expect(screen.getByRole('dialog', { name: 'Nouveau lien de partage' })).toBeInTheDocument();
   await user.click(shown.getByRole('button', { name: 'Fermer' }));
   await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
 

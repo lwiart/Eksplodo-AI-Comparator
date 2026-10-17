@@ -19,3 +19,11 @@ test('podium : aucun modèle noté, message au lieu des marches', () => {
   expect(screen.queryByRole('list', { name: 'Podium' })).toBeNull();
   expect(screen.getByText(/Aucun modèle noté/)).toBeInTheDocument();
 });
+
+test('podium : un nom très long peut passer à la ligne dans la marche (min-w-0, break-words)', () => {
+  const long = { ...MODELS[0]!, name: 'openrouter/anthropic/claude-opus-4-very-long-identifier-preview' };
+  render(<Podium rows={rankedRows([long], DEFAULTS)} />);
+  const name = screen.getByText(long.name);
+  expect(name).toHaveClass('min-w-0', 'break-words');
+  expect(within(screen.getByRole('list', { name: 'Podium' })).getByRole('listitem')).toHaveClass('min-w-0');
+});

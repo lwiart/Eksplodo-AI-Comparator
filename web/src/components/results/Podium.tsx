@@ -2,9 +2,9 @@ import type { RankedRow } from '../../lib/ranking';
 import { score } from './format';
 
 const STEP_STYLE = [
-  'h-[200px] border-orange/55 bg-gradient-to-b from-orange/30 to-orange/5 shadow-[0_0_40px_-10px_rgba(240,99,31,0.6)]',
-  'h-[160px] border-line bg-night-0/45',
-  'h-[130px] border-line bg-night-0/45',
+  'min-h-[200px] border-orange/55 bg-gradient-to-b from-orange/30 to-orange/5 shadow-[0_0_40px_-10px_rgba(240,99,31,0.6)]',
+  'min-h-[160px] border-line bg-night-0/45',
+  'min-h-[130px] border-line bg-night-0/45',
 ];
 
 /** Les trois premiers du classement ; le premier au centre. Un modèle sans qualité n'y figure jamais. */
@@ -24,13 +24,13 @@ export function Podium({ rows }: { rows: RankedRow[] }) {
       {display.map((i) => {
         const { model, rank, global } = top[i]!;
         return (
-          <li key={model.modelId} className={`relative flex flex-col items-center rounded-[14px] border px-2.5 py-3 text-center ${STEP_STYLE[i]}`}>
+          <li key={model.modelId} className={`relative flex min-w-0 flex-col items-center rounded-[14px] border px-2.5 py-3 text-center ${STEP_STYLE[i]}`}>
             <span className="font-display text-[28px] leading-none font-extrabold text-white">{rank}</span>
-            <span className="mt-1.5 flex items-center gap-1.5 font-display text-[13px] font-bold text-white">
+            <span className="mt-1.5 flex max-w-full items-center gap-1.5 font-display text-[13px] font-bold text-white">
               <span aria-hidden="true" className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: model.color }} />
-              {model.name}
+              <span className="min-w-0 break-words">{model.name}</span>
             </span>
-            <span className="font-mono text-[11px] text-mute">{model.providerName}</span>
+            <span className="max-w-full font-mono text-[11px] break-words text-mute">{model.providerName}</span>
             <span className={`mt-auto pt-2 font-display text-[22px] font-extrabold ${i === 0 ? 'text-peach' : 'text-sky'}`}>{score(global)}</span>
           </li>
         );

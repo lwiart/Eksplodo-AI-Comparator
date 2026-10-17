@@ -4,10 +4,10 @@ export type LogStream = { write(line: string): void };
 
 // Paramètre dont le nom contient « token » (token, resetToken…) : sa valeur est un jeton actif.
 const TOKEN_PARAM = /([?&](?:[^=&#]*token[^=&#]*)=)[^&#]*/gi;
-// Liens envoyés par e-mail : le jeton est le segment de chemin qui suit /invitation/ ou /reinitialiser/.
-const TOKEN_PATH = /(\/(?:invitation|reinitialiser)\/)[^/?#]+/gi;
+// Liens à jeton (e-mail, partage) : le jeton est le segment de chemin qui suit /invitation/, /reinitialiser/, /share/ ou /p/.
+const TOKEN_PATH = /(\/(?:invitation|reinitialiser|share|p)\/)[^/?#]+/gi;
 
-/** Masque les jetons de l'URL : segment de chemin des liens d'invitation/réinitialisation (`[REDACTED]`) et paramètres de type jeton (`[redacted]`). */
+/** Masque les jetons de l'URL : segment de chemin des liens d'invitation, de réinitialisation et de partage (`[REDACTED]`) et paramètres de type jeton (`[redacted]`). */
 export function redactUrl(url: string): string {
   const path = url.replace(TOKEN_PATH, '$1[REDACTED]');
   return path.includes('?') ? path.replace(TOKEN_PARAM, '$1[redacted]') : path;

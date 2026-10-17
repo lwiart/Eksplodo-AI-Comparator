@@ -30,3 +30,15 @@ test('Markdown : un lien javascript: n’aboutit pas à un href exécutable', ()
   const { container } = render(<Markdown text="[clic](javascript:alert(1))" />);
   expect(container.innerHTML.toLowerCase()).not.toContain('javascript:');
 });
+
+test('Markdown : sur la page publique, un lien relatif est rendu comme du texte, un lien externe reste un lien', () => {
+  render(<Markdown relativeLinksAsText text="[admin](/admin) et [exemple](https://example.test/page)" />);
+  expect(screen.queryByRole('link', { name: 'admin' })).toBeNull();
+  expect(screen.getByText('admin')).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: 'exemple' })).toHaveAttribute('href', 'https://example.test/page');
+});
+
+test('Markdown : hors page publique, un lien relatif reste un lien', () => {
+  render(<Markdown text="[admin](/admin)" />);
+  expect(screen.getByRole('link', { name: 'admin' })).toHaveAttribute('href', '/admin');
+});

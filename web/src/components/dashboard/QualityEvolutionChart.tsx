@@ -17,7 +17,8 @@ export function QualityEvolutionChart({ suites }: { suites: Dashboard['evolution
     queryFn: () => getEvolution(suiteId!),
     enabled: suiteId !== null,
   });
-  const empty = suiteId === null || (evolution.isSuccess && (evolution.data.runs.length === 0 || plottedSeries(evolution.data.series).length === 0));
+  const noRun = suiteId === null || (evolution.isSuccess && evolution.data.runs.length === 0);
+  const noQuality = evolution.isSuccess && evolution.data.runs.length > 0 && plottedSeries(evolution.data.series).length === 0;
 
   return (
     <Card>
@@ -41,8 +42,10 @@ export function QualityEvolutionChart({ suites }: { suites: Dashboard['evolution
         ) : null}
       </div>
       <div className="mt-3">
-        {empty ? (
+        {noRun ? (
           <p className="m-0 py-8 text-center text-sm text-mute">Aucune série terminée pour cette suite</p>
+        ) : noQuality ? (
+          <p className="m-0 py-8 text-center text-sm text-mute">Aucune note de qualité pour ces séries</p>
         ) : evolution.isError ? (
           <p role="alert" className="m-0 text-sm text-bad">
             {messageForError(evolution.error)}

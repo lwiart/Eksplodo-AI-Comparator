@@ -23,8 +23,9 @@ export default function EvolutionLines({ evolution }: { evolution: Evolution }) 
   const series = plottedSeries(evolution.series);
   const rows = evolutionRows(evolution);
   return (
-    <div role="img" aria-label={`Évolution de la qualité sur la suite ${evolution.suite.name}`} data-testid="evolution-chart" className="h-[260px] w-full">
-      <ResponsiveContainer width="100%" height="100%">
+    <div>
+      <div role="img" aria-label={`Évolution de la qualité sur la suite ${evolution.suite.name}`} data-testid="evolution-chart" className="h-[260px] w-full">
+        <ResponsiveContainer width="100%" height="100%">
         <LineChart data={rows} margin={{ top: 8, right: 12, bottom: 0, left: -12 }}>
           <CartesianGrid stroke={GRID_STROKE} vertical={false} />
           <XAxis dataKey="name" tick={AXIS_TICK} tickLine={false} axisLine={{ stroke: GRID_STROKE }} interval={0} tickFormatter={(_, i) => `#${i + 1}`} />
@@ -41,7 +42,22 @@ export default function EvolutionLines({ evolution }: { evolution: Evolution }) 
             <Line key={s.modelId} type="monotone" dataKey={`m${k}`} name={s.name} stroke={s.color} strokeWidth={2} dot={{ r: 3, fill: s.color }} connectNulls isAnimationActive={false} />
           ))}
         </LineChart>
-      </ResponsiveContainer>
+        </ResponsiveContainer>
+      </div>
+      <ul aria-label="Légende" className="m-0 mt-2 flex list-none flex-wrap gap-x-4 gap-y-1 p-0 text-xs text-ink">
+        {series.map((s) => (
+          <li key={s.modelId} className="flex items-center gap-1.5">
+            <span aria-hidden="true" className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: s.color }} />
+            {s.name}
+          </li>
+        ))}
+      </ul>
+      {/* Alternative textuelle du graphe : les séries comparées dans l'ordre des abscisses (#1, #2…). */}
+      <ol aria-label="Séries comparées" className="sr-only">
+        {rows.map((row, i) => (
+          <li key={i}>{`#${i + 1} : ${row.name}, ${row.date}, juge : ${row.judge}`}</li>
+        ))}
+      </ol>
     </div>
   );
 }

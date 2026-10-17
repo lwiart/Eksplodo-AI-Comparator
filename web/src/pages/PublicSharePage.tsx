@@ -45,7 +45,7 @@ function AuditButton({ url }: { url: string }) {
       href={url}
       target="_blank"
       rel="noopener noreferrer"
-      className="inline-flex items-center justify-center rounded-full bg-gradient-to-r from-orange to-orange-soft px-5 py-2.5 text-[13px] font-semibold text-white no-underline shadow-[0_8px_24px_-8px_rgba(240,99,31,0.7)] hover:brightness-110 no-print"
+      className="inline-flex items-center justify-center whitespace-nowrap rounded-full bg-gradient-to-r from-orange to-orange-soft px-5 py-2.5 text-[13px] font-semibold text-white no-underline shadow-[0_8px_24px_-8px_rgba(240,99,31,0.7)] hover:brightness-110 no-print"
     >
       Audit gratuit
     </a>
@@ -56,14 +56,14 @@ function AuditButton({ url }: { url: string }) {
 function Frame({ children, auditUrl, printable = false }: { children: ReactNode; auditUrl?: string; printable?: boolean }) {
   return (
     <div className="share-page min-h-screen overflow-x-hidden">
-      <header className="flex items-center justify-between gap-3 border-b border-line px-4 py-4 sm:px-8">
+      <header className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-line px-4 py-4 sm:px-8">
         <Brand />
         <div className="no-print flex items-center gap-2">
           {printable ? (
             <button
               type="button"
               onClick={() => window.print()}
-              className="inline-flex cursor-pointer items-center justify-center rounded-full border border-line-strong bg-night-2/70 px-4 py-2.5 text-[13px] font-semibold text-white hover:bg-night-2"
+              className="inline-flex cursor-pointer items-center justify-center whitespace-nowrap rounded-full border border-line-strong bg-night-2/70 px-4 py-2.5 text-[13px] font-semibold text-white hover:bg-night-2"
             >
               Version imprimable
             </button>
@@ -106,6 +106,9 @@ function ShareContent({ share }: { share: PublicShare }) {
         </div>
         <div className="relative z-10 mx-auto max-w-[1100px] px-4 py-14 sm:px-8 sm:py-20">
           <div className="max-w-[40rem]">
+            {run.completedAt === null ? (
+              <span className="mr-2 inline-block rounded-full border border-line-strong bg-night-2/70 px-3 py-1 font-mono text-[11px] font-semibold text-sky">Résultats provisoires</span>
+            ) : null}
             {date ? (
               <span className="inline-block rounded-full border border-orange/50 bg-orange/10 px-3 py-1 font-mono text-[11px] font-semibold text-peach">Résultats de {date}</span>
             ) : null}

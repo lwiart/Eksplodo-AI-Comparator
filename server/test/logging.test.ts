@@ -33,6 +33,14 @@ describe('journal des requêtes', () => {
     expect(redactUrl('/invitation/abc123/')).toBe('/invitation/[REDACTED]/');
   });
 
+  test('redactUrl masque le jeton des liens de partage (API et page publique)', () => {
+    const token = 'Ab3_-xYz'.repeat(4);
+    expect(redactUrl(`/share/${token}`)).toBe('/share/[REDACTED]');
+    expect(redactUrl(`/p/${token}`)).toBe('/p/[REDACTED]');
+    expect(redactUrl(`/p/${token}?x=1`)).toBe('/p/[REDACTED]?x=1');
+    expect(redactUrl('/parametres')).toBe('/parametres');
+  });
+
   test('un jeton de lien d’invitation ou de réinitialisation n’apparaît jamais dans les journaux', async () => {
     const lines: string[] = [];
     const app = await buildApp({

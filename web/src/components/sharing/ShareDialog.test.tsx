@@ -22,13 +22,16 @@ const ranking = {
 };
 
 let rankingBody: unknown;
+let resultsBody: unknown;
 let postError: ApiError | null;
 beforeEach(() => {
   rankingBody = ranking;
+  resultsBody = [];
   postError = null;
   apiFetch.mockReset();
   apiFetch.mockImplementation((path: string, init?: { method?: string }) => {
     if (path === '/api/runs/r1/ranking') return Promise.resolve(rankingBody);
+    if (path === '/api/runs/r1/results') return Promise.resolve({ results: resultsBody });
     if (path === '/api/share-links' && init?.method === 'POST') return postError ? Promise.reject(postError) : Promise.resolve({ link, token: TOKEN });
     return Promise.reject(new Error(`appel inattendu ${path}`));
   });
@@ -50,23 +53,25 @@ test('Partager : verdicts proposés à partir du classement, modifiables ; créa
   const title = await screen.findByLabelText('Titre de la page');
   expect(title).toHaveValue('Polyvalence octobre');
 
+  // Coûts masqués par défaut : « Le moins cher » n'est pas proposé.
   const groups = screen.getAllByRole('group', { name: /^Verdict / });
-  expect(groups).toHaveLength(3);
+  expect(groups).toHaveLength(2);
   const labels = groups.map((g) => within(g).getByLabelText('Titre du verdict') as HTMLInputElement);
-  expect(labels.map((l) => l.value)).toEqual(['Meilleur compromis', 'Meilleure qualité', 'Le moins cher']);
+  expect(labels.map((l) => l.value)).toEqual(['Meilleur compromis', 'Meilleure qualité']);
   const models = groups.map((g) => (within(g).getByLabelText('Modèle') as HTMLSelectElement).selectedOptions[0]!.textContent);
-  expect(models).toEqual(['Alpha', 'Alpha', 'Bravo']);
+  expect(models).toEqual(['Alpha', 'Alpha']);
 
-  // Modifier un titre, supprimer le dernier verdict, ajouter puis retirer un verdict libre.
+  // Modifier un titre, ajouter puis retirer un verdict libre.
   await user.clear(labels[0]!);
   await user.type(labels[0]!, 'Notre choix');
-  await user.click(screen.getByRole('button', { name: 'Supprimer le verdict 3' }));
-  expect(screen.getAllByRole('group', { name: /^Verdict / })).toHaveLength(2);
   await user.click(screen.getByRole('button', { name: 'Ajouter un verdict' }));
   expect(screen.getAllByRole('group', { name: /^Verdict / })).toHaveLength(3);
   await user.click(screen.getByRole('button', { name: 'Supprimer le verdict 3' }));
 
+  // Afficher les coûts propose alors « Le moins cher » ; on le retire.
   await user.click(screen.getByRole('checkbox', { name: 'Afficher les coûts' }));
+  expect(screen.getAllByRole('group', { name: /^Verdict / })).toHaveLength(3);
+  await user.click(screen.getByRole('button', { name: 'Supprimer le verdict 3' }));
   await user.click(screen.getByRole('button', { name: 'Créer le lien' }));
 
   const post = apiFetch.mock.calls.find((c) => c[1]?.method === 'POST')!;
@@ -89,10 +94,12 @@ test('Partager : verdicts proposés à partir du classement, modifiables ; créa
   expect(screen.getByText(/ne pourra plus être réaffiché/)).toBeInTheDocument();
 });
 
-test('« Le moins cher » n’est pas proposé sans aucun coût', async () => {
+test('« Le moins cher » n’est pas proposé sans aucun coût, même coûts affichés', async () => {
   rankingBody = { ...ranking, models: ranking.models.map((m) => ({ ...m, raw: { ...m.raw, meanCostUsd: null } })) };
+  const user = userEvent.setup();
   renderDialog();
   await screen.findByLabelText('Titre de la page');
+  await user.click(screen.getByRole('checkbox', { name: 'Afficher les coûts' }));
   const labels = screen.getAllByLabelText('Titre du verdict').map((l) => (l as HTMLInputElement).value);
   expect(labels).toEqual(['Meilleur compromis', 'Meilleure qualité']);
 });
@@ -104,4 +111,60 @@ test('refus du serveur : message en français et lien non affiché', async () =>
   await user.click(await screen.findByRole('button', { name: 'Créer le lien' }));
   expect(await screen.findByRole('alert')).toHaveTextContent('ne fait pas partie de cette série');
   await waitFor(() => expect(screen.queryByLabelText('Lien de la page publique')).toBeNull());
+});
+
+test('« Le moins cher » : proposé en cochant les coûts ; décocher avec ce verdict présent affiche une remarque', async () => {
+  const user = userEvent.setup();
+  renderDialog();
+  await screen.findByLabelText('Titre de la page');
+  expect(screen.getAllByLabelText('Titre du verdict')).toHaveLength(2);
+  await user.click(screen.getByRole('checkbox', { name: 'Afficher les coûts' }));
+  expect(screen.getAllByLabelText('Titre du verdict').map((l) => (l as HTMLInputElement).value)).toContain('Le moins cher');
+  expect(screen.queryByText(/révèle l’ordre des coûts/)).toBeNull();
+  await user.click(screen.getByRole('checkbox', { name: 'Afficher les coûts' }));
+  expect(screen.getByText(/révèle l’ordre des coûts/)).toBeInTheDocument();
+});
+
+test('questions manuelles : avertissement sous « Afficher les réponses »', async () => {
+  resultsBody = [{ id: 'x', scoreStatus: 'awaiting_manual', hiddenUntilScored: true }];
+  renderDialog();
+  expect(await screen.findByText(/lève l’aveugle/)).toBeInTheDocument();
+});
+
+test('sans question manuelle : pas d’avertissement', async () => {
+  resultsBody = [{ id: 'x', scoreStatus: 'done', hiddenUntilScored: false }];
+  renderDialog();
+  await screen.findByLabelText('Titre de la page');
+  await waitFor(() => expect(apiFetch).toHaveBeenCalledWith('/api/runs/r1/results'));
+  expect(screen.queryByText(/lève l’aveugle/)).toBeNull();
+});
+
+test('lien affiché : Échap ne ferme pas la fenêtre, seul « Fermer » la ferme ; un seul titre accessible', async () => {
+  const user = userEvent.setup();
+  const onClose = renderDialog();
+  await user.click(await screen.findByRole('button', { name: 'Créer le lien' }));
+  await screen.findByLabelText('Lien de la page publique');
+  expect(screen.getByRole('dialog', { name: 'Lien de partage créé' })).not.toHaveAttribute('aria-describedby');
+  await user.keyboard('{Escape}');
+  expect(onClose).not.toHaveBeenCalled();
+  expect(screen.getByLabelText('Lien de la page publique')).toBeInTheDocument();
+  await user.click(screen.getByRole('button', { name: 'Fermer' }));
+  expect(onClose).toHaveBeenCalledTimes(1);
+});
+
+test('envoi en cours : Échap ignoré', async () => {
+  let release!: (v: unknown) => void;
+  apiFetch.mockImplementation((path: string, init?: { method?: string }) => {
+    if (path === '/api/runs/r1/ranking') return Promise.resolve(rankingBody);
+    if (path === '/api/runs/r1/results') return Promise.resolve({ results: [] });
+    if (path === '/api/share-links' && init?.method === 'POST') return new Promise((r) => (release = r));
+    return Promise.reject(new Error(`appel inattendu ${path}`));
+  });
+  const user = userEvent.setup();
+  const onClose = renderDialog();
+  await user.click(await screen.findByRole('button', { name: 'Créer le lien' }));
+  await user.keyboard('{Escape}');
+  expect(onClose).not.toHaveBeenCalled();
+  release({ link, token: TOKEN });
+  await screen.findByLabelText('Lien de la page publique');
 });

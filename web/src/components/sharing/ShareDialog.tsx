@@ -2,13 +2,15 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, type FormEvent } from 'react';
 import { messageForError } from '../../api/messages';
 import { getRanking, rankingKey } from '../../api/results';
+import { RUNS_KEY, getRunResults } from '../../api/runs';
 import { SHARE_LINKS_KEY, createShareLink, shareUrl, updateShareLink, type ShareLink } from '../../api/sharing';
 import { Button } from '../ui/Button';
 import { CopyLink } from '../ui/CopyLink';
 import { Dialog } from '../ui/Dialog';
 import { Field } from '../ui/Field';
 import { TextArea } from '../ui/TextArea';
-import { fromDraft, proposeVerdicts, toDraft, VerdictsEditor, type DraftVerdict } from './VerdictsEditor';
+import type { ShareVerdict } from '../../api/sharing';
+import { COST_VERDICT_LABEL, MAX_VERDICTS, fromDraft, newKey, proposeVerdicts, toDraft, VerdictsEditor, type DraftVerdict } from './VerdictsEditor';
 
 type Props = {
   runId: string;
@@ -25,6 +27,10 @@ export function ShareDialog({ runId, runName, open, onClose, link }: Props) {
   const client = useQueryClient();
   const [token, setToken] = useState<string | null>(null);
   const ranking = useQuery({ queryKey: rankingKey(runId), queryFn: () => getRanking(runId), enabled: open });
+  // Mêmes résultats que la page de la série (cache partagé) : sert à repérer les questions manuelles.
+  const results = useQuery({ queryKey: [...RUNS_KEY, runId, 'results'], queryFn: () => getRunResults(runId), enabled: open });
+  const hasManual = results.data?.some((r) => r.scoreStatus === 'awaiting_manual' || r.hiddenUntilScored) ?? false;
+  const [busy, setBusy] = useState(false);
 
   // Le jeton ne survit pas à sa fenêtre.
   const close = () => {
@@ -36,7 +42,8 @@ export function ShareDialog({ runId, runName, open, onClose, link }: Props) {
   return (
     <Dialog
       open={open}
-      onOpenChange={(o) => !o && close()}
+      // Tant que le jeton est affiché (une seule fois) ou qu'un envoi est en cours, seul « Fermer » ferme la fenêtre.
+      onOpenChange={(o) => !o && token === null && !busy && close()}
       size="wide"
       title={title}
       description={token ? undefined : 'Une page publique en lecture seule, sans connexion ni accès au reste de l’application.'}
@@ -64,7 +71,10 @@ export function ShareDialog({ runId, runName, open, onClose, link }: Props) {
           runName={runName}
           link={link}
           models={ranking.data.models}
-          initialVerdicts={link ? link.verdicts.map(toDraft) : proposeVerdicts(ranking.data).map(toDraft)}
+          initialVerdicts={link ? link.verdicts.map(toDraft) : proposeVerdicts(ranking.data, false).map(toDraft)}
+          costVerdict={proposeVerdicts(ranking.data, true).find((v) => v.label === COST_VERDICT_LABEL) ?? null}
+          hasManual={hasManual}
+          onBusyChange={setBusy}
           onCancel={close}
           onDone={(issued) => {
             void client.invalidateQueries({ queryKey: SHARE_LINKS_KEY });
@@ -83,6 +93,9 @@ function ShareForm({
   link,
   models,
   initialVerdicts,
+  costVerdict,
+  hasManual,
+  onBusyChange,
   onCancel,
   onDone,
 }: {
@@ -91,6 +104,11 @@ function ShareForm({
   link?: ShareLink;
   models: { modelId: string; name: string }[];
   initialVerdicts: DraftVerdict[];
+  /** Verdict « Le moins cher » proposé quand on active l'affichage des coûts (absent sans aucun coût). */
+  costVerdict: ShareVerdict | null;
+  /** La série contient des questions manuelles (notation à l'aveugle en cours ou à faire). */
+  hasManual: boolean;
+  onBusyChange(busy: boolean): void;
   onCancel(): void;
   /** Jeton en clair après une création ; `null` après une modification. */
   onDone(token: string | null): void;
@@ -103,12 +121,27 @@ function ShareForm({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  const setBusyBoth = (b: boolean) => {
+    setBusy(b);
+    onBusyChange(b);
+  };
+  // Proposé une seule fois, à la première activation des coûts sur un nouveau lien.
+  const [costOffered, setCostOffered] = useState(false);
+  const changeShowCosts = (checked: boolean) => {
+    setShowCosts(checked);
+    if (checked && !link && !costOffered && costVerdict && verdicts.length < MAX_VERDICTS && !verdicts.some((v) => v.label === COST_VERDICT_LABEL)) {
+      setVerdicts([...verdicts, { ...costVerdict, key: newKey() }]);
+      setCostOffered(true);
+    }
+  };
+  const revealsCosts = !showCosts && verdicts.some((v) => /moins cher/i.test(v.label));
+
   const invalid = title.trim() === '' || verdicts.some((v) => v.label.trim() === '');
 
   async function submit(e: FormEvent) {
     e.preventDefault();
     setError(null);
-    setBusy(true);
+    setBusyBoth(true);
     const fields = {
       title: title.trim(),
       intro: intro.trim() === '' ? null : intro.trim(),
@@ -126,7 +159,7 @@ function ShareForm({
     } catch (err) {
       setError(messageForError(err));
     } finally {
-      setBusy(false);
+      setBusyBoth(false);
     }
   }
 
@@ -145,13 +178,23 @@ function ShareForm({
       <fieldset className="m-0 flex flex-col gap-2 rounded-xl border border-line p-3">
         <legend className="px-1 text-[13px] font-medium text-ink">Ce que voit le public</legend>
         <label className="flex items-center gap-2 text-sm text-ink">
-          <input type="checkbox" checked={showCosts} onChange={(e) => setShowCosts(e.target.checked)} />
+          <input type="checkbox" checked={showCosts} onChange={(e) => changeShowCosts(e.target.checked)} />
           Afficher les coûts
         </label>
+        {revealsCosts ? (
+          <p role="note" className="m-0 ml-6 text-xs text-peach">
+            Le verdict « Le moins cher » révèle l’ordre des coûts, même masqués : retirez-le si vous voulez les garder confidentiels.
+          </p>
+        ) : null}
         <label className="flex items-center gap-2 text-sm text-ink">
           <input type="checkbox" checked={showResponses} onChange={(e) => setShowResponses(e.target.checked)} />
           Afficher les réponses
         </label>
+        {hasManual ? (
+          <p role="note" className="m-0 ml-6 text-xs text-peach">
+            Cette série contient des questions manuelles : la page publique associe chaque réponse à son modèle, ce qui lève l’aveugle pour qui n’a pas encore noté.
+          </p>
+        ) : null}
       </fieldset>
       {error ? (
         <p role="alert" className="m-0 text-sm text-bad">
@@ -159,7 +202,7 @@ function ShareForm({
         </p>
       ) : null}
       <div className="flex justify-end gap-2">
-        <Button variant="ghost" onClick={onCancel}>
+        <Button variant="ghost" disabled={busy} onClick={onCancel}>
           Annuler
         </Button>
         <Button type="submit" variant="primary" disabled={busy || invalid}>

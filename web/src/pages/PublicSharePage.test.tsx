@@ -181,3 +181,14 @@ test('verdict sans modèle : libellé et texte seuls', async () => {
   expect(item.querySelector('strong')).toBeNull();
   await waitFor(() => expect(document.title).toContain(SHARE.title));
 });
+
+test('série non terminée : badge « Résultats provisoires » ; absent d’une série terminée', async () => {
+  mockFetch({ ...SHARE, run: { ...SHARE.run, completedAt: null } });
+  const { unmount } = renderPage();
+  expect(await screen.findByText('Résultats provisoires')).toBeInTheDocument();
+  unmount();
+  mockFetch(SHARE);
+  renderPage();
+  await screen.findByRole('heading', { level: 1, name: SHARE.title });
+  expect(screen.queryByText('Résultats provisoires')).toBeNull();
+});

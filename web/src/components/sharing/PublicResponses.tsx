@@ -43,7 +43,7 @@ export function PublicResponses({ responses, models }: { responses: PublicRespon
                 </h3>
                 <span className="font-mono text-xs text-peach">{a.finalScore === null ? DASH : `${score(a.finalScore)} / 10`}</span>
               </header>
-              <div className="mt-2 text-sm break-words">{a.text ? <Markdown text={a.text} /> : <p className="m-0 text-mute">Pas de texte.</p>}</div>
+              <div className="mt-2 text-sm break-words">{a.text ? <Markdown text={a.text} relativeLinksAsText /> : <p className="m-0 text-mute">Pas de texte.</p>}</div>
               {a.judgeRationale ? <p className="mt-3 mb-0 border-t border-line pt-2 text-xs text-mute">{a.judgeRationale}</p> : null}
             </article>
           );

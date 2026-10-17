@@ -8,6 +8,8 @@ import { SelectField } from '../ui/SelectField';
 import { TextArea } from '../ui/TextArea';
 
 export const MAX_VERDICTS = 6;
+/** Titre du verdict proposé sur le coût moyen. */
+export const COST_VERDICT_LABEL = 'Le moins cher';
 
 /** Verdict en cours d'édition : `key` donne une identité stable aux lignes quand on en retire une. */
 export type DraftVerdict = ShareVerdict & { key: string };
@@ -21,9 +23,9 @@ const score = (x: number) => x.toFixed(1).replace('.', ',');
 
 /**
  * Trois propositions calculées sur le classement à la pondération de la série : meilleur score global, meilleure qualité
- * et plus petit coût moyen (absente quand aucun modèle n'a de coût).
+ * et plus petit coût moyen (absente quand aucun modèle n'a de coût, et quand `withCost` est faux : il révélerait l'ordre des coûts).
  */
-export function proposeVerdicts(ranking: Ranking): ShareVerdict[] {
+export function proposeVerdicts(ranking: Ranking, withCost: boolean): ShareVerdict[] {
   const rows = rankedRows(ranking.models, ranking.weights).filter((r) => r.global !== null);
   const out: ShareVerdict[] = [];
   const top = rows[0];
@@ -56,7 +58,7 @@ export function proposeVerdicts(ranking: Ranking): ShareVerdict[] {
     });
   }
   const cheap = best((m) => m.raw.meanCostUsd, (a, b) => a < b);
-  if (cheap) out.push({ label: 'Le moins cher', modelId: cheap.model.modelId, text: `${cheap.model.name} est le moins cher par réponse.` });
+  if (cheap && withCost) out.push({ label: COST_VERDICT_LABEL, modelId: cheap.model.modelId, text: `${cheap.model.name} est le moins cher par réponse.` });
   return out;
 }
 

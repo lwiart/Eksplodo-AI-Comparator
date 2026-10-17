@@ -160,7 +160,7 @@ export function ShareLinksPage() {
 
       <Dialog
         open={confirm !== null}
-        onOpenChange={(open) => !open && setConfirm(null)}
+        onOpenChange={(open) => !open && !busy && setConfirm(null)}
         title={confirm?.kind === 'delete' ? 'Supprimer ce lien ?' : 'Régénérer ce lien ?'}
         description={confirm ? `« ${confirm.link.title} », série ${confirm.link.runName}.` : undefined}
       >
@@ -185,7 +185,8 @@ export function ShareLinksPage() {
 
       <Dialog
         open={shown !== null}
-        onOpenChange={(open) => !open && closeShown()}
+        // Le lien n'est affiché qu'une fois : Échap ou un clic à l'extérieur ne le ferment pas, seul « Fermer » le fait.
+        onOpenChange={() => {}}
         title="Nouveau lien de partage"
         description={shown ? `« ${shown.link.title} » : l’ancien lien ne fonctionne plus.` : undefined}
       >
