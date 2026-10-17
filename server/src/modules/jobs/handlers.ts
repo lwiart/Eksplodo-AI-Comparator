@@ -7,6 +7,7 @@ import { createErrorsPurgeHandler } from '../errors/report.js';
 import type { Mailer } from '../mail/mailer.js';
 import type { Registry } from '../providers/registry.js';
 import { executeRunSlice } from '../runs/engine.js';
+import { createOnResultFinished } from '../scoring/on-result.js';
 import { RUN_EXECUTE } from '../runs/run-job.js';
 import { QUICK_TRY, createQuickTryHandler } from '../tests/quick-try.js';
 import type { JobHandlers } from './queue.js';
@@ -33,6 +34,11 @@ export function createJobHandlers(deps: JobHandlersDeps): JobHandlers {
     error_digest: createErrorDigestHandler(deps),
     catalog_refresh: createCatalogRefreshHandler({ ...(deps.fetch ? { fetch: deps.fetch } : {}) }),
     [QUICK_TRY]: createQuickTryHandler({ db: deps.db, registry: deps.registry, config: deps.config }),
-    [RUN_EXECUTE]: (job, ctx) => executeRunSlice({ db: deps.db, registry: deps.registry, config: deps.config }, job, ctx),
+    [RUN_EXECUTE]: (job, ctx) =>
+      executeRunSlice(
+        { db: deps.db, registry: deps.registry, config: deps.config, onResultFinished: createOnResultFinished({ db: deps.db }) },
+        job,
+        ctx,
+      ),
   };
 }

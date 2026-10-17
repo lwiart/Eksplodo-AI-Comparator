@@ -14,6 +14,7 @@ import { resetFakeCallCounters } from '../src/modules/providers/fake.js';
 import { createProviderRegistry, type ProviderLike } from '../src/modules/providers/registry.js';
 import type { GenerateEvent, ProviderAdapter } from '../src/modules/providers/types.js';
 import { executeRunSlice, type EngineDeps } from '../src/modules/runs/engine.js';
+import { createOnResultFinished } from '../src/modules/scoring/on-result.js';
 import { createRunsService } from '../src/modules/runs/runs.service.js';
 import { monthSpend, recordUsage } from '../src/modules/usage/usage.js';
 import { createUsersRepo } from '../src/modules/users/users.repo.js';
@@ -67,6 +68,7 @@ async function seedRun(opts: {
   repetitions?: number;
   concurrency?: number;
   maxConcurrency?: number;
+  scoring?: { method: 'expected' | 'judge' | 'manual'; config: Record<string, unknown> };
 }) {
   const user = await createUsersRepo(t.db).insert({ email: `admin-${randomUUID()}@acme.fr`, name: 'Admin', role: 'admin' });
   let specs = opts.models;
@@ -97,8 +99,8 @@ async function seedRun(opts: {
       category: 'Culture',
       tags: [],
       userPrompt: prompt,
-      scoringMethod: 'manual',
-      scoringConfig: {},
+      scoringMethod: opts.scoring?.method ?? 'manual',
+      scoringConfig: opts.scoring?.config ?? {},
     });
     testIds.push(id);
   }
@@ -593,4 +595,39 @@ test('monthSpend : mois civil en Europe/Paris, part du juge séparée', async ()
   expect(spend.totalUsd).toBeCloseTo(1.75, 6);
   expect(spend.judgeUsd).toBeCloseTo(0.25, 6);
   expect(await monthSpend(t.db, new Date('2026-12-01T10:00:00.000Z'))).toEqual({ totalUsd: 0, judgeUsd: 0 });
+});
+
+test('notation : un résultat done d’un test expected est noté dans la foulée (scoreStatus done)', async () => {
+  const { runId } = await seedRun({
+    prompts: ['Capitale de la France ?'],
+    scoring: { method: 'expected', config: { mode: 'regex', pattern: '.', flags: '' } },
+  });
+  await drain(engineDeps({ onResultFinished: createOnResultFinished({ db: t.db }) }));
+  const rows = await resultRows(runId);
+  expect(rows).toHaveLength(2);
+  for (const r of rows) {
+    expect(r).toMatchObject({ status: 'done', scoreStatus: 'done', autoScore: 10, judgeRationale: 'Expression trouvée dans la réponse.' });
+  }
+});
+
+test('notation : un test expected sans correspondance reçoit 0 ; une note imposée ou déjà posée n’est pas écrasée', async () => {
+  const { runId } = await seedRun({
+    prompts: ['Capitale de la France ?'],
+    scoring: { method: 'expected', config: { mode: 'exact', expected: 'introuvable', ignoreCase: true, ignoreAccents: false } },
+  });
+  const deps = engineDeps({ onResultFinished: createOnResultFinished({ db: t.db }) });
+  await drain(deps);
+  const rows = await resultRows(runId);
+  expect(rows.every((r) => r.scoreStatus === 'done' && r.autoScore === 0)).toBe(true);
+  // Rejeu : la note existe déjà (scoreStatus ≠ pending), rien ne change.
+  await t.db.update(results).set({ autoScore: 7 }).where(eq(results.runId, runId));
+  await createOnResultFinished({ db: t.db })(rows[0]!.id);
+  expect((await resultRows(runId)).every((r) => r.autoScore === 7)).toBe(true);
+});
+
+test('notation : un test manuel n’est pas touché par le crochet', async () => {
+  const { runId } = await seedRun({ prompts: ['Deux plus deux ?'] });
+  await drain(engineDeps({ onResultFinished: createOnResultFinished({ db: t.db }) }));
+  const rows = await resultRows(runId);
+  expect(rows.every((r) => r.scoreStatus === 'awaiting_manual' && r.autoScore === null)).toBe(true);
 });
