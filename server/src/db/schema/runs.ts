@@ -17,6 +17,7 @@ import {
 } from 'drizzle-orm/mysql-core';
 import { models } from './catalog.js';
 import { users } from './core.js';
+import type { TestSnapshot } from '../../modules/runs/snapshot.js';
 import { suites, tests } from './tests.js';
 
 const now = () => sql`CURRENT_TIMESTAMP(3)`;
@@ -79,7 +80,7 @@ export const runTests = mysqlTable('run_tests', {
     .references(() => tests.id, { onDelete: 'restrict' }),
   position: int('position').notNull(),
   // Instantané du test au lancement (type TestSnapshot).
-  snapshot: json('snapshot').$type<Record<string, unknown>>().notNull(),
+  snapshot: json('snapshot').$type<TestSnapshot>().notNull(),
 });
 
 export const results = mysqlTable(
