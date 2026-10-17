@@ -33,3 +33,35 @@ test('curseurs : changer la qualité réajuste les autres pour garder 100', asyn
   expect(screen.getByRole('slider', { name: 'Vitesse' })).toHaveAttribute('aria-valuenow', '16');
   expect(screen.getByText('60 %')).toBeInTheDocument();
 });
+
+test('second geste sur le même curseur : repart des poids après le premier geste', async () => {
+  const user = userEvent.setup();
+  const seen: Weights[] = [];
+  render(<Harness onChange={(w) => seen.push(w)} />);
+  const quality = screen.getByRole('slider', { name: 'Qualité' });
+  quality.focus();
+  await user.keyboard('{ArrowRight>10/}'); // 60 / 16 / 16 / 8
+  await user.keyboard('{Tab}');
+  quality.focus();
+  await user.keyboard('{ArrowRight>10/}'); // 70 depuis 60/16/16/8 : 12 / 12 / 6
+  expect(seen.at(-1)).toEqual({ quality: 70, speed: 12, cost: 12, reliability: 6 });
+});
+
+test('retour depuis 100 : le reste est partagé à parts égales', async () => {
+  const user = userEvent.setup();
+  const seen: Weights[] = [];
+  render(<Harness onChange={(w) => seen.push(w)} />);
+  const quality = screen.getByRole('slider', { name: 'Qualité' });
+  quality.focus();
+  await user.keyboard('{End}');
+  expect(seen.at(-1)).toEqual({ quality: 100, speed: 0, cost: 0, reliability: 0 });
+  // Dans le même geste, revenir en arrière retrouve les proportions de départ.
+  await user.keyboard('{ArrowLeft>40/}');
+  expect(seen.at(-1)).toEqual({ quality: 60, speed: 16, cost: 16, reliability: 8 });
+  // Nouveau geste depuis 100 : parts égales.
+  await user.keyboard('{End}');
+  await user.keyboard('{Tab}');
+  quality.focus();
+  await user.keyboard('{ArrowLeft>40/}');
+  expect(seen.at(-1)).toEqual({ quality: 60, speed: 14, cost: 13, reliability: 13 });
+});

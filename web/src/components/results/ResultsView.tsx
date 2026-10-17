@@ -78,6 +78,9 @@ export default function ResultsView({ runId, ranking, isAdmin }: { runId: string
         </div>
       </Card>
 
+      {rows.length > CHART_MODELS ? (
+        <p className="m-0 text-xs text-mute">Graphes : {CHART_MODELS} premiers modèles sur {rows.length}, selon la pondération actuelle.</p>
+      ) : null}
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
           <h2 className="m-0 mb-2 font-display text-sm font-bold text-white">

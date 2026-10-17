@@ -3,7 +3,7 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { cloneElement, type ReactElement } from 'react';
 import { beforeAll, beforeEach, expect, test, vi } from 'vitest';
-import { RANKING } from './fixtures';
+import { MODELS, RANKING, model } from './ranking.fixtures';
 import ResultsView from './ResultsView';
 
 const apiFetch = vi.hoisted(() => vi.fn());
@@ -21,10 +21,10 @@ beforeEach(() => {
   apiFetch.mockResolvedValue({ run: {} });
 });
 
-function renderView(isAdmin: boolean) {
+function renderView(isAdmin: boolean, ranking = RANKING) {
   render(
     <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
-      <ResultsView runId="r1" ranking={RANKING} isAdmin={isAdmin} />
+      <ResultsView runId="r1" ranking={ranking} isAdmin={isAdmin} />
     </QueryClientProvider>,
   );
 }
@@ -68,4 +68,15 @@ test('Utilisateur : bouton d’enregistrement absent, export présent', () => {
   renderView(false);
   expect(screen.queryByRole('button', { name: /Enregistrer comme pondération/ })).toBeNull();
   expect(screen.getByRole('link', { name: 'Exporter' })).toHaveAttribute('href', '/api/runs/r1/export.csv');
+});
+
+test('plus de six modèles : les graphes l’indiquent', () => {
+  const extra = ['e', 'f', 'g'].map((id) => model({ modelId: id, name: `Extra ${id}` }));
+  renderView(false, { ...RANKING, models: [...MODELS, ...extra] });
+  expect(screen.getByText(/6 premiers modèles sur 7/)).toBeInTheDocument();
+});
+
+test('six modèles ou moins : pas de mention', () => {
+  renderView(false);
+  expect(screen.queryByText(/premiers modèles sur/)).toBeNull();
 });

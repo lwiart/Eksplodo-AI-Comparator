@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeAll, beforeEach, expect, test, vi } from 'vitest';
 import { AuthContext, type PublicUser, type Role } from '../auth/AuthProvider';
-import { MODELS as RANKED_MODELS, RANKING } from '../components/results/fixtures';
+import { MODELS as RANKED_MODELS, RANKING } from '../components/results/ranking.fixtures';
 import { RunPage } from './RunPage';
 
 const apiFetch = vi.hoisted(() => vi.fn());

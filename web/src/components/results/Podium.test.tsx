@@ -1,7 +1,7 @@
 import { render, screen, within } from '@testing-library/react';
 import { expect, test } from 'vitest';
 import { rankedRows } from '../../lib/ranking';
-import { MODELS } from './fixtures';
+import { MODELS } from './ranking.fixtures';
 import { Podium } from './Podium';
 
 const DEFAULTS = { quality: 50, speed: 20, cost: 20, reliability: 10 };

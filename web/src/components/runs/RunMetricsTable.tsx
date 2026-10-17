@@ -54,7 +54,7 @@ export function modelMetrics(rows: ResultRow[]): ModelMetrics[] {
 
 const dash = '—';
 
-/** Tableau des mesures par modèle d'une série terminée . */
+/** Tableau des mesures par modèle d'une série terminée. */
 export function RunMetricsTable({ rows }: { rows: ResultRow[] }) {
   const headingId = useId();
   const metrics = modelMetrics(rows);

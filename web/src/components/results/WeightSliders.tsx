@@ -22,6 +22,10 @@ export function WeightSliders({ value, onChange }: { value: Weights; onChange(ne
     gesture.current = { key, base, emitted: next };
     onChange(next);
   };
+  // Le geste se termine au relâchement du pointeur ou quand le curseur perd le focus (clavier).
+  const endGesture = () => {
+    gesture.current = null;
+  };
   return (
     <div role="group" aria-label="Pondération" className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-4">
       {LABELS.map(([key, label]) => (
@@ -36,6 +40,7 @@ export function WeightSliders({ value, onChange }: { value: Weights; onChange(ne
             step={1}
             value={[value[key]]}
             onValueChange={([v]) => move(key, v ?? value[key])}
+            onPointerUp={endGesture}
             className="relative flex h-5 w-full touch-none items-center select-none"
           >
             <Slider.Track className="relative h-1.5 grow rounded-full bg-white/10">
@@ -43,6 +48,7 @@ export function WeightSliders({ value, onChange }: { value: Weights; onChange(ne
             </Slider.Track>
             <Slider.Thumb
               aria-label={label}
+              onBlur={endGesture}
               className="block h-4 w-4 cursor-pointer rounded-full border-2 border-peach bg-night-0 shadow-[0_0_10px_rgba(240,99,31,0.6)]"
             />
           </Slider.Root>

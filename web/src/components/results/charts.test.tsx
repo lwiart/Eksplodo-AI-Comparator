@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react';
 import { cloneElement, type ReactElement } from 'react';
 import { expect, test, vi } from 'vitest';
 import { CategoryChart, categoryRows } from './CategoryChart';
-import { MODELS, RANKING } from './fixtures';
+import { MODELS, RANKING } from './ranking.fixtures';
 import { QualitySpeedChart, scatterPoints } from './QualitySpeedChart';
 
 // jsdom ne mesure rien : le conteneur adaptatif reçoit une taille fixe.
@@ -21,6 +21,9 @@ test('nuage : un point par modèle ayant qualité et vitesse', () => {
   const chart = screen.getByTestId('quality-speed-chart');
   expect(chart.querySelectorAll('.recharts-scatter')).toHaveLength(3);
   expect(chart.querySelector('.recharts-reference-area')).not.toBeNull();
+  // Légende : chaque point est identifiable par le nom du modèle.
+  for (const name of ['Alpha', 'Bravo', 'Charlie']) expect(chart.textContent).toContain(name);
+  expect(chart.textContent).not.toContain('Delta');
 });
 
 test('catégories : une barre par modèle noté et par catégorie, absente sans note', () => {

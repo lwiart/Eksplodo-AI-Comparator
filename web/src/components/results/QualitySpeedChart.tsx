@@ -1,4 +1,4 @@
-import { CartesianGrid, ReferenceArea, ResponsiveContainer, Scatter, ScatterChart, Tooltip, XAxis, YAxis, ZAxis } from 'recharts';
+import { CartesianGrid, ReferenceArea, ResponsiveContainer, Legend, Scatter, ScatterChart, Tooltip, XAxis, YAxis, ZAxis } from 'recharts';
 import type { RankingModel } from '../../api/results';
 import { AXIS_TICK, GRID_STROKE, TOOLTIP_STYLE } from './chart-theme';
 import { score } from './format';
@@ -11,6 +11,22 @@ export type ScatterPoint = { modelId: string; name: string; color: string; speed
 /** Un point par modèle ayant une note de qualité et une note de vitesse. */
 export function scatterPoints(models: RankingModel[]): ScatterPoint[] {
   return models.flatMap((m) => (m.quality === null || m.speed === null ? [] : [{ modelId: m.modelId, name: m.name, color: m.color, speed: m.speed, quality: m.quality }]));
+}
+
+/** Infobulle d'un point : nom du modèle, couleur, qualité et vitesse. */
+function PointTooltip({ active, payload }: { active?: boolean; payload?: { payload?: ScatterPoint }[] }) {
+  const p = active ? payload?.[0]?.payload : undefined;
+  if (!p) return null;
+  return (
+    <div style={TOOLTIP_STYLE.contentStyle} className="px-3 py-2">
+      <div className="flex items-center gap-2 font-semibold text-white">
+        <span aria-hidden="true" className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: p.color }} />
+        {p.name}
+      </div>
+      <div className="font-mono text-xs">Qualité {score(p.quality)}</div>
+      <div className="font-mono text-xs">Vitesse {score(p.speed)}</div>
+    </div>
+  );
 }
 
 /** Nuage qualité × vitesse (notes sur 10) ; en haut à droite, la zone idéale. */
@@ -45,7 +61,8 @@ export function QualitySpeedChart({ models }: { models: RankingModel[] }) {
           />
           <YAxis type="number" dataKey="quality" name="Qualité" domain={[0, 10]} ticks={[0, 2, 4, 6, 8, 10]} tick={AXIS_TICK} stroke={GRID_STROKE} width={36} />
           <ZAxis range={[110, 110]} />
-          <Tooltip cursor={{ stroke: GRID_STROKE }} {...TOOLTIP_STYLE} formatter={(v) => score(typeof v === 'number' ? v : null)} />
+          <Tooltip cursor={{ stroke: GRID_STROKE }} content={<PointTooltip />} />
+          <Legend formatter={(name) => <span className="text-xs text-ink">{String(name)}</span>} iconType="circle" />
           {points.map((p) => (
             <Scatter key={p.modelId} name={p.name} data={[p]} fill={p.color} isAnimationActive={false} />
           ))}
