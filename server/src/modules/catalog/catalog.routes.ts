@@ -108,6 +108,17 @@ export function registerCatalogRoutes(app: FastifyInstance, service: CatalogServ
     return { models: await service.remoteModels(id) };
   });
 
+  app.get('/api/catalog/new', admin, async () => ({
+    models: await service.newModels(),
+    openRouterProviderId: await service.openRouterProviderId(),
+  }));
+
+  app.post('/api/catalog/:id/dismiss', admin, async (req, reply) => {
+    const { id } = idParams.parse(req.params);
+    await service.dismissNew(req.actor!, id);
+    return reply.status(204).send();
+  });
+
   app.get('/api/models', connected, async (req) => ({ models: await service.listModels(req.actor!) }));
 
   app.get('/api/models/:id', connected, async (req) => {

@@ -1,0 +1,124 @@
+{
+  "data": [
+    {
+      "id": "anthropic/claude-sonnet-5.5",
+      "name": "Anthropic: Claude Sonnet 5.5",
+      "context_length": 1000000,
+      "architecture": {
+        "modality": "text+image+file->text",
+        "input_modalities": [
+          "text",
+          "image",
+          "file"
+        ],
+        "output_modalities": [
+          "text"
+        ]
+      },
+      "pricing": {
+        "prompt": "0.000002",
+        "completion": "0.00001"
+      }
+    },
+    {
+      "id": "mistralai/mistral-large",
+      "name": "Mistral: Large",
+      "context_length": 128000,
+      "architecture": {
+        "modality": "text->text",
+        "input_modalities": [
+          "text"
+        ],
+        "output_modalities": [
+          "text"
+        ]
+      },
+      "pricing": {
+        "prompt": "0.000003",
+        "completion": "0.000009"
+      }
+    },
+    {
+      "id": "openrouter/auto",
+      "name": "Auto Router",
+      "context_length": 2000000,
+      "architecture": {
+        "modality": "text->text",
+        "input_modalities": [
+          "text",
+          "image"
+        ],
+        "output_modalities": [
+          "text"
+        ]
+      },
+      "pricing": {
+        "prompt": "-1",
+        "completion": "-1"
+      }
+    },
+    {
+      "id": "vendor/no-pricing",
+      "name": "Vendor: Sans tarif",
+      "context_length": 32768,
+      "architecture": {
+        "modality": "text->text",
+        "input_modalities": [
+          "text"
+        ],
+        "output_modalities": [
+          "text"
+        ]
+      }
+    },
+    {
+      "id": "vendor/no-architecture",
+      "name": "Vendor: Sans architecture",
+      "context_length": 8192,
+      "pricing": {
+        "prompt": "0.0000005",
+        "completion": "0.0000015"
+      }
+    },
+    {
+      "id": "meta-llama/llama-free:free",
+      "name": "Meta: Llama (gratuit)",
+      "context_length": 65536,
+      "architecture": {
+        "modality": "text->text",
+        "input_modalities": [
+          "text"
+        ],
+        "output_modalities": [
+          "text"
+        ]
+      },
+      "pricing": {
+        "prompt": "0",
+        "completion": "0"
+      }
+    },
+    {
+      "id": "newlab/model-x",
+      "name": "NewLab: Model X",
+      "context_length": 200000,
+      "architecture": {
+        "modality": "text+image->text",
+        "input_modalities": [
+          "text",
+          "image"
+        ],
+        "output_modalities": [
+          "text"
+        ]
+      },
+      "pricing": {
+        "prompt": "0.000001",
+        "completion": "0.000004"
+      }
+    },
+    {
+      "name": "Entrée sans identifiant"
+    }
+  ]
+}

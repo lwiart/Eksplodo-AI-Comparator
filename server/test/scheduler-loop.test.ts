@@ -16,13 +16,14 @@ async function until(cond: () => boolean, timeoutMs = 10_000): Promise<void> {
 }
 
 describe('appSchedules', () => {
-  test('purge du journal des erreurs à 03:30, récapitulatif des erreurs à 07:30 (heure de Paris)', () => {
+  test('purge du journal des erreurs à 03:30, récapitulatif des erreurs à 07:30, catalogue OpenRouter à 06:00 (heure de Paris)', () => {
     const entries = appSchedules();
-    expect(entries.map((e) => e.key)).toEqual(['errors-purge', 'error-digest']);
+    expect(entries.map((e) => e.key)).toEqual(['errors-purge', 'error-digest', 'catalog-refresh']);
     expect(entries[0]!.times).toEqual(['03:30']);
     expect(entries[1]!.times).toEqual(['07:30']);
+    expect(entries[2]!.times).toEqual(['06:00']);
     const slot = new Date('2026-10-11T04:00:00Z');
-    expect(entries.flatMap((e) => e.build(slot))).toEqual([{ type: 'errors_purge' }, { type: 'error_digest' }]);
+    expect(entries.flatMap((e) => e.build(slot))).toEqual([{ type: 'errors_purge' }, { type: 'error_digest' }, { type: 'catalog_refresh' }]);
   });
 });
 
@@ -37,7 +38,7 @@ describe('boucle de planification', () => {
     return d.db;
   }
 
-  test('à 07:30 Paris : une tâche error_digest et la purge de 03:30, une seule fois malgré plusieurs passages', async () => {
+  test('à 07:30 Paris : une tâche error_digest, la purge de 03:30 et le catalogue de 06:00, une seule fois malgré plusieurs passages', async () => {
     const db = await fresh();
     const clock = vi.fn(() => new Date('2026-10-11T05:30:30Z')); // 07:30:30 à Paris
     const loop = startSchedulerLoop({ db, schedules: appSchedules(), clock, logger: logger() }, { intervalMs: 5 });
@@ -48,6 +49,7 @@ describe('boucle de planification', () => {
     }
     const rows = await db.select().from(jobs);
     expect(rows.map((r) => r.dedupeKey).sort()).toEqual([
+      'catalog_refresh:catalog-refresh:2026-10-11T04:00:00.000Z',
       'error_digest:error-digest:2026-10-11T05:30:00.000Z',
       'errors_purge:errors-purge:2026-10-11T01:30:00.000Z',
     ]);

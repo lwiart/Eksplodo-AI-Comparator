@@ -1,10 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import type { AppConfig } from '../../config/config.js';
 import type { Db } from '../../db/client.js';
+import { openrouterCatalog } from '../../db/schema/catalog.js';
+import { and, desc, eq, gte, isNull } from 'drizzle-orm';
 import { AppError, ConflictError, NotFoundError } from '../../errors.js';
 import type { Clock } from '../../lib/clock.js';
 import { audit } from '../audit/audit.js';
 import type { Actor } from '../auth/actor.js';
+import { isOpenRouter } from '../providers/openrouter.js';
 import { ProviderError } from '../providers/errors.js';
 import { KeyMissingError, KeyUnreadableError, sealApiKey, type KeyState, type Registry } from '../providers/registry.js';
 import type { RemoteModel } from '../providers/types.js';
@@ -49,6 +52,18 @@ export type PublicModel = {
   createdAt: string;
 };
 
+export type NewModel = {
+  id: string;
+  openrouterId: string;
+  name: string;
+  inputPricePerM: number | null;
+  outputPricePerM: number | null;
+  supportsVision: boolean;
+  supportsPdf: boolean;
+  contextWindow: number | null;
+  firstSeenAt: string;
+};
+
 export type RemoteModelView = RemoteModel & { alreadyAdded: boolean };
 
 export type ConnectionTest =
@@ -89,6 +104,8 @@ export type CatalogServiceDeps = {
 
 const ER_DUP_ENTRY = 1062;
 const LIST_MODELS_TIMEOUT_MS = 15_000;
+/** Une nouveauté du catalogue OpenRouter reste signalée 30 jours après sa première apparition. */
+const NEW_MODEL_WINDOW_MS = 30 * 24 * 3_600_000;
 
 /** Palette des modèles : la couleur par défaut en est tirée par hachage de l'identifiant API. */
 const MODEL_PALETTE = [
@@ -334,6 +351,52 @@ export function createCatalogService(deps: CatalogServiceDeps) {
         details: { fields: Object.keys(columns).sort() },
       });
       return publicModel(row, await requireProvider(row.providerId));
+    },
+
+    /** Modèles apparus dans le catalogue OpenRouter depuis moins de 30 jours (hors première synchronisation, écartés, ou déjà ajoutés). */
+    async newModels(): Promise<NewModel[]> {
+      const since = new Date(deps.clock().getTime() - NEW_MODEL_WINDOW_MS);
+      const [rows, provs] = await Promise.all([
+        db
+          .select()
+          .from(openrouterCatalog)
+          .where(
+            and(eq(openrouterCatalog.initialSync, false), isNull(openrouterCatalog.dismissedAt), gte(openrouterCatalog.firstSeenAt, since)),
+          )
+          .orderBy(desc(openrouterCatalog.firstSeenAt), openrouterCatalog.openrouterId),
+        providersRepo.list(),
+      ]);
+      const local = new Set<string>();
+      for (const p of provs.filter((x) => isOpenRouter(x.baseUrl))) {
+        for (const id of await modelsRepo.apiModelIdsOf(p.id)) local.add(id);
+      }
+      return rows
+        .filter((r) => !local.has(r.openrouterId))
+        .map((r) => ({
+          id: r.id,
+          openrouterId: r.openrouterId,
+          name: r.name,
+          inputPricePerM: r.inputPricePerM,
+          outputPricePerM: r.outputPricePerM,
+          supportsVision: r.inputModalities.includes('image'),
+          supportsPdf: r.inputModalities.includes('file'),
+          contextWindow: r.contextWindow,
+          firstSeenAt: r.firstSeenAt.toISOString(),
+        }));
+    },
+
+    /** Écarte une nouveauté (elle ne sera plus proposée). */
+    async dismissNew(actor: Actor, id: string): Promise<void> {
+      const [row] = await db.select({ id: openrouterCatalog.id }).from(openrouterCatalog).where(eq(openrouterCatalog.id, id));
+      if (!row) throw new NotFoundError('Nouveauté introuvable');
+      await db.update(openrouterCatalog).set({ dismissedAt: deps.clock() }).where(eq(openrouterCatalog.id, id));
+      await audit(db, { actorUserId: actor.userId, action: 'catalog_dismissed', targetType: 'openrouter_catalog', targetId: id });
+    },
+
+    /** Premier fournisseur OpenRouter actif (cible du bouton « Ajouter » des nouveautés). */
+    async openRouterProviderId(): Promise<string | null> {
+      const rows = await providersRepo.list(); // triés par nom
+      return rows.find((p) => p.enabled && isOpenRouter(p.baseUrl))?.id ?? null;
     },
 
     /** Fournisseurs actifs dont la clé est utilisable (tous, en mode faux). */

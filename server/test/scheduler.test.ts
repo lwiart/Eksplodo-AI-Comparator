@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test } from 'vitest';
 import { jobs } from '../src/db/schema/jobs.js';
+import { appSchedules } from '../src/modules/jobs/schedules.js';
 import { scheduleDueJobs, type ScheduleEntry } from '../src/modules/jobs/scheduler.js';
 import { buildTestApp, type TestApp } from './helpers/test-app.js';
 import { createTestDb } from './helpers/test-db.js';
@@ -100,5 +101,19 @@ describe('/internal/tick', () => {
     expect(ok.json()).toEqual({ recovered: 0, failedStale: 0, scheduled: 1 });
     const again = await t.app.inject({ method: 'POST', url: '/internal/tick', headers: { 'x-cron-secret': 'x'.repeat(32) } });
     expect(again.json()).toEqual({ recovered: 0, failedStale: 0, scheduled: 0 });
+  });
+});
+
+describe('planification applicative', () => {
+  test('la tâche catalog_refresh est planifiée à 06:00 heure de Paris', async () => {
+    const d = await createTestDb();
+    try {
+      await scheduleDueJobs(d.db, appSchedules(), new Date('2026-03-10T05:01:00Z')); // 06:01 à Paris (UTC+1)
+      const rows = (await d.db.select().from(jobs)).filter((r) => r.type === 'catalog_refresh');
+      expect(rows).toHaveLength(1);
+      expect(rows[0]!.dedupeKey).toContain('2026-03-10T05:00:00.000Z');
+    } finally {
+      await d.destroy();
+    }
   });
 });

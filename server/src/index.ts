@@ -61,7 +61,7 @@ async function main(): Promise<void> {
     throw err;
   }
 
-  const handlers = createJobHandlers({ db, mailer, config, clock: systemClock, logger });
+  const handlers = createJobHandlers({ db, mailer, config, clock: systemClock, logger, fetch });
   // Alertes immédiates des erreurs graves : l'écouteur crée une tâche `error_alert` (il ne lève jamais).
   setGraveListener(createGraveListener({ db, clock: systemClock }));
   const schedules = appSchedules(); // entrées validées ici : une erreur de planification empêche le démarrage
