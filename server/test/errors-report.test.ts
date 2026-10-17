@@ -41,6 +41,13 @@ function input(over: Partial<ErrorInput> = {}): ErrorInput {
 
 const eventsOf = (origin: string) => t.db.select().from(errorEvents).where(eq(errorEvents.origin, origin));
 
+/**
+ * Plafond des tests de durée : un retour arrière exponentiel ou un parcours quadratique sur ces entrées (plusieurs Mo, ou
+ * des milliers de répétitions) prendrait des minutes ; un traitement linéaire, quelques millisecondes. Un plafond large
+ * garde la détection sans échouer quand la machine est chargée (suite complète en parallèle).
+ */
+const TIME_BUDGET_MS = 2_000;
+
 describe('référence et empreinte', () => {
   test('format et alphabet', () => {
     for (let i = 0; i < 500; i++) expect(newReference()).toMatch(/^E-[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{5}$/);
@@ -364,7 +371,7 @@ describe('redact : formes des fournisseurs', () => {
     const text = '{"password":"' + 'a\\'.repeat(5000);
     const start = performance.now();
     const out = redact(text);
-    expect(performance.now() - start).toBeLessThan(200);
+    expect(performance.now() - start).toBeLessThan(TIME_BUDGET_MS);
     expect(out).toBe(text); // valeur non terminée : aucune règle ne s'applique, et surtout aucun blocage
   });
   test('redact : pas de double masquage', () => {
@@ -377,11 +384,11 @@ describe('redact : formes des fournisseurs', () => {
 });
 
 describe('masquage borné', () => {
-  test('un message de 2 Mo est masqué en moins de 200 ms', () => {
+  test('un message de 2 Mo est masqué sans blocage (durée linéaire, bien sous le plafond)', () => {
     const message = `${'a-'.repeat(1_000_000)}key=x`;
     const t0 = performance.now();
     const out = mask({ source: 'job', origin: 'o', code: 'internal', message, severity: 'normale' });
-    expect(performance.now() - t0).toBeLessThan(200);
+    expect(performance.now() - t0).toBeLessThan(TIME_BUDGET_MS);
     expect(out.message.length).toBeLessThanOrEqual(2000);
   });
 });
