@@ -544,7 +544,7 @@ Chaque plan est rédigé, relu puis exécuté l'un après l'autre.
 | # | Risque / inconnue | Vérification |
 |---|---|---|
 | 1 | LiteSpeed coupe les requêtes longues de l'essai rapide (jusqu'à 90 s) | **Vérifié le 2026-10-17 : coupure à 60 s** (307 du proxy Hostinger). Décision validée par Laurent : l'essai rapide (§7) passe par une tâche de la file et un suivi par interrogation ; aucune requête HTTP ne doit dépasser 60 s |
-| 2 | Nombre de connexions sortantes simultanées et mémoire sur l'hébergement mutualisé | Plan 3 : série de démonstration à 4 appels simultanés sur Hostinger, avec mesure de la mémoire résidente |
+| 2 | Nombre de connexions sortantes simultanées et mémoire sur l'hébergement mutualisé | Plan 3 livré : à mesurer au premier déploiement — série de démonstration à 4 appels simultanés avec mémoire résidente (RSS) ; pièces jointes lues en base64 à chaque appel |
 | 3 | Différences de format entre fournisseurs : usage absent du flux, tokens de raisonnement, PDF acceptés ou non | Plan 2 : fixtures construites d'après la documentation publique de chaque fournisseur ; vérification sur un appel réel au premier essai rapide (plan 3), avec l'accord de Laurent pour la dépense |
 | 4 | Limites de taille des pièces jointes en base64 selon les fournisseurs | Plan 3 : vérification à l'ajout de la pièce jointe (10 Mo par fichier) et message clair en cas de refus |
 | 5 | Coût réel OpenRouter (`usage.cost`) disponible en streaming | Plan 2 : lecture de `usage.cost` dans le flux (fixture) ; vérification sur un appel réel au plan 3, sinon calcul avec les prix importés |
