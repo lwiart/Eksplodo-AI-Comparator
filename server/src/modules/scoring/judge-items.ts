@@ -4,9 +4,9 @@ import { and, asc, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
 import { models, providers } from '../../db/schema/catalog.js';
 import { results, runTests, runs } from '../../db/schema/runs.js';
 import { affectedRows, type DbOrTx } from '../jobs/queue.js';
-import type { GenerateRequest } from '../providers/types.js';
+import type { GenerateRequest, ProviderAdapter } from '../providers/types.js';
 import type { ProviderLike } from '../providers/registry.js';
-import type { ModelPrices } from '../runs/call.js';
+import { measureCall, type CallOutcome, type ModelPrices } from '../runs/call.js';
 import { withTxRetry } from '../runs/run-job.js';
 import type { SnapshotAttachment, TestSnapshot } from '../runs/snapshot.js';
 import { recordUsage } from '../usage/usage.js';
@@ -146,6 +146,26 @@ export function judgeInputTokens(snapshot: TestSnapshot, responseChars: number, 
 /** Coût maximal d'un appel du juge, réservé sur le plafond : entrée estimée × prix d'entrée + 800 × prix de sortie. */
 export function judgeCallMaxCostUsd(inputTokens: number, prices: ModelPrices): number {
   return (inputTokens * prices.inputPricePerM + JUDGE_MAX_OUTPUT_TOKENS * prices.outputPricePerM) / 1_000_000;
+}
+
+/**
+ * Appel mesuré du juge, commun à la série et à l'essai rapide : requête du juge (jamais le nom du modèle évalué) puis
+ * appel mesuré avec l'entrée estimée donnée.
+ */
+export function measureJudgeCall(
+  adapter: ProviderAdapter,
+  input: { snapshot: TestSnapshot; response: string; judge: JudgeModel; attachments: GenerateRequest['attachments']; inputTokens: number },
+  deps: { now: () => number; signal?: AbortSignal },
+): Promise<CallOutcome> {
+  const { judge } = input;
+  const req = buildJudgeRequest({
+    snapshot: input.snapshot,
+    response: input.response,
+    judgeApiModelId: judge.apiModelId,
+    judgeSupports: { vision: judge.supportsVision, pdf: judge.supportsPdf },
+    attachments: input.attachments,
+  });
+  return measureCall(adapter, req, judge.prices, { ...deps, estimatedInputTokens: input.inputTokens });
 }
 
 /** Condition SQL : le juge de la série est toujours celui attendu (`<=>` : égalité qui accepte le nul). */

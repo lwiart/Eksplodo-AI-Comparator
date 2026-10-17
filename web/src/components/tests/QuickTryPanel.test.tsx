@@ -30,6 +30,7 @@ const OUTCOME = {
   errorCode: null,
   errorMessage: null,
   modelName: 'Modèle A',
+  score: null,
 };
 
 let polls: unknown[];
@@ -147,4 +148,41 @@ test('essai rapide : l’interrogation s’arrête au démontage', async () => {
   unmount();
   await tick(10_000);
   expect(pollCount()).toBe(1);
+});
+
+async function tryOnce() {
+  const user = userEvent.setup({ delay: null });
+  renderPanel();
+  await user.selectOptions(await screen.findByLabelText('Modèle'), 'm1');
+  await user.click(screen.getByRole('button', { name: 'Essayer' }));
+  await screen.findByText(/en file|en cours/i);
+  await tick(2000);
+}
+
+test('essai rapide : note du juge, justification échappée et nom du juge', async () => {
+  polls = [
+    {
+      status: 'done',
+      outcome: { ...OUTCOME, score: { method: 'judge', score: 8, rationale: 'Clair <b>et</b> complet', judgeModelName: 'Juge 0', judgeCostUsd: 0.0004 } },
+    },
+  ];
+  await tryOnce();
+  expect(await screen.findByText('Note : 8/10')).toBeInTheDocument();
+  expect(screen.getByText('Clair <b>et</b> complet')).toBeInTheDocument();
+  expect(screen.getByText(/Juge 0/)).toBeInTheDocument();
+});
+
+test('essai rapide : note par réponse attendue sans nom de juge ; note absente → justification seule', async () => {
+  polls = [{ status: 'done', outcome: { ...OUTCOME, score: { method: 'expected', score: 6.7, rationale: '2 éléments trouvés sur 3' } } }];
+  await tryOnce();
+  expect(await screen.findByText('Note : 6,7/10')).toBeInTheDocument();
+  expect(screen.getByText('2 éléments trouvés sur 3')).toBeInTheDocument();
+  expect(screen.queryByText(/Juge/)).toBeNull();
+});
+
+test('essai rapide : juge indisponible → pas de note, message affiché', async () => {
+  polls = [{ status: 'done', outcome: { ...OUTCOME, score: { method: 'judge', score: null, rationale: 'Aucun juge par défaut disponible' } } }];
+  await tryOnce();
+  expect(await screen.findByText('Aucun juge par défaut disponible')).toBeInTheDocument();
+  expect(screen.queryByText(/Note :/)).toBeNull();
 });

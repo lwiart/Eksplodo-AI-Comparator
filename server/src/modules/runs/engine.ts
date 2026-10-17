@@ -26,6 +26,7 @@ import {
   judgeInputTokens,
   loadPendingJudgements,
   loadRunJudge,
+  measureJudgeCall,
   readJudgeAttachments,
   readResponse,
   releaseJudgement,
@@ -35,7 +36,6 @@ import {
   type PendingJudgement,
 } from '../scoring/judge-items.js';
 import { parseJudgeReply } from '../scoring/judge-parse.js';
-import { buildJudgeRequest } from '../scoring/judge-prompt.js';
 import { recordUsage } from '../usage/usage.js';
 import { buildRequest, measureCall, type CallOutcome, type ModelPrices } from './call.js';
 import { estimateInputTokens, maxCallCostUsd } from './estimate.js';
@@ -564,14 +564,11 @@ export async function executeRunSlice(deps: EngineDeps, job: Job, ctx: JobContex
       console.warn('run_execute : pièce jointe illisible (juge)', { resultId: item.resultId, code });
       return failedBeforeCall('attachment_unreadable', `Pièce jointe illisible (${code}) : le fichier n'a pas pu être lu`);
     }
-    const req = buildJudgeRequest({
-      snapshot: item.snapshot,
-      response: await readResponse(db, item.resultId),
-      judgeApiModelId: item.judge.apiModelId,
-      judgeSupports: { vision: item.judge.supportsVision, pdf: item.judge.supportsPdf },
-      attachments,
-    });
-    return measureCall(adapter, req, item.judge.prices, { now: nowMs, signal: ctx.signal, estimatedInputTokens: item.inputTokens });
+    return measureJudgeCall(
+      adapter,
+      { snapshot: item.snapshot, response: await readResponse(db, item.resultId), judge: item.judge, attachments, inputTokens: item.inputTokens },
+      { now: nowMs, signal: ctx.signal },
+    );
   }
 
   /** Appel du juge écrit : coût s'il est facturé (réponse reçue), puis la note ou l'échec (`null` : un appel suit). */

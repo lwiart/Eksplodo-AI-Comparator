@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { MODELS_KEY, listModels } from '../../api/catalog';
 import { messageForError } from '../../api/messages';
-import { getQuickTry, startQuickTry, type QuickTryOutcome } from '../../api/tests';
+import { getQuickTry, startQuickTry, type QuickTryOutcome, type QuickTryScore } from '../../api/tests';
 import { formatNumber } from '../catalog/format';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
@@ -21,6 +21,17 @@ function Metric({ label, children, title }: { label: string; children: string; t
     <div className="flex flex-col gap-0.5" title={title}>
       <dt className="text-xs text-mute">{label}</dt>
       <dd className="m-0 font-mono text-sm text-white">{children}</dd>
+    </div>
+  );
+}
+
+function ScoreBlock({ score }: { score: QuickTryScore }) {
+  return (
+    <div className="rounded-xl border border-line bg-night-0/60 p-3">
+      {score.score !== null ? <p className="m-0 font-display text-base font-bold text-white">{`Note : ${formatNumber(score.score)}/10`}</p> : null}
+      {/* Texte brut : React échappe la justification. */}
+      <p className="m-0 mt-1 text-sm break-words whitespace-pre-wrap text-ink">{score.rationale}</p>
+      {score.judgeModelName ? <p className="m-0 mt-1 text-xs text-mute">{`Noté par ${score.judgeModelName}`}</p> : null}
     </div>
   );
 }
@@ -49,6 +60,7 @@ function Outcome({ outcome }: { outcome: QuickTryOutcome }) {
           <Metric label="Tokens">{tokens}</Metric>
         </div>
       </dl>
+      {outcome.score ? <ScoreBlock score={outcome.score} /> : null}
       {outcome.text !== '' ? (
         <div>
           <p className="m-0 mb-1.5 text-xs text-mute">Réponse de {outcome.modelName}</p>

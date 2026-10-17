@@ -6,6 +6,7 @@ import { errorEvents } from '../src/db/schema/errors.js';
 import { jobs } from '../src/db/schema/jobs.js';
 import { aiUsage, results } from '../src/db/schema/runs.js';
 import { testAttachments } from '../src/db/schema/tests.js';
+import { writeValue } from '../src/modules/settings/settings.repo.js';
 import { createJobHandlers } from '../src/modules/jobs/handlers.js';
 import type { JobHandlers } from '../src/modules/jobs/queue.js';
 import { runWorkerOnce } from '../src/modules/jobs/worker.js';
@@ -236,4 +237,113 @@ test('modèle indisponible → 409 ; pièce jointe non gérée par le modèle �
   expect(unsupported.statusCode).toBe(400);
   expect(unsupported.json().error.code).toBe('unsupported_attachment');
   expect(await t.db.select().from(jobs)).toHaveLength(0);
+});
+
+const DEFAULT_JUDGE_KEY = 'scoring.default_judge_model_id';
+
+async function tryTest(t: Awaited<ReturnType<typeof setup>>, payload: { scoringMethod: string; scoringConfig: unknown; userPrompt: string }) {
+  const res = await t.post('/api/tests', { name: 'Noté', category: 'Culture', ...payload });
+  expect(res.statusCode).toBe(201);
+  const testId = res.json().test.id as string;
+  const { jobId } = (await t.post('/api/tests/try', { testId, modelId: t.model.id })).json() as { jobId: string };
+  expect(await t.runFast()).toBe(true);
+  return (await t.get(`/api/tests/try/${jobId}`)).json();
+}
+
+test('essai rapide d’un test expected : note et justification dans l’issue', async () => {
+  const t = await setup();
+  const body = await tryTest(t, {
+    scoringMethod: 'expected',
+    scoringConfig: { mode: 'contains', items: ['zzz-introuvable'], ignoreCase: true },
+    userPrompt: 'Dis quelque chose',
+  });
+  expect(body.status).toBe('done');
+  expect(body.outcome.score).toEqual({ method: 'expected', score: 0, rationale: '0 élément trouvé sur 1' });
+  expect((await t.db.select().from(aiUsage)).map((u) => u.origin)).toEqual(['quick_try']);
+});
+
+test('essai rapide d’un test manuel : score nul', async () => {
+  const t = await setup();
+  const body = await tryTest(t, { scoringMethod: 'manual', scoringConfig: {}, userPrompt: 'Bonjour' });
+  expect(body.outcome.score).toBeNull();
+});
+
+test('essai rapide d’un test judge : appel du juge par défaut, coût ai_usage judge, note affichée', async () => {
+  const t = await setup();
+  const judge = await seedModel(t.db, {
+    providerId: t.provider.id,
+    apiModelId: 'fake-juge-0',
+    displayName: 'Juge 0',
+    inputPricePerM: 2,
+    outputPricePerM: 20,
+  });
+  await writeValue(t.db, DEFAULT_JUDGE_KEY, judge.id);
+  const body = await tryTest(t, {
+    scoringMethod: 'judge',
+    scoringConfig: { criteria: 'Clarté' },
+    userPrompt: 'Explique [[fake:judge={"score": 8, "rationale": "Clair et complet"}]]',
+  });
+  expect(body.status).toBe('done');
+  expect(body.outcome.score).toMatchObject({ method: 'judge', score: 8, rationale: 'Clair et complet', judgeModelName: 'Juge 0' });
+  expect(body.outcome.score.judgeCostUsd).toBeGreaterThan(0);
+  const usage = await t.db.select().from(aiUsage);
+  expect(usage.map((u) => u.origin).sort()).toEqual(['judge', 'quick_try']);
+  const judged = usage.find((u) => u.origin === 'judge')!;
+  expect(judged).toMatchObject({ runId: null, modelId: judge.id });
+  expect(judged.costUsd).toBeCloseTo(body.outcome.score.judgeCostUsd, 5);
+  expect(await t.db.select().from(results)).toHaveLength(0);
+});
+
+test('juge : réponse illisible, un second appel puis score nul ; les deux appels sont facturés', async () => {
+  const t = await setup();
+  const judge = await seedModel(t.db, { providerId: t.provider.id, apiModelId: 'fake-juge-0', displayName: 'Juge 0' });
+  await writeValue(t.db, DEFAULT_JUDGE_KEY, judge.id);
+  const body = await tryTest(t, {
+    scoringMethod: 'judge',
+    scoringConfig: { criteria: 'Clarté' },
+    userPrompt: 'Explique [[fake:judge=pas du json]]',
+  });
+  expect(body.status).toBe('done');
+  expect(body.outcome.score).toMatchObject({ method: 'judge', score: null, rationale: 'Réponse du juge illisible', judgeModelName: 'Juge 0' });
+  expect((await t.db.select().from(aiUsage)).filter((u) => u.origin === 'judge')).toHaveLength(2);
+});
+
+test('juge : écriture de ai_usage impossible, note gardée et erreur journalisée', async () => {
+  const t = await setup();
+  const judge = await seedModel(t.db, { providerId: t.provider.id, apiModelId: 'fake-juge-0', displayName: 'Juge 0' });
+  await writeValue(t.db, DEFAULT_JUDGE_KEY, judge.id);
+  await t.db.execute(
+    sql.raw(`CREATE TRIGGER fail_usage BEFORE INSERT ON ai_usage FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'écriture refusée'`),
+  );
+  const body = await tryTest(t, {
+    scoringMethod: 'judge',
+    scoringConfig: { criteria: 'Clarté' },
+    userPrompt: 'Explique [[fake:judge={"score": 6, "rationale": "Moyen"}]]',
+  });
+  expect(body.status).toBe('done');
+  expect(body.outcome.score).toMatchObject({ method: 'judge', score: 6 });
+  expect((await t.db.select().from(errorEvents)).length).toBeGreaterThanOrEqual(1);
+});
+
+test('sans juge par défaut : score null et message', async () => {
+  const t = await setup();
+  const body = await tryTest(t, {
+    scoringMethod: 'judge',
+    scoringConfig: { criteria: 'Clarté' },
+    userPrompt: 'Explique',
+  });
+  expect(body.status).toBe('done');
+  expect(body.outcome.score).toEqual({ method: 'judge', score: null, rationale: 'Aucun juge par défaut disponible' });
+  expect((await t.db.select().from(aiUsage)).map((u) => u.origin)).toEqual(['quick_try']);
+});
+
+test('modèle évalué en erreur : aucune note', async () => {
+  const t = await setup();
+  const body = await tryTest(t, {
+    scoringMethod: 'expected',
+    scoringConfig: { mode: 'contains', items: ['x'], ignoreCase: true },
+    userPrompt: 'Panne [[fake:500]]',
+  });
+  expect(body.outcome.status).toBe('error');
+  expect(body.outcome.score).toBeNull();
 });

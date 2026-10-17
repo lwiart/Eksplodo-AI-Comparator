@@ -43,6 +43,14 @@ export type PublicTest = TestInput & {
 export type TestFilters = { archived?: boolean; category?: string; tag?: string; q?: string };
 export type TestsMeta = { categories: string[]; tags: string[] };
 
+/** Note automatique de l'essai (miroir de server/src/modules/tests/quick-try.ts). */
+export type QuickTryScore = {
+  method: 'expected' | 'judge';
+  score: number | null;
+  rationale: string;
+  judgeModelName?: string;
+  judgeCostUsd?: number;
+};
 export type QuickTryOutcome = {
   status: 'done' | 'error' | 'timeout';
   text: string;
@@ -59,6 +67,7 @@ export type QuickTryOutcome = {
   errorCode: string | null;
   errorMessage: string | null;
   modelName: string;
+  score: QuickTryScore | null;
 };
 export type QuickTryStatus = {
   status: 'queued' | 'running' | 'done' | 'failed';
