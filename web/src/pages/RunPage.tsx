@@ -1,16 +1,18 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { lazy, Suspense, useEffect, useMemo, useRef } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { messageForError } from '../api/messages';
 import { answersPrefix, getRanking, rankingKey } from '../api/results';
 import { RUNS_KEY, getRun, getRunProgress, getRunResults, type RunProgress, type RunStatus, type RunSummary } from '../api/runs';
 import { useAuth } from '../auth/AuthProvider';
+import { ShareDialog } from '../components/sharing/ShareDialog';
 import { ActivityFeed } from '../components/runs/ActivityFeed';
 import { SideBySide, type SideBySideTest } from '../components/results/SideBySide';
 import { LiveMatrix } from '../components/runs/LiveMatrix';
 import { PauseNotice, RunControls } from '../components/runs/RunControls';
 import { RunMetricsTable } from '../components/runs/RunMetricsTable';
 import { RunStatusChip } from '../components/runs/RunStatusChip';
+import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { RUN_STATUS_LABELS, duration, finishedCalls, plural, usd } from '../lib/format';
 import { LiveFlowFallback } from '../three/LiveFlowFallback';
@@ -212,6 +214,7 @@ export function RunPage() {
     refetchOnWindowFocus: 'always',
   });
 
+  const [sharing, setSharing] = useState(false);
   const status = progress.data?.status ?? run.data?.status;
   const live = status === 'queued' || status === 'running';
   const error = run.error ?? progress.error;
@@ -236,12 +239,19 @@ export function RunPage() {
           <header className="mb-4 flex flex-wrap items-center gap-3">
             <h1 className="m-0 font-display text-[30px] leading-[1.1] font-extrabold tracking-[-0.01em] text-white">{run.data.name}</h1>
             {status ? <RunStatusChip status={status} /> : null}
+            {isAdmin ? (
+              <Button className="ml-auto" onClick={() => setSharing(true)}>
+                <span aria-hidden="true">⇪</span>
+                Partager
+              </Button>
+            ) : null}
           </header>
           {live ? (
             <p className="mt-0 mb-4 max-w-prose text-sm text-mute">
               Les résultats arrivent au fil de l’eau. Vous pouvez fermer la page : la série continue sur le serveur.
             </p>
           ) : null}
+          {isAdmin && sharing ? <ShareDialog open runId={id} runName={run.data.name} onClose={() => setSharing(false)} /> : null}
           <Facts run={run.data} progress={progress.data} />
 
           {progress.data ? (

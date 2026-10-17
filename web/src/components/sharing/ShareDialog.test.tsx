@@ -1,0 +1,107 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { beforeEach, expect, test, vi } from 'vitest';
+import { ApiError } from '../../api/client';
+import { MODELS, RANKING } from '../results/ranking.fixtures';
+import { ShareDialog } from './ShareDialog';
+
+const apiFetch = vi.hoisted(() => vi.fn());
+vi.mock('../../api/client', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../api/client')>()),
+  apiFetch,
+}));
+
+const TOKEN = 'a'.repeat(32);
+const link = { id: 'l1', runId: 'r1', runName: 'Polyvalence octobre', title: 'x', intro: null, verdicts: [], showCosts: false, showResponses: false, active: true, viewCount: 0, createdAt: '2026-10-17T12:00:00.000Z', updatedAt: '2026-10-17T12:00:00.000Z' };
+
+// Bravo est le moins cher ; Alpha a le meilleur score global et la meilleure qualité.
+const ranking = {
+  ...RANKING,
+  models: MODELS.map((m) => (m.modelId === 'b' ? { ...m, raw: { ...m.raw, meanCostUsd: 0.001 } } : m)),
+};
+
+let rankingBody: unknown;
+let postError: ApiError | null;
+beforeEach(() => {
+  rankingBody = ranking;
+  postError = null;
+  apiFetch.mockReset();
+  apiFetch.mockImplementation((path: string, init?: { method?: string }) => {
+    if (path === '/api/runs/r1/ranking') return Promise.resolve(rankingBody);
+    if (path === '/api/share-links' && init?.method === 'POST') return postError ? Promise.reject(postError) : Promise.resolve({ link, token: TOKEN });
+    return Promise.reject(new Error(`appel inattendu ${path}`));
+  });
+});
+
+function renderDialog() {
+  const onClose = vi.fn();
+  render(
+    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+      <ShareDialog open runId="r1" runName="Polyvalence octobre" onClose={onClose} />
+    </QueryClientProvider>,
+  );
+  return onClose;
+}
+
+test('Partager : verdicts proposés à partir du classement, modifiables ; création → lien affiché une fois avec « Copier »', async () => {
+  const user = userEvent.setup();
+  renderDialog();
+  const title = await screen.findByLabelText('Titre de la page');
+  expect(title).toHaveValue('Polyvalence octobre');
+
+  const groups = screen.getAllByRole('group', { name: /^Verdict / });
+  expect(groups).toHaveLength(3);
+  const labels = groups.map((g) => within(g).getByLabelText('Titre du verdict') as HTMLInputElement);
+  expect(labels.map((l) => l.value)).toEqual(['Meilleur compromis', 'Meilleure qualité', 'Le moins cher']);
+  const models = groups.map((g) => (within(g).getByLabelText('Modèle') as HTMLSelectElement).selectedOptions[0]!.textContent);
+  expect(models).toEqual(['Alpha', 'Alpha', 'Bravo']);
+
+  // Modifier un titre, supprimer le dernier verdict, ajouter puis retirer un verdict libre.
+  await user.clear(labels[0]!);
+  await user.type(labels[0]!, 'Notre choix');
+  await user.click(screen.getByRole('button', { name: 'Supprimer le verdict 3' }));
+  expect(screen.getAllByRole('group', { name: /^Verdict / })).toHaveLength(2);
+  await user.click(screen.getByRole('button', { name: 'Ajouter un verdict' }));
+  expect(screen.getAllByRole('group', { name: /^Verdict / })).toHaveLength(3);
+  await user.click(screen.getByRole('button', { name: 'Supprimer le verdict 3' }));
+
+  await user.click(screen.getByRole('checkbox', { name: 'Afficher les coûts' }));
+  await user.click(screen.getByRole('button', { name: 'Créer le lien' }));
+
+  const post = apiFetch.mock.calls.find((c) => c[1]?.method === 'POST')!;
+  expect(post[0]).toBe('/api/share-links');
+  expect(post[1].body).toMatchObject({
+    runId: 'r1',
+    title: 'Polyvalence octobre',
+    intro: null,
+    showCosts: true,
+    showResponses: false,
+    verdicts: [
+      { label: 'Notre choix', modelId: 'a' },
+      { label: 'Meilleure qualité', modelId: 'a' },
+    ],
+  });
+
+  const url = (await screen.findByLabelText('Lien de la page publique')) as HTMLInputElement;
+  expect(url.value).toBe(`${location.origin}/p/${TOKEN}`);
+  expect(screen.getByRole('button', { name: 'Copier' })).toBeInTheDocument();
+  expect(screen.getByText(/ne pourra plus être réaffiché/)).toBeInTheDocument();
+});
+
+test('« Le moins cher » n’est pas proposé sans aucun coût', async () => {
+  rankingBody = { ...ranking, models: ranking.models.map((m) => ({ ...m, raw: { ...m.raw, meanCostUsd: null } })) };
+  renderDialog();
+  await screen.findByLabelText('Titre de la page');
+  const labels = screen.getAllByLabelText('Titre du verdict').map((l) => (l as HTMLInputElement).value);
+  expect(labels).toEqual(['Meilleur compromis', 'Meilleure qualité']);
+});
+
+test('refus du serveur : message en français et lien non affiché', async () => {
+  postError = new ApiError('verdict_model_not_in_run', 400, 'x');
+  const user = userEvent.setup();
+  renderDialog();
+  await user.click(await screen.findByRole('button', { name: 'Créer le lien' }));
+  expect(await screen.findByRole('alert')).toHaveTextContent('ne fait pas partie de cette série');
+  await waitFor(() => expect(screen.queryByLabelText('Lien de la page publique')).toBeNull());
+});

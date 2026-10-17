@@ -351,6 +351,17 @@ test('Utilisateur : aucun bouton de contrôle', async () => {
   expect(screen.queryByLabelText('Nouveau plafond en $')).toBeNull();
 });
 
+test('bouton « Partager » absent pour un Utilisateur', async () => {
+  renderPage('user');
+  await screen.findByRole('progressbar', { name: 'Avancement' });
+  expect(screen.queryByRole('button', { name: 'Partager' })).toBeNull();
+});
+
+test('bouton « Partager » présent pour l’Admin', async () => {
+  renderPage('admin');
+  expect(await screen.findByRole('button', { name: 'Partager' })).toBeInTheDocument();
+});
+
 test('série terminée : tableau des métriques par modèle', async () => {
   summary = { ...SUMMARY, status: 'completed', completedAt: '2026-10-17T12:40:00.000Z' };
   renderPage('user', { ...PROGRESS, status: 'completed', etaSeconds: 0, running: [] });

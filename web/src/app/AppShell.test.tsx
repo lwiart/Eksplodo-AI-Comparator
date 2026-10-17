@@ -51,6 +51,7 @@ test('Admin : section ADMIN visible', () => {
   expect(screen.getByText('ADMIN')).toBeInTheDocument();
   expect(screen.getByRole('link', { name: 'Utilisateurs' })).toBeInTheDocument();
   expect(screen.getByRole('link', { name: 'Journal des erreurs' })).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: 'Liens de partage' })).toHaveAttribute('href', '/admin/partages');
 });
 
 test('Utilisateur : aucune entrée Admin', () => {

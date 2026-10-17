@@ -1,3 +1,6 @@
+/** Partagé avec la saisie : le même texte s'affiche avant l'envoi et après un refus du serveur. */
+export const AUDIT_URL_MESSAGE = 'L’URL doit commencer par https:// et tenir en 300 caractères.';
+
 const MESSAGES: Record<string, string> = {
   unauthorized: 'Votre session a expiré. Reconnectez-vous.',
   invalid_credentials: 'E-mail ou mot de passe incorrect.',
@@ -36,6 +39,8 @@ const MESSAGES: Record<string, string> = {
   invalid_score: 'La note doit être comprise entre 0 et 10, avec une décimale au plus.',
   result_not_scorable: 'Seul un résultat terminé peut recevoir une note imposée.',
   question_not_ready: 'Toutes les réponses de cette question ne sont pas encore arrivées. Réessayez plus tard.',
+  verdict_model_not_in_run: 'Le modèle d’un verdict ne fait pas partie de cette série.',
+  invalid_audit_url: AUDIT_URL_MESSAGE,
   not_found: "Cet élément n'existe plus. Rechargez la page.",
   csrf: 'Votre session a expiré, rechargez la page.',
   internal: "Une erreur inattendue s'est produite. Réessayez dans quelques instants.",

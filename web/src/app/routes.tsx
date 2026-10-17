@@ -14,6 +14,7 @@ import { ProvidersPage } from '../pages/admin/ProvidersPage';
 import { TestEditorPage } from '../pages/admin/TestEditorPage';
 import { TestsPage } from '../pages/admin/TestsPage';
 import { SuitesPage } from '../pages/admin/SuitesPage';
+import { ShareLinksPage } from '../pages/admin/ShareLinksPage';
 import { UsersPage } from '../pages/admin/UsersPage';
 import { ToScorePage } from '../pages/ToScorePage';
 import { ResetPasswordPage } from '../pages/ResetPasswordPage';
@@ -79,6 +80,7 @@ export function AppRoutes() {
             <Route path="/admin/tests/:id" element={<TestEditorPage />} />
             <Route path="/admin/suites" element={<SuitesPage />} />
             <Route path="/series/nouvelle" element={<LaunchRunPage />} />
+            <Route path="/admin/partages" element={<ShareLinksPage />} />
             <Route path="/admin/erreurs" element={<ErrorLogPage />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />

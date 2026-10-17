@@ -23,6 +23,7 @@ const ADMIN: NavItem[] = [
   { to: '/admin/fournisseurs', label: 'Fournisseurs', icon: '⌁' },
   { to: '/admin/tests', label: 'Tests', icon: '✎' },
   { to: '/admin/suites', label: 'Suites', icon: '☰' },
+  { to: '/admin/partages', label: 'Liens de partage', icon: '⇪' },
   { to: '/admin/erreurs', label: 'Journal des erreurs', icon: '⚠' },
 ];
 
