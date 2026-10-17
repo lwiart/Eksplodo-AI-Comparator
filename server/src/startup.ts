@@ -3,6 +3,7 @@ import { poolOf, type Db } from './db/client.js';
 import { runMigrations } from './db/migrate.js';
 import type { Clock } from './lib/clock.js';
 import { ensureBootstrapAdmin } from './modules/auth/bootstrap.js';
+import { seedProviders } from './modules/catalog/seed.js';
 
 const DEFAULT_LOCK_TIMEOUT_SEC = 120;
 
@@ -66,6 +67,7 @@ export async function prepareDatabase(deps: {
         clock: deps.clock,
         ...(deps.logger ? { logger: deps.logger } : {}),
       });
+      await seedProviders(deps.db, deps.clock());
     },
     deps.lockTimeoutSec,
   );
