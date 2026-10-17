@@ -1,4 +1,6 @@
 import type { BufferAttribute, BufferGeometry, Group, Line, Material, Mesh, Shape, Sprite, Texture, Vector3 } from 'three';
+import { formatScore, podiumLabel, randomScore } from './fanout-score';
+import { createInteractionGate } from './interaction-gate';
 import { magnetOffset, pickNearest, springStep } from './fanout-physics';
 import { MAIN_PROVIDERS } from './providers';
 import type { SceneFactory } from './useThreeScene';
@@ -236,16 +238,13 @@ export const fanoutScene: SceneFactory = ({ THREE, canvas, width, height, isMobi
     const tip = new THREE.Mesh(new THREE.SphereGeometry(0.13, 20, 20), new THREE.MeshBasicMaterial({ color: PEACH }));
     const num = label('', { size: 64, color: '#fff', w: 320, h: 128 });
     num.sprite.scale.set(1.25, 0.5, 1);
-    num.sprite.position.set(0, 0.06, 0.1);
-    const cap = label('/ 10', { size: 28, color: '#7fa3b5', w: 256, h: 64 });
-    cap.sprite.scale.set(0.9, 0.22, 1);
-    cap.sprite.position.set(0, -0.4, 0.1);
+    num.sprite.position.set(0, 0, 0.1);
     const glow = new THREE.Mesh(
       new THREE.CircleGeometry(R - 0.14, 64),
       new THREE.MeshBasicMaterial({ color: ORANGE, transparent: true, opacity: 0.08 }),
     );
     glow.position.z = -0.05;
-    g.add(glow, track, fill, tip, num.sprite, cap.sprite);
+    g.add(glow, track, fill, tip, num.sprite);
     let val = 0;
     let target = 0;
     let shown = -1;
@@ -254,7 +253,7 @@ export const fanoutScene: SceneFactory = ({ THREE, canvas, width, height, isMobi
       g,
       update(t, dt) {
         val = lerp(val, target, ease(0.08, dt));
-        const arc = Math.max(0.01, (val / 10) * Math.PI * 2);
+        const arc = Math.max(0.01, (val / 100) * Math.PI * 2);
         if (Math.abs(arc - builtArc) > 0.002) {
           fill.geometry.dispose();
           fill.geometry = new THREE.TorusGeometry(R, 0.1, 16, 160, arc);
@@ -264,10 +263,10 @@ export const fanoutScene: SceneFactory = ({ THREE, canvas, width, height, isMobi
         const a = Math.PI / 2 - arc;
         tip.position.set(Math.cos(a) * R, Math.sin(a) * R, 0.02);
         tip.visible = val > 0.05;
-        const v = Math.round(val * 10) / 10;
+        const v = Math.round(val);
         if (v !== shown) {
           shown = v;
-          num.set(v.toFixed(1));
+          num.set(formatScore(v));
         }
         (glow.material as import('three').MeshBasicMaterial).opacity = 0.06 + 0.04 * Math.sin(t * 3);
         g.rotation.y = Math.sin(t * 0.4) * 0.2;
@@ -378,7 +377,16 @@ export const fanoutScene: SceneFactory = ({ THREE, canvas, width, height, isMobi
     canvas.addEventListener(type, fn as EventListener);
     listeners.push(() => canvas.removeEventListener(type, fn as EventListener));
   };
+  let capturedId: number | null = null;
   function detachInteraction() {
+    if (capturedId !== null) {
+      try {
+        canvas.releasePointerCapture(capturedId);
+      } catch {
+        /* capture déjà perdue */
+      }
+      capturedId = null;
+    }
     listeners.forEach((off) => off());
     listeners = [];
     drag = null;
@@ -404,26 +412,24 @@ export const fanoutScene: SceneFactory = ({ THREE, canvas, width, height, isMobi
       if (!n) return;
       drag = n;
       n.vel.set(0, 0, 0);
-      canvas.setPointerCapture((e as PointerEvent).pointerId);
+      capturedId = (e as PointerEvent).pointerId;
+      canvas.setPointerCapture(capturedId);
       canvas.style.cursor = 'grabbing';
     });
     const release = () => {
       if (!drag) return;
       drag = null;
+      capturedId = null;
       canvas.style.cursor = 'grab';
     };
     on('pointerup', release);
     on('pointercancel', release);
   }
-  let interactive = false;
-  function syncInteraction(w: number) {
-    const want = !isMobile && w >= CENTERED_BELOW;
-    if (want === interactive) return;
-    interactive = want;
-    if (want) attachInteraction();
-    else detachInteraction();
-  }
-  syncInteraction(width);
+  // Interaction réservée au grand écran (même seuil que `lg`), suivie en direct ; sinon le défilement tactile reste libre.
+  const gate =
+    typeof window.matchMedia === 'function'
+      ? createInteractionGate(window.matchMedia('(min-width: 1024px)'), { attach: attachInteraction, detach: detachInteraction })
+      : null;
 
   // ---------- cycle ----------
   let T = 0;
@@ -435,7 +441,7 @@ export const fanoutScene: SceneFactory = ({ THREE, canvas, width, height, isMobi
     judge.onSend();
     nodes.forEach((n) => {
       n.lat = 1.1 + Math.random() * 2.6;
-      n.score = +(6.4 + Math.random() * 3.4).toFixed(1);
+      n.score = randomScore();
       n.rank = 0;
       n.pop = 0;
       n.sc.sprite.visible = n.tm.sprite.visible = false;
@@ -490,7 +496,7 @@ export const fanoutScene: SceneFactory = ({ THREE, canvas, width, height, isMobi
       n.dotOut.position.lerpVectors(n.pos, JUDGE, back);
       (n.outL.material as import('three').LineBasicMaterial).opacity = (back > 0 && back < 1 ? 0.45 : 0.12) + stretch * 0.7;
       if (back >= 1 && !n.sc.sprite.visible) {
-        n.sc.set(`${n.score} / 10`);
+        n.sc.set(formatScore(n.score));
         n.sc.sprite.visible = true;
         judge.onScore(n.score);
       }
@@ -503,8 +509,7 @@ export const fanoutScene: SceneFactory = ({ THREE, canvas, width, height, isMobi
         .sort((a, b) => b.score - a.score)
         .forEach((n, k) => {
           n.rank = k + 1;
-          if (k < 3) n.sc.set(`${['🥇', '🥈', '🥉'][k]} ${n.score}`, '#FFB48A');
-          else n.sc.set(`${n.score} / 10`, '#7fa3b5');
+          n.sc.set(podiumLabel(k, n.score), k < 3 ? '#FFB48A' : '#7fa3b5');
         });
     }
     if (T > CYCLE) reset();
@@ -529,10 +534,10 @@ export const fanoutScene: SceneFactory = ({ THREE, canvas, width, height, isMobi
     resize(w, h) {
       renderer.setSize(w, h, false);
       fit(w, h);
-      syncInteraction(w);
     },
     dispose() {
       disposed = true;
+      gate?.dispose();
       detachInteraction();
       scene.traverse((o) => {
         const m = o as Mesh;

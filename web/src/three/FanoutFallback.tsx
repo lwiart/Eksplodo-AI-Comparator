@@ -61,11 +61,8 @@ export function FanoutFallback({ className = '' }: { className?: string }) {
           strokeDasharray="87 13"
           transform="rotate(-90)"
         />
-        <text y="0.18" textAnchor="middle" fontFamily="'Noto Sans Mono', monospace" fontWeight="600" fontSize="0.5" fill="#fff">
-          8.7
-        </text>
-        <text y="0.62" textAnchor="middle" fontFamily="'Noto Sans Mono', monospace" fontWeight="600" fontSize="0.2" fill="#7FA3B5">
-          / 10
+        <text y="0.17" textAnchor="middle" fontFamily="'Noto Sans Mono', monospace" fontWeight="600" fontSize="0.5" fill="#fff">
+          87
         </text>
       </g>
       <text x={JX} y="1.75" textAnchor="middle" fontFamily="'Noto Sans Mono', monospace" fontWeight="600" fontSize="0.28" fill="#fff">

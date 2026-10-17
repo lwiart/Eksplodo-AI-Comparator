@@ -76,3 +76,9 @@ test('la couche de page laisse passer la souris vers la scène ; seule la colonn
   expect(column).toHaveClass('pointer-events-auto');
   expect(column).toContainElement(screen.getByLabelText('E-mail'));
 });
+
+test('le titre laisse passer la souris, le bandeau la capte (pause au survol)', () => {
+  setup(vi.fn());
+  expect(screen.getByText('Testé · chronométré · noté')).toHaveClass('pointer-events-none');
+  expect(screen.getByTestId('provider-ticker')).toHaveClass('pointer-events-auto');
+});

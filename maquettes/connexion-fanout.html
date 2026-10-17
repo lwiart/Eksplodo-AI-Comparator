@@ -250,13 +250,12 @@ function judgeGaugeRound(){const g=new THREE.Group();const R=.95;
   const track=new THREE.Mesh(new THREE.TorusGeometry(R,.09,16,160),new THREE.MeshBasicMaterial({color:0x0c3a52}));
   const fill=new THREE.Mesh(new THREE.TorusGeometry(R,.1,16,160,.01),new THREE.MeshBasicMaterial({color:0xF0631F}));
   const tip=new THREE.Mesh(new THREE.SphereGeometry(.13,20,20),new THREE.MeshBasicMaterial({color:0xFFB48A}));
-  const num=label('',{size:64,color:'#fff',w:320,h:128});num.scale.set(1.25,.5,1);num.position.set(0,.06,.1);
-  const cap=label('/ 10',{size:28,color:'#7fa3b5',w:256,h:64});cap.scale.set(.9,.22,1);cap.position.set(0,-.4,.1);
+  const num=label('',{size:64,color:'#fff',w:320,h:128});num.scale.set(1.25,.5,1);num.position.set(0,0,.1);
   const glow=new THREE.Mesh(new THREE.CircleGeometry(R-.14,64),new THREE.MeshBasicMaterial({color:0xF0631F,transparent:true,opacity:.08}));glow.position.z=-.05;
-  g.add(glow,track,fill,tip,num,cap);let val=0,target=0,shown=-1;
-  return {g,update(t,dt){val=lerp(val,target,.08);const arc=Math.max(.01,val/10*Math.PI*2);fill.geometry.dispose();fill.geometry=new THREE.TorusGeometry(R,.1,16,160,arc);
+  g.add(glow,track,fill,tip,num);let val=0,target=0,shown=-1;
+  return {g,update(t,dt){val=lerp(val,target,.08);const arc=Math.max(.01,val/100*Math.PI*2);fill.geometry.dispose();fill.geometry=new THREE.TorusGeometry(R,.1,16,160,arc);
       fill.rotation.z=Math.PI/2-arc;const a=Math.PI/2-arc;tip.position.set(Math.cos(a)*R,Math.sin(a)*R,.02);tip.visible=val>.05;
-      const v=Math.round(val*10)/10;if(v!==shown){shown=v;num.userData.set(v.toFixed(1));}glow.material.opacity=.06+.04*Math.sin(t*3);g.rotation.y=Math.sin(t*.4)*.2;},onSend(){target=0;},onScore(s){target=s;}};}
+      const v=Math.round(val);if(v!==shown){shown=v;num.userData.set(String(v));}glow.material.opacity=.06+.04*Math.sin(t*3);g.rotation.y=Math.sin(t*.4)*.2;},onSend(){target=0;},onScore(s){target=s;}};}
 const PJ_VARIANTS=[
   {key:'final',label:'Retenu · Bulle & jauge ronde',prompt:promptBubble,judge:judgeGaugeRound},
   {key:'actuel',label:'Actuel',prompt:promptOrb,judge:judgeOrb},
@@ -307,7 +306,7 @@ const S1=(()=>{const S=setup('c1',45,[OFFSET_X,0,13],[OFFSET_X,0,0]);const root=
   const tmpT=new THREE.Vector3(),tmpD=new THREE.Vector3(),tmpF=new THREE.Vector3();
 
   let T=0,cycle=7.5,ranked=false;
-  function reset(){T=0;ranked=false;if(prompt){prompt.onSend();judge.onSend();}nodes.forEach(n=>{n.lat=1.1+Math.random()*2.6;n.score=+(6.4+Math.random()*3.4).toFixed(1);n.rank=0;n.pop=0;n.sc.visible=n.tm.visible=false;});}
+  function reset(){T=0;ranked=false;if(prompt){prompt.onSend();judge.onSend();}nodes.forEach(n=>{n.lat=1.1+Math.random()*2.6;n.score=64+Math.floor(Math.random()*35);n.rank=0;n.pop=0;n.sc.visible=n.tm.visible=false;});}
   reset();
   return {S,desc:'',setVariant,
     hud(){document.getElementById('hud').innerHTML='<div class="metric">Testé · chronométré · noté</div>';},
@@ -333,9 +332,9 @@ const S1=(()=>{const S=setup('c1',45,[OFFSET_X,0,13],[OFFSET_X,0,0]);const root=
         if(T>1+n.lat&&!n.tm.visible){n.tm.userData.set(`${n.lat.toFixed(1)} s`);n.tm.visible=true;n.pop=1;}
         n.dotOut.visible=back>0&&back<1;n.dotOut.position.lerpVectors(n.pos,JUDGE,back);
         n.outL.material.opacity=(back>0&&back<1?.45:.12)+stretch*.7;
-        if(back>=1&&!n.sc.visible){n.sc.userData.set(`${n.score} / 10`);n.sc.visible=true;judge.onScore(n.score);}
+        if(back>=1&&!n.sc.visible){n.sc.userData.set(String(n.score));n.sc.visible=true;judge.onScore(n.score);}
         n.sc.position.set(n.pos.x+1.45,n.pos.y,0);n.tm.position.set(n.pos.x-1.6,n.pos.y,0);});
-      if(!ranked&&nodes.every(n=>n.sc.visible)){ranked=true;[...nodes].sort((a,b)=>b.score-a.score).forEach((n,k)=>{n.rank=k+1;if(k<3)n.sc.userData.set(`${['🥇','🥈','🥉'][k]} ${n.score}`,'#FFB48A');else n.sc.userData.set(`${n.score} / 10`,'#7fa3b5');});}
+      if(!ranked&&nodes.every(n=>n.sc.visible)){ranked=true;[...nodes].sort((a,b)=>b.score-a.score).forEach((n,k)=>{n.rank=k+1;if(k<3)n.sc.userData.set(`${['🥇','🥈','🥉'][k]} ${n.score}`,'#FFB48A');else n.sc.userData.set(String(n.score),'#7fa3b5');});}
       if(T>cycle)reset();}};})();
 
 // =====================================================================
