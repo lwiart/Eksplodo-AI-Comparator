@@ -62,9 +62,23 @@ describe('interface statique', () => {
     const internal = await app.inject({ method: 'GET', url: '/internal/inconnu' });
     expect(internal.statusCode).toBe(404);
     expect(internal.json()).toMatchObject({ error: { code: 'not_found' } });
-    const share = await app.inject({ method: 'GET', url: '/share/abc' });
+    const share = await app.inject({ method: 'GET', url: '/share/abc/def' });
     expect(share.statusCode).toBe(404);
     expect(share.json()).toMatchObject({ error: { code: 'not_found' } });
+    await app.close();
+  });
+
+  test('page publique : /share/… n’est pas servi comme SPA ; /p/x renvoie index.html avec X-Robots-Tag noindex', async () => {
+    const app = await newApp({ webRoot });
+    const share = await app.inject({ method: 'GET', url: '/share/x/y' });
+    expect(share.statusCode).toBe(404);
+    expect(share.body).not.toContain('<div id="root">');
+    const page = await app.inject({ method: 'GET', url: '/p/Abc_123-def' });
+    expect(page.statusCode).toBe(200);
+    expect(page.body).toBe(INDEX);
+    expect(page.headers['x-robots-tag']).toBe('noindex');
+    const other = await app.inject({ method: 'GET', url: '/connexion' });
+    expect(other.headers['x-robots-tag']).toBeUndefined();
     await app.close();
   });
 

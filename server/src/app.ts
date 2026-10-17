@@ -21,6 +21,7 @@ import { createResultsService } from './modules/scoring/results.service.js';
 import { createManualScoringService } from './modules/scoring/manual.service.js';
 import { registerScoringRoutes } from './modules/scoring/scoring.routes.js';
 import { registerRunsRoutes } from './modules/runs/runs.routes.js';
+import { registerPublicShareRoutes } from './modules/sharing/public.routes.js';
 import { registerShareLinksRoutes } from './modules/sharing/share-links.routes.js';
 import { createShareLinksService } from './modules/sharing/share-links.service.js';
 import { createRunsService } from './modules/runs/runs.service.js';
@@ -194,6 +195,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   registerRunsRoutes(app, createRunsService(deps));
   registerScoringRoutes(app, deps);
   registerShareLinksRoutes(app, createShareLinksService(deps), deps);
+  registerPublicShareRoutes(app, deps);
   registerManualScoringRoutes(app, createManualScoringService(deps));
   registerResultsRoutes(app, createResultsService(deps));
   registerTickRoutes(app, deps);

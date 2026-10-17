@@ -47,6 +47,8 @@ export async function registerStatic(app: FastifyInstance, root: string): Promis
       }
       return reply.sendFile(pathname);
     }
+    // Page publique de partage (/p/<jeton>) : servie comme la SPA mais jamais indexée.
+    if (pathname.startsWith('/p/')) reply.header('x-robots-tag', 'noindex');
     // index.html n'est jamais mis en cache : il référence les fichiers fingerprintés du dernier build.
     return reply.header('cache-control', 'no-cache').sendFile('index.html', { cacheControl: false });
   });

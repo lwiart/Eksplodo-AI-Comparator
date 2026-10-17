@@ -21,6 +21,7 @@ export default defineConfig({
     proxy: {
       '/api': { target: API, changeOrigin: false },
       '/internal': { target: API, changeOrigin: false },
+      '/share': { target: API, changeOrigin: false },
       '/health': { target: API, changeOrigin: false },
     },
   },

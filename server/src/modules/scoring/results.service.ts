@@ -48,7 +48,7 @@ const snapshotName = sql<string>`JSON_UNQUOTE(JSON_EXTRACT(${runTests.snapshot},
 const snapshotCategory = sql<string>`JSON_UNQUOTE(JSON_EXTRACT(${runTests.snapshot}, '$.category'))`;
 const snapshotMethod = sql<ScoringMethod>`JSON_VALUE(${runTests.snapshot}, '$.scoringMethod')`;
 /** Moyenne des évaluateurs du résultat, au centième (nulle sans note) ; nom de table écrit en entier (sous-requête corrélée). */
-const manualAvg = sql<number | null>`(SELECT ROUND(AVG(m.score), 2) FROM manual_scores m WHERE m.result_id = results.id)`.mapWith(Number);
+export const manualAvg = sql<number | null>`(SELECT ROUND(AVG(m.score), 2) FROM manual_scores m WHERE m.result_id = results.id)`.mapWith(Number);
 
 const STATUS_LABELS: Record<ResultStatus, string> = {
   pending: 'en attente',
