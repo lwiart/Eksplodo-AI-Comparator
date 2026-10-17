@@ -90,6 +90,22 @@ test('Admin : modifier prix, couleur et activation ; Utilisateur : lecture seule
   expect(call[1].body).not.toHaveProperty('outputPricePerM');
 });
 
+test('Enregistrer sans modification : aucune requête, le formulaire se ferme', async () => {
+  const user = userEvent.setup();
+  renderPage('admin');
+  await user.click(await screen.findByRole('button', { name: 'Modifier' }));
+  await user.click(screen.getByRole('button', { name: 'Enregistrer' }));
+  await vi.waitFor(() => expect(screen.queryByRole('heading', { name: 'Modifier le modèle' })).not.toBeInTheDocument());
+  expect(apiFetch.mock.calls.some(([, init]) => init?.method === 'PATCH')).toBe(false);
+});
+
+test('mode faux : « Faux fournisseur » à la place de « Clé manquante »', async () => {
+  detail = () => Promise.resolve({ model: { ...MODEL, provider: { ...PROVIDER, keyState: 'missing', keyLast4: null, fake: true } } });
+  renderPage('user');
+  expect(await screen.findByText('Faux fournisseur')).toBeInTheDocument();
+  expect(screen.queryByText('Clé manquante')).not.toBeInTheDocument();
+});
+
 test('Utilisateur : aucun bouton de modification', async () => {
   renderPage('user');
   await screen.findByText('claude-opus-5-5');

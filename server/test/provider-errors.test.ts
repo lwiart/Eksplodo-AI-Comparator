@@ -13,7 +13,7 @@ const sig = new AbortController().signal;
 test.each([
   [401, '', 'auth_invalid', false], [403, '', 'auth_invalid', false], [404, '', 'model_not_found', false],
   [429, '', 'rate_limited', true], [500, '', 'provider_unavailable', true], [503, '', 'provider_unavailable', true],
-  [529, '', 'provider_unavailable', true], [413, '', 'context_too_long', false],
+  [529, '', 'provider_unavailable', true], [413, '', 'context_too_long', false], [408, '', 'timeout', true],
   [400, '{"error":{"code":"context_length_exceeded"}}', 'context_too_long', false],
   [400, 'prompt is too long: 250000 tokens > 200000 maximum', 'context_too_long', false],
   [400, '{"error":{"message":"API key not valid. Please pass a valid API key.","status":"INVALID_ARGUMENT"}}', 'auth_invalid', false],

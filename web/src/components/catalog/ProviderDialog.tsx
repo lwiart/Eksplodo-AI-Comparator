@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState, type FormEvent } from 'react';
 import { PROVIDERS_KEY, createProvider, updateProvider, type ProviderType, type PublicProvider } from '../../api/catalog';
-import { messageForError } from '../../api/messages';
+import { messageForKeyError } from '../../api/messages';
 import { Button } from '../ui/Button';
 import { Dialog } from '../ui/Dialog';
 import { Field } from '../ui/Field';
@@ -37,7 +37,11 @@ export function ProviderDialog({ provider, open, onOpenChange }: Props) {
     gcTime: 0, // la clé éventuelle ne reste pas dans le cache de TanStack
     mutationFn: () => {
       const base = { name: name.trim(), type, baseUrl: baseUrl.trim(), maxConcurrency: Number(concurrency) };
-      if (provider) return updateProvider(provider.id, { ...base, enabled });
+      if (provider) {
+        const all = { ...base, enabled };
+        const changed = Object.fromEntries(Object.entries(all).filter(([k, v]) => v !== provider[k as keyof typeof all]));
+        return Object.keys(changed).length === 0 ? Promise.resolve(null) : updateProvider(provider.id, changed);
+      }
       const key = apiKey.trim();
       return createProvider({ ...base, ...(key !== '' ? { apiKey: key } : {}) });
     },
@@ -52,7 +56,7 @@ export function ProviderDialog({ provider, open, onOpenChange }: Props) {
       }
       close();
     },
-    onError: (err) => setError(messageForError(err)),
+    onError: (err) => setError(messageForKeyError(err)),
   });
 
   function submit(e: FormEvent) {
@@ -77,6 +81,7 @@ export function ProviderDialog({ provider, open, onOpenChange }: Props) {
           autoComplete="off"
           required
           placeholder="https://api.exemple.com/v1"
+          hint={provider ? 'Changer l’hôte de l’URL efface la clé enregistrée : ressaisissez-la.' : undefined}
           className="font-mono"
           value={baseUrl}
           onChange={(e) => setBaseUrl(e.target.value)}

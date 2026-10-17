@@ -77,6 +77,14 @@ export type ProviderInput = {
   maxConcurrency?: number;
   apiKey?: string;
 };
+function hostOf(url: string): string | null {
+  try {
+    return new URL(url).host.toLowerCase();
+  } catch {
+    return null;
+  }
+}
+
 /** `apiKey: string` remplace la clé, `apiKey: null` la supprime. */
 export type ProviderUpdate = Partial<Omit<ProviderInput, 'apiKey'>> & { enabled?: boolean; apiKey?: string | null };
 
@@ -226,7 +234,7 @@ export function createCatalogService(deps: CatalogServiceDeps) {
     },
 
     async updateProvider(actor: Actor, id: string, patch: ProviderUpdate): Promise<PublicProvider> {
-      await requireProvider(id);
+      const current = await requireProvider(id);
       const { apiKey, ...rest } = patch;
       const columns: ProviderPatch = { ...rest };
       let keyChanged: 'replaced' | 'removed' | null = null;
@@ -234,6 +242,11 @@ export function createCatalogService(deps: CatalogServiceDeps) {
         Object.assign(columns, sealApiKey(apiKey, deps.config.encryptionKey));
         keyChanged = 'replaced';
       } else if (apiKey === null) {
+        columns.apiKeyEncrypted = null;
+        columns.apiKeyLast4 = null;
+        keyChanged = 'removed';
+      } else if (rest.baseUrl !== undefined && hostOf(rest.baseUrl) !== hostOf(current.baseUrl)) {
+        // Une clé ne part jamais vers un nouvel hôte sans avoir été ressaisie.
         columns.apiKeyEncrypted = null;
         columns.apiKeyLast4 = null;
         keyChanged = 'removed';

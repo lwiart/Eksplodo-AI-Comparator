@@ -103,7 +103,7 @@ export function createOpenAiCompatibleAdapter(cfg: ProviderConfig): ProviderAdap
         }
         if (!isRecord(packet)) throw new ProviderError('invalid_response', { detail: 'Paquet de flux inattendu' });
 
-        if (packet.error !== undefined) {
+        if (packet.error != null) {
           const e = isRecord(packet.error) ? packet.error : {};
           const code = typeof e.code === 'number' ? e.code : 502;
           throw httpError(code, JSON.stringify(packet), {}, secrets);
@@ -150,9 +150,9 @@ export function createOpenAiCompatibleAdapter(cfg: ProviderConfig): ProviderAdap
       } catch {
         throw new ProviderError('invalid_response', { detail: 'Liste de modèles non JSON' });
       }
-      if (openRouter) return parseOpenRouterModels(json);
       const data = isRecord(json) && Array.isArray(json.data) ? json.data : null;
       if (!data) throw new ProviderError('invalid_response', { detail: 'Liste de modèles inattendue' });
+      if (openRouter) return parseOpenRouterModels(json);
       return data
         .flatMap((m) => (isRecord(m) && typeof m.id === 'string' && m.id !== '' ? [m.id] : []))
         .sort()

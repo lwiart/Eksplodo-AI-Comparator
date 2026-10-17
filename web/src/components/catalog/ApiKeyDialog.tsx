@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState, type FormEvent } from 'react';
 import { PROVIDERS_KEY, updateProvider } from '../../api/catalog';
-import { messageForError } from '../../api/messages';
+import { messageForKeyError } from '../../api/messages';
 import { Button } from '../ui/Button';
 import { Dialog } from '../ui/Dialog';
 import { Field } from '../ui/Field';
@@ -60,7 +60,7 @@ export function ApiKeyDialog({ providerId, providerName, hasKey, open, onOpenCha
       void client.invalidateQueries({ queryKey: PROVIDERS_KEY });
     },
     onSuccess: () => close(),
-    onError: (err) => setError(messageForError(err)),
+    onError: (err) => setError(messageForKeyError(err)),
   });
 
   function submit(e: FormEvent) {

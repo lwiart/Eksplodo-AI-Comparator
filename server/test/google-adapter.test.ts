@@ -155,6 +155,12 @@ describe('generate', () => {
     expect(textOf(seen)).toBe('Début de réponse');
   });
 
+  test('paquet "error": null avec du texte : pas une erreur', async () => {
+    const sse = 'data: {"error":null,"candidates":[{"content":{"role":"model","parts":[{"text":"Bonjour"}]},"finishReason":"STOP"}]}\n\n';
+    const events = await collect(make(fakeFetch({ [URL_GEN]: () => new Response(sse) })));
+    expect(textOf(events)).toBe('Bonjour');
+  });
+
   test('ligne data non JSON → invalid_response', async () => {
     const adapter = make(fakeFetch({ [URL_GEN]: ok('google/bad-json.sse') }));
     await expect(collect(adapter)).rejects.toMatchObject({ code: 'invalid_response' });

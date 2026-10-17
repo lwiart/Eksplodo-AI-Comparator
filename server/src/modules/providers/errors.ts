@@ -83,6 +83,7 @@ const KEY_INVALID = /API_KEY_INVALID|API key not valid/i;
 function classify(status: number, body: string): ProviderErrorCode {
   if (status === 401 || status === 403) return 'auth_invalid';
   if (status === 404) return 'model_not_found';
+  if (status === 408) return 'timeout';
   if (status === 413) return 'context_too_long';
   if (status === 429) return 'rate_limited';
   if (status >= 500) return 'provider_unavailable';

@@ -17,6 +17,7 @@ type Model = PublicModel & { provider: PublicProvider };
 const EMPTY_SERIES = 'Aucune série pour l’instant';
 
 function KeyChip({ provider, isAdmin }: { provider: PublicProvider; isAdmin: boolean }) {
+  if (provider.fake) return <Chip tone="live">Faux fournisseur</Chip>;
   if (provider.keyState === 'stored') {
     return (
       <Chip tone="good">
@@ -73,7 +74,10 @@ function EditPanel({ model, onDone }: { model: Model; onDone(): void }) {
   const [draft, setDraft] = useState(() => draftFromModel(model));
   const [enabled, setEnabled] = useState(model.enabled);
   const save = useMutation({
-    mutationFn: () => updateModel(model.id, patchFrom(model, draft, enabled)),
+    mutationFn: async () => {
+      const patch = patchFrom(model, draft, enabled);
+      if (Object.keys(patch).length > 0) await updateModel(model.id, patch);
+    },
     onSuccess: async () => {
       await client.invalidateQueries({ queryKey: MODELS_KEY });
       onDone();

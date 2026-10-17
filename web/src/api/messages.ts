@@ -29,6 +29,13 @@ export function messageFor(code: string): string {
   return Object.hasOwn(MESSAGES, code) ? MESSAGES[code]! : DEFAULT_MESSAGE;
 }
 
+/** Comme `messageForError`, mais le refus d'une clé mal formée garde le message précis du serveur. */
+export function messageForKeyError(err: unknown): string {
+  const { code, message } = (err ?? {}) as { code?: unknown; message?: unknown };
+  if (code === 'validation' && typeof message === 'string' && message.startsWith('Clé API invalide')) return message;
+  return messageForError(err);
+}
+
 /** Message à afficher pour une erreur quelconque (ApiError ou autre). */
 export function messageForError(err: unknown): string {
   const { code, reference } = (err ?? {}) as { code?: unknown; reference?: unknown };

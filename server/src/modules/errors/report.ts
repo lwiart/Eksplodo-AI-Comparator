@@ -81,15 +81,15 @@ const MASK_KEY = '[clé masquée]';
 
 /** Valeur déjà masquée : les règles suivantes ne la masquent pas une seconde fois. */
 const NOT_MASKED = String.raw`(?!\[clé masquée\])`;
-const HEADER_KEY_RE = new RegExp(String.raw`\b(x-goog-api-key|x-api-key|api-key)(\s*[:=]\s*)${NOT_MASKED}[^\s"',;]+`, 'gi');
+const HEADER_KEY_RE = new RegExp(String.raw`\b(x-goog-api-key|x-api-key|api-key)(\s*[:=]\s*["']?)${NOT_MASKED}[^\s"',;]+`, 'gi');
 const AUTHORIZATION_RE = new RegExp(String.raw`\b(authorization\s*[:=]\s*)${NOT_MASKED}(?:[A-Za-z]+\s+)?[^\s"',;]+`, 'gi');
-const JSON_FIELD_RE = /(["'])(api_key|apiKey|api-key|x-api-key|secret|password|token)\1(\s*:\s*)(["'])((?:(?!\4).)*)\4/gi;
+const JSON_FIELD_RE = /(["'])(api_key|apiKey|api-key|x-api-key|x-goog-api-key|authorization|access_token|refresh_token|secret|password|token)\1(\s*:\s*)(["'])((?:\\.|(?!\4).)*)\4/gi;
 
 /**
  * Masque les secrets de forme connue : jetons `Bearer`, clés `sk-…` (OpenRouter, OpenAI, Anthropic), clés Google
  * `AIza…`, paramètre d'URL `key=…`, en-têtes `x-api-key`, `x-goog-api-key`, `api-key` et `authorization` (tout schéma,
  * `Basic` compris) suivis de `:` ou `=`, et valeurs des champs JSON ou objet `api_key`, `apiKey`, `api-key`, `x-api-key`,
- * `secret`, `password` et `token` (le nom du champ et le reste du texte sont conservés). Appliqué au message et à la pile
+ * `x-goog-api-key`, `authorization`, `access_token`, `refresh_token`, `secret`, `password` et `token` (le nom du champ et le reste du texte sont conservés). Appliqué au message et à la pile
  * avant toute écriture en base.
  */
 export function redact(text: string): string {

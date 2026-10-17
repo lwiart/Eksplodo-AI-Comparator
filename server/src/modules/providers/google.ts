@@ -81,7 +81,7 @@ export function createGoogleAdapter(cfg: ProviderConfig): ProviderAdapter {
         }
         if (!isRecord(packet)) throw new ProviderError('invalid_response', { detail: 'Paquet de flux inattendu' });
 
-        if (packet.error !== undefined) {
+        if (packet.error != null) {
           const e = isRecord(packet.error) ? packet.error : {};
           const code = typeof e.code === 'number' ? e.code : 502;
           throw httpError(code, JSON.stringify(packet), {}, secrets);

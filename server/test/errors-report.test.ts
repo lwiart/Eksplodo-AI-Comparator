@@ -350,6 +350,19 @@ describe('redact : formes des fournisseurs', () => {
   test('redact garde le nom du champ et le reste du texte', () => {
     expect(redact('{"api_key":"abc123456789","model":"gpt-x"}')).toBe('{"api_key":"[clé masquée]","model":"gpt-x"}');
   });
+  test('redact : valeur entre guillemets, champs JSON authorization et x-goog-api-key, guillemet échappé', () => {
+    expect(redact('x-api-key: "abcdefgh1234"')).toBe('x-api-key: "[clé masquée]"');
+    expect(redact('{"Authorization":"Basic dXNlcjpwYXNz"}')).toBe('{"Authorization":"[clé masquée]"}');
+    expect(redact('{"x-goog-api-key": "AQ.secret-12345678"}')).toBe('{"x-goog-api-key": "[clé masquée]"}');
+    expect(redact('{"access_token":"abc.def.ghi","refresh_token":"zzz"}')).toBe(
+      '{"access_token":"[clé masquée]","refresh_token":"[clé masquée]"}',
+    );
+    expect(redact('{"password":"ab\\"cd-secret-123"}')).toBe('{"password":"[clé masquée]"}');
+  });
+  test('redact : pas de double masquage', () => {
+    expect(redact('X-Api-Key=abcdefghij0123456789')).toBe('X-Api-Key=[clé masquée]');
+    expect(redact('Authorization: Bearer xyz.token')).toBe('Authorization: [clé masquée]');
+  });
   test('redact ne touche pas un texte sans secret', () => {
     expect(redact('Modèle claude-opus-5-5 introuvable (404)')).toBe('Modèle claude-opus-5-5 introuvable (404)');
   });

@@ -54,7 +54,7 @@ Tant que le dépôt GitHub n'est pas branché dans hPanel, le déploiement se fa
 1. `git archive --format=zip -o app.zip HEAD` (seuls les fichiers commités sont inclus).
 2. Envoyer `app.zip` dans `public_html` (gestionnaire de fichiers hPanel, ou envoi TUS via l'API `hosting_files_generate-upload-url`). **L'archive est consommée par chaque build : la renvoyer avant chaque nouveau build.**
 3. Lancer le build : Node 24, type `fastify`, script `build`, fichier d'entrée `dist/server/index.js`, dossier de sortie `.`.
-4. Vérifier : `https://ia.eksplodo.fr/health` → `{"status":"ok","db":"ok","worker":"running","providers":{"configured":N}}` (`N` : nombre de fournisseurs activés dont la clé est utilisable), puis la page de connexion.
+4. Vérifier : `https://ia.eksplodo.fr/health` → `{"status":"ok","db":"ok","worker":"running","providers":{"configured":N}}` (`N` : nombre de fournisseurs activés dont la clé est utilisable), puis la page de connexion. Une réponse 503 `{"status":"degraded","db":"down"}` signifie que la base est injoignable.
 
 Plus tard (recommandé) : brancher GitHub dans hPanel (Sites web → Gérer → Avancé → Git) pour un déploiement automatique.
 

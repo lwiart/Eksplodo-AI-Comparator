@@ -77,6 +77,21 @@ describe('fournisseurs', () => {
     expect(audits).not.toContain('9876543210');
   });
 
+  test('PATCH : changer l’hôte efface la clé, sauf nouvelle clé ; le chemin seul la garde', async () => {
+    const { patch, db } = await setup();
+    const p = await seedProvider(db, { apiKey: KEY });
+    const path = await patch(`/api/providers/${p.id}`, { baseUrl: 'https://api.example.test/v2' });
+    expect(path.json().provider).toMatchObject({ keyState: 'stored' });
+    const host = await patch(`/api/providers/${p.id}`, { baseUrl: 'https://autre.example.test/v2' });
+    expect(host.json().provider).toMatchObject({ keyState: 'missing', keyLast4: null, usable: false });
+    const q = await seedProvider(db, { apiKey: KEY });
+    const withKey = await patch(`/api/providers/${q.id}`, { baseUrl: 'https://autre.example.test/v1', apiKey: 'sk-nouvelle-9876543210wxyz' });
+    expect(withKey.json().provider).toMatchObject({ keyState: 'stored', keyLast4: 'wxyz' });
+    const audits = JSON.stringify(await db.select().from(auditLog));
+    expect(audits).toContain('"keyChanged":"removed"');
+    expect(audits).toContain('"keyChanged":"replaced"');
+  });
+
   test('clé invalide (vide, espaces, retour à la ligne) → 400 validation', async () => {
     const { post } = await setup();
     for (const apiKey of ['', '   ', 'sk-avec espace-123', 'sk-ligne\n-1234567']) {

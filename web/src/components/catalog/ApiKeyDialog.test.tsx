@@ -51,6 +51,16 @@ test('Supprimer la clé demande confirmation puis envoie apiKey: null', async ()
   await waitFor(() => expect(apiFetch).toHaveBeenCalledWith('/api/providers/p1', { method: 'PATCH', body: { apiKey: null } }));
 });
 
+test('clé mal formée : le message précis du serveur est affiché', async () => {
+  const user = userEvent.setup();
+  const message = 'Clé API invalide : 8 à 500 caractères imprimables, sans espace';
+  apiFetch.mockRejectedValue(Object.assign(new Error(message), { code: 'validation', status: 400 }));
+  renderDialog();
+  await user.type(screen.getByLabelText('Clé API'), KEY);
+  await user.click(screen.getByRole('button', { name: 'Enregistrer' }));
+  expect(await screen.findByRole('alert')).toHaveTextContent(message);
+});
+
 test('une erreur du serveur est affichée et la saisie est effacée', async () => {
   const user = userEvent.setup();
   apiFetch.mockRejectedValue(Object.assign(new Error('x'), { code: 'validation', status: 400 }));

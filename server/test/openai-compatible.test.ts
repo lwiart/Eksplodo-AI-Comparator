@@ -156,6 +156,12 @@ describe('generate', () => {
     expect(textOf(seen)).toBe('Début de réponse');
   });
 
+  test('paquet "error": null avec du texte : pas une erreur', async () => {
+    const sse = 'data: {"error":null,"choices":[{"index":0,"delta":{"content":"Bonjour"},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n';
+    const events = await collect(make(fakeFetch({ [URL_CHAT]: () => new Response(sse) })));
+    expect(textOf(events)).toBe('Bonjour');
+  });
+
   test('flux coupé sans [DONE] ni finish_reason : se termine sans événement finish', async () => {
     const events = await collect(make(fakeFetch({ [URL_CHAT]: ok('openai/cut.sse') })));
     expect(textOf(events)).toBe('Réponse coupée');
@@ -228,6 +234,12 @@ describe('listModels', () => {
     expect(models.find((m) => m.id === 'anthropic/claude-sonnet-5.5')).toMatchObject({
       inputPricePerM: 2, outputPricePerM: 10, supportsVision: true, supportsPdf: true,
     });
+  });
+
+  test('listModels sur OpenRouter sans tableau data → invalid_response', async () => {
+    const url = 'https://openrouter.ai/api/v1';
+    const f = fakeFetch({ [`GET ${url}/models`]: () => new Response('{"models":[]}') });
+    await expect(make(f, { baseUrl: url }).listModels(sig)).rejects.toMatchObject({ code: 'invalid_response' });
   });
 
   test('HTTP 401 et réponse illisible', async () => {

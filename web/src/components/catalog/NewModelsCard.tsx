@@ -40,6 +40,11 @@ function NewModelRow({ model, canAdd, onAdd }: { model: NewModel; canAdd: boolea
           Ignorer
         </Button>
       </div>
+      {dismiss.isError ? (
+        <p role="alert" className="m-0 basis-full text-xs text-bad">
+          {messageForError(dismiss.error)}
+        </p>
+      ) : null}
     </li>
   );
 }
@@ -51,7 +56,7 @@ function NewModelsList() {
 
   const openRouterId = fresh.data?.openRouterProviderId ?? null;
   const openRouter = providers.data?.find((p) => p.id === openRouterId);
-  const canAdd = openRouter !== undefined;
+  const canAdd = openRouter?.usable === true;
 
   return (
     <Card>
@@ -69,6 +74,10 @@ function NewModelsList() {
           {openRouterId === null ? (
             <p className="mt-2 mb-0 text-xs text-peach">
               Activez le fournisseur OpenRouter dans « Fournisseurs » pour ajouter ces modèles au catalogue.
+            </p>
+          ) : openRouter && !openRouter.usable ? (
+            <p className="mt-2 mb-0 text-xs text-peach">
+              La clé du fournisseur OpenRouter est manquante ou illisible : saisissez-la dans « Fournisseurs » pour ajouter ces modèles.
             </p>
           ) : null}
           <ul className="m-0 mt-2 list-none p-0">
