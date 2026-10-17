@@ -332,3 +332,25 @@ describe("écouteurs d'alerte isolés", () => {
     }
   });
 });
+
+describe('redact : formes des fournisseurs', () => {
+  test.each([
+    ['x-api-key: sk-ant-api03-AbCdEf123456', 'sk-ant-api03-AbCdEf123456'],
+    ['X-Api-Key=abcdefghij0123456789', 'abcdefghij0123456789'],
+    ['x-goog-api-key: AQ.Ab8RN6Kz-very-secret', 'AQ.Ab8RN6Kz-very-secret'],
+    ['{"api_key":"mistral-0123456789abcdef"}', 'mistral-0123456789abcdef'],
+    ['{"apiKey": "ds-0123456789abcdef"}', 'ds-0123456789abcdef'],
+    ["{'api-key': 'tok_0123456789abcdef'}", 'tok_0123456789abcdef'],
+    ['Authorization: Basic dXNlcjpwYXNzd29yZA==', 'dXNlcjpwYXNzd29yZA=='],
+  ])('redact masque %s', (input, secret) => {
+    const out = redact(input);
+    expect(out).not.toContain(secret);
+    expect(out).toContain('[clé masquée]');
+  });
+  test('redact garde le nom du champ et le reste du texte', () => {
+    expect(redact('{"api_key":"abc123456789","model":"gpt-x"}')).toBe('{"api_key":"[clé masquée]","model":"gpt-x"}');
+  });
+  test('redact ne touche pas un texte sans secret', () => {
+    expect(redact('Modèle claude-opus-5-5 introuvable (404)')).toBe('Modèle claude-opus-5-5 introuvable (404)');
+  });
+});

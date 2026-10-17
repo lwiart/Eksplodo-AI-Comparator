@@ -79,16 +79,28 @@ function serialized<T>(key: string, task: () => Promise<T>): Promise<T> {
 
 const MASK_KEY = '[clé masquée]';
 
+/** Valeur déjà masquée : les règles suivantes ne la masquent pas une seconde fois. */
+const NOT_MASKED = String.raw`(?!\[clé masquée\])`;
+const HEADER_KEY_RE = new RegExp(String.raw`\b(x-goog-api-key|x-api-key|api-key)(\s*[:=]\s*)${NOT_MASKED}[^\s"',;]+`, 'gi');
+const AUTHORIZATION_RE = new RegExp(String.raw`\b(authorization\s*[:=]\s*)${NOT_MASKED}(?:[A-Za-z]+\s+)?[^\s"',;]+`, 'gi');
+const JSON_FIELD_RE = /(["'])(api_key|apiKey|api-key|x-api-key|secret|password|token)\1(\s*:\s*)(["'])((?:(?!\4).)*)\4/gi;
+
 /**
  * Masque les secrets de forme connue : jetons `Bearer`, clés `sk-…` (OpenRouter, OpenAI, Anthropic), clés Google
- * `AIza…` et paramètre d'URL `key=…`. Appliqué au message et à la pile avant toute écriture en base.
+ * `AIza…`, paramètre d'URL `key=…`, en-têtes `x-api-key`, `x-goog-api-key`, `api-key` et `authorization` (tout schéma,
+ * `Basic` compris) suivis de `:` ou `=`, et valeurs des champs JSON ou objet `api_key`, `apiKey`, `api-key`, `x-api-key`,
+ * `secret`, `password` et `token` (le nom du champ et le reste du texte sont conservés). Appliqué au message et à la pile
+ * avant toute écriture en base.
  */
 export function redact(text: string): string {
   return text
     .replace(/Bearer\s+\S+/gi, MASK_KEY)
     .replace(/sk-[A-Za-z0-9_-]{8,}/g, MASK_KEY)
     .replace(/AIza[0-9A-Za-z_-]{10,}/g, MASK_KEY)
-    .replace(/\b([A-Za-z0-9_-]*key)=[^&\s"'<>]+/gi, `$1=${MASK_KEY}`);
+    .replace(/\b([A-Za-z0-9_-]*key)=[^&\s"'<>]+/gi, `$1=${MASK_KEY}`)
+    .replace(HEADER_KEY_RE, `$1$2${MASK_KEY}`)
+    .replace(AUTHORIZATION_RE, `$1${MASK_KEY}`)
+    .replace(JSON_FIELD_RE, `$1$2$1$3$4${MASK_KEY}$4`);
 }
 
 function mask(input: ErrorInput): { message: string; stack: string | null } {
