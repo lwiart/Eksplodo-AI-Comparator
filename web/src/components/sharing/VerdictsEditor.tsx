@@ -17,7 +17,7 @@ export type DraftVerdict = ShareVerdict & { key: string };
 let counter = 0;
 export const newKey = (): string => `v${++counter}`;
 export const toDraft = (v: ShareVerdict): DraftVerdict => ({ ...v, key: newKey() });
-export const fromDraft = ({ label, modelId, text }: DraftVerdict): ShareVerdict => ({ label: label.trim(), modelId, text });
+export const fromDraft = ({ label, modelId, text, auto }: DraftVerdict): ShareVerdict => ({ label: label.trim(), modelId, text, ...(auto ? { auto } : {}) });
 
 const score = (x: number) => String(Math.round(x));
 
@@ -32,6 +32,7 @@ export function proposeVerdicts(ranking: Ranking, withCost: boolean): ShareVerdi
   if (top) {
     out.push({
       label: 'Meilleur compromis',
+      auto: 'global',
       modelId: top.model.modelId,
       text: `${top.model.name} a le meilleur score global (${score(top.global!)} sur 100).`,
     });
@@ -53,12 +54,13 @@ export function proposeVerdicts(ranking: Ranking, withCost: boolean): ShareVerdi
   if (quality) {
     out.push({
       label: 'Meilleure qualité',
+      auto: 'quality',
       modelId: quality.model.modelId,
       text: `${quality.model.name} obtient la meilleure qualité (${score(quality.value)} sur 100).`,
     });
   }
   const cheap = best((m) => m.raw.meanCostUsd, (a, b) => a < b);
-  if (cheap && withCost) out.push({ label: COST_VERDICT_LABEL, modelId: cheap.model.modelId, text: `${cheap.model.name} est le moins cher par réponse.` });
+  if (cheap && withCost) out.push({ label: COST_VERDICT_LABEL, auto: 'cost', modelId: cheap.model.modelId, text: `${cheap.model.name} est le moins cher par réponse.` });
   return out;
 }
 
@@ -72,7 +74,16 @@ type Props = {
 export function VerdictsEditor({ verdicts, models, onChange }: Props) {
   const heading = useId();
   const options = [{ value: '', label: 'Aucun modèle' }, ...models.map((m) => ({ value: m.modelId, label: m.name }))];
-  const patch = (key: string, change: Partial<ShareVerdict>) => onChange(verdicts.map((v) => (v.key === key ? { ...v, ...change } : v)));
+  // Modifier le modèle ou la phrase fige le verdict : il n'est plus recalculé à l'affichage (le titre seul ne compte pas).
+  const patch = (key: string, change: Partial<ShareVerdict>) =>
+    onChange(
+      verdicts.map((v) => {
+        if (v.key !== key) return v;
+        const next = { ...v, ...change };
+        if ('text' in change || 'modelId' in change) delete next.auto;
+        return next;
+      }),
+    );
   return (
     <section aria-labelledby={heading} className="flex flex-col gap-3">
       <div className="flex items-baseline justify-between gap-3">

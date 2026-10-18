@@ -52,6 +52,7 @@ const verdictSchema = z
     label: z.string().trim().min(1).max(60),
     modelId: z.string().uuid().nullable(),
     text: z.string().max(500),
+    auto: z.enum(['global', 'quality', 'cost']).optional(),
   })
   .strict();
 

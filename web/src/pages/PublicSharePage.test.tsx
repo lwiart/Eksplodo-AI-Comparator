@@ -226,12 +226,40 @@ test('bandeau : une information par ligne, et la gerbe dans une bande à droite'
   expect(screen.queryByText(/Résultats de/)).toBeNull();
 });
 
-test('constellation des modèles affichée à côté du podium, absente de la version imprimable', async () => {
+test('ordre : verdicts, podium sur toute la largeur, constellation sur toute la largeur (sans impression), puis le nuage', async () => {
   mockFetch(SHARE);
   renderPage();
   const heading = await screen.findByRole('heading', { name: /Constellation des modèles/ });
   expect(heading.closest('.no-print')).not.toBeNull();
   expect(screen.getByRole('list', { name: 'Légende de la constellation' })).toBeInTheDocument();
+  const main = screen.getByRole('main');
+  const verdicts = screen.getByRole('list', { name: 'Verdicts' });
+  const podiumCard = screen.getByRole('heading', { level: 2, name: 'Podium score global pondéré' }).parentElement!;
+  const constellationCard = screen.getByTestId('constellation-fallback').closest('.no-print')!;
+  const scatterCard = screen.getByTestId('quality-speed-chart').parentElement!;
+  // Podium et constellation sont des enfants directs de la colonne : plus de grille côte à côte.
+  expect(podiumCard.parentElement).toBe(main);
+  expect(constellationCard.parentElement).toBe(main);
+  expect(main.querySelector('[class*="grid-cols-[1.4fr_1fr]"]')).toBeNull();
+  const follows = (a: Element, b: Element) => (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
+  expect(follows(verdicts, podiumCard)).toBe(true);
+  expect(follows(podiumCard, constellationCard)).toBe(true);
+  expect(follows(constellationCard, scatterCard)).toBe(true);
+  // Le podium remplit une zone de hauteur fixe, masquée à l'impression (le podium statique la remplace).
+  expect(screen.getByRole('list', { name: 'Podium' }).parentElement).toHaveClass('no-print', 'h-[280px]');
+});
+
+test('nuage : tous les modèles, aide avec les définitions, plus de mention « premiers modèles »', async () => {
+  const many = Array.from({ length: 8 }, (_, i) => ({ ...models[0]!, modelId: `x${i}`, name: `Modèle ${i}` }));
+  mockFetch({ ...SHARE, models: many });
+  renderPage();
+  await screen.findByRole('heading', { level: 1, name: SHARE.title });
+  expect(screen.queryByText(/premiers modèles sur/)).toBeNull();
+  expect(within(screen.getByRole('list', { name: 'Légende du nuage' })).getAllByRole('listitem')).toHaveLength(8);
+  const help = screen.getByRole('button', { name: 'Aide : Qualité et vitesse' });
+  const text = document.getElementById(help.getAttribute('aria-describedby')!)?.textContent ?? '';
+  expect(text).toContain(DEFINITIONS.quality);
+  expect(text).toContain(DEFINITIONS.speed);
 });
 
 test('bandeau : répétitions au pluriel juste après le nombre de cas', async () => {

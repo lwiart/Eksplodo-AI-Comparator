@@ -19,6 +19,7 @@ import {
   placeLabel,
   sameHover,
   orbitRadius,
+  orbitRanks,
   orbitSpeed,
   starCount,
 } from './constellation-scene';
@@ -59,6 +60,18 @@ test('orbites : régulières, plafonnées, positions sur le cercle ; particules 
   expect(Math.abs(p.y)).toBeLessThanOrEqual(0.08);
   expect(flowCount(true)).toBe(flowCount(false) / 2);
   expect(starCount(true)).toBe(starCount(false) / 2);
+});
+
+test('orbites par débit : le plus rapide au plus près du centre, puis par débit décroissant, sans débit à l’extérieur', () => {
+  // Ordre reçu (classement) : a, b, c, d, e. Débits : 40, inconnu, 120, 80, inconnu.
+  const ranks = orbitRanks([{ tokensPerS: 40 }, { tokensPerS: null }, { tokensPerS: 120 }, { tokensPerS: 80 }, { tokensPerS: null }]);
+  expect(ranks).toEqual([2, 3, 0, 1, 4]);
+  // Égalité de débit, ou débit illisible : l'ordre reçu départage.
+  expect(orbitRanks([{ tokensPerS: 50 }, { tokensPerS: 50 }, { tokensPerS: Number.NaN }, { tokensPerS: 10 }])).toEqual([0, 1, 3, 2]);
+  expect(orbitRanks([])).toEqual([]);
+  // Le plus rapide a donc l'orbite la plus petite.
+  expect(orbitRadius(ranks[2]!, 5)).toBe(FIRST_ORBIT);
+  expect(orbitRadius(ranks[4]!, 5)).toBeGreaterThan(orbitRadius(ranks[1]!, 5));
 });
 
 test('survol : coordonnées écran, événement réémis seulement si l’astre change ou bouge d’au moins un demi-pixel', () => {
@@ -109,4 +122,17 @@ test('sans WebGL : repli SVG avec un astre par modèle', async () => {
   expect(astres).toHaveLength(2);
   const fills = astres.map((g) => g.querySelectorAll('circle')[1]!.getAttribute('fill'));
   expect(fills).toEqual(['#F0631F', UNRATED_COLOR]);
+});
+
+test('repli SVG : l’orbite suit le débit, pas l’ordre reçu', () => {
+  const data = {
+    models: [
+      { id: 'lent', color: '#F0631F', quality: 90, tokensPerS: 20 },
+      { id: 'rapide', color: '#3FA2E0', quality: 70, tokensPerS: 90 },
+    ],
+  };
+  render(createElement(ConstellationFallback, { data }));
+  const orbits = screen.getAllByTestId('constellation-astre').map((g) => Number(g.querySelector('circle')!.getAttribute('r')));
+  expect(orbits[1]).toBe(FIRST_ORBIT);
+  expect(orbits[0]).toBeGreaterThan(orbits[1]!);
 });

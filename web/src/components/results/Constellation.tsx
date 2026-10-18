@@ -24,8 +24,9 @@ export function hoverDetails(m: RankingModel): string {
 
 /**
  * Constellation des modèles : un astre par modèle, de sa couleur (gris et plus petit tant qu'il n'est pas noté).
- * Taille = qualité (note sur 100), vitesse de rotation = débit médian (relatif au plus rapide) ; les orbites suivent
- * l'ordre reçu, celui du classement : le premier tourne au plus près du centre. Une icône « ? » l'explique.
+ * Taille = qualité (note sur 100) ; distance au centre = débit médian en tokens par seconde : le plus rapide sur l'orbite
+ * la plus proche du centre, puis par débit décroissant, les modèles sans débit à l'extérieur (voir `orbitRanks`). La
+ * vitesse de rotation suit aussi le débit (les astres proches tournent plus vite). Une icône « ? » l'explique.
  * Sur grand écran, survoler un astre affiche son nom, sa qualité et son débit dans une étiquette qui le suit : la scène
  * émet `CONSTELLATION_HOVER_EVENT` sur son canevas, l'événement remonte jusqu'au cadre écouté ici.
  * Sur mobile ou sans WebGL, pas de survol : la légende en texte suffit (la scène reste décorative).
@@ -101,8 +102,9 @@ export function Constellation({ models, className = '' }: { models: RankingModel
         <h2 className="m-0 font-display text-sm font-bold text-white">Constellation des modèles</h2>
         <InfoTip label="Constellation">
           Chaque astre est un modèle, de sa couleur. Sa taille suit la qualité (note sur 100) ; gris et plus petit, il n’est
-          pas encore noté. Sa vitesse de rotation suit le débit médian en tokens par seconde : le plus rapide tourne le plus
-          vite. Les orbites suivent le classement, le premier au plus près du centre.
+          pas encore noté. Sa distance au centre suit le débit médian en tokens par seconde : le modèle le plus proche du
+          centre a le plus haut débit, et il tourne aussi le plus vite. Les modèles sans débit mesuré sont sur les orbites
+          extérieures.
         </InfoTip>
       </div>
       {/* Légende et consigne dans une même rangée : la consigne reste à droite, ou passe à la ligne, sans chevauchement. */}
@@ -125,7 +127,7 @@ export function Constellation({ models, className = '' }: { models: RankingModel
           ))}
         </ul>
         <p className="m-0 ml-auto hidden min-w-0 text-right font-mono text-[10px] font-medium text-mute md:block">
-          Taille = qualité · Vitesse de rotation = débit
+          Taille = qualité · Plus près du centre = débit plus élevé
           {/* Le survol n'existe que sur grand écran (voir la scène). */}
           <span className="hidden lg:inline"> · Survolez un astre pour son nom</span>
         </p>

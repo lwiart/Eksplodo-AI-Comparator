@@ -1,12 +1,13 @@
-import { FIRST_ORBIT, astreColor, astreRadius, orbitRadius, type ConstellationData } from './constellation-scene';
+import { FIRST_ORBIT, astreColor, astreRadius, orbitRadius, orbitRanks, type ConstellationData } from './constellation-scene';
 
 const PEACH = '#FFB48A';
 const PAD = 0.9;
 
-/** Repli statique de la constellation (sans WebGL) : vue de dessus, un astre par modèle sur son orbite. */
+/** Repli statique de la constellation (sans WebGL) : vue de dessus, un astre par modèle sur son orbite (la plus proche du centre pour le plus haut débit). */
 export function ConstellationFallback({ data, className = '' }: { data: ConstellationData; className?: string }) {
   const count = data.models.length;
   const outer = (count > 0 ? orbitRadius(count - 1, count) : FIRST_ORBIT) + PAD;
+  const ranks = orbitRanks(data.models);
   return (
     <svg
       data-testid="constellation-fallback"
@@ -16,7 +17,7 @@ export function ConstellationFallback({ data, className = '' }: { data: Constell
       className={`absolute inset-0 h-full w-full ${className}`}
     >
       {data.models.map((m, i) => {
-        const r = orbitRadius(i, count);
+        const r = orbitRadius(ranks[i]!, count);
         const angle = -Math.PI / 2 + i * 1.1; // même déphasage que la scène 3D
         const color = astreColor(m.color, m.quality);
         return (

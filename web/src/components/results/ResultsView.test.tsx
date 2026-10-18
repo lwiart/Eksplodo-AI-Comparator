@@ -84,7 +84,8 @@ test('graphes : titre « Qualité par catégorie de test » et libellé de l’a
 test('mise en page : nuage puis matrice par catégorie, chacun sur toute la largeur', () => {
   renderView(false);
   const card = (name: string) => screen.getByRole('heading', { level: 2, name }).parentElement!;
-  const scatter = card('Qualité et vitesse en haut à droite : idéal');
+  // Le titre du nuage partage une rangée avec son icône d'aide : la carte est le parent de cette rangée.
+  const scatter = card('Qualité et vitesse zone orangée en haut à droite : idéal').parentElement!;
   const heatmap = card('Qualité par catégorie de test note moyenne sur 100');
   expect(within(scatter).getByTestId('quality-speed-chart')).toBeInTheDocument();
   expect(within(heatmap).getByRole('table', { name: 'Qualité par catégorie de test' })).toBeInTheDocument();
@@ -130,18 +131,29 @@ test('classement détaillé : aides sur les en-têtes et définitions imprimable
   expect(screen.getByRole('region', { name: 'Définitions' })).toHaveClass('print-only');
 });
 
-test('plus de six modèles : le nuage l’indique, la matrice les montre tous', () => {
+test('plus de six modèles : tous dans le nuage, sans mention « premiers modèles »', () => {
   const extra = ['e', 'f', 'g', 'h'].map((id) => model({ modelId: id, name: `Extra ${id}` }));
   renderView(false, { ...RANKING, models: [...MODELS, ...extra] });
-  const scatter = screen.getByRole('heading', { level: 2, name: 'Qualité et vitesse en haut à droite : idéal' }).parentElement!;
-  expect(within(scatter).getByText(/6 premiers modèles sur 8/)).toBeInTheDocument();
-  // Tous les modèles notés par catégorie (Delta n'en a aucune) : 7 lignes, au-delà des 6 du nuage.
+  expect(screen.queryByText(/premiers modèles sur/)).toBeNull();
+  // Tous les modèles ayant qualité et vitesse (Delta n'en a pas) : 7 entrées dans la légende du nuage.
+  expect(within(screen.getByRole('list', { name: 'Légende du nuage' })).getAllByRole('listitem')).toHaveLength(7);
   expect(within(screen.getByRole('table', { name: 'Qualité par catégorie de test' })).getAllByRole('rowheader')).toHaveLength(7);
 });
 
-test('six modèles ou moins : pas de mention', () => {
+test('nuage : aide avec les définitions de la qualité et de la vitesse', () => {
   renderView(false);
-  expect(screen.queryByText(/premiers modèles sur/)).toBeNull();
+  const help = screen.getByRole('button', { name: 'Aide : Qualité et vitesse' });
+  const text = document.getElementById(help.getAttribute('aria-describedby')!)?.textContent ?? '';
+  expect(text).toContain(DEFINITIONS.quality);
+  expect(text).toContain(DEFINITIONS.speed);
+});
+
+test('podium : dans la carte à droite de la constellation, avant la pondération, dans une zone qui remplit la carte', () => {
+  renderView(false);
+  const podium = screen.getByRole('list', { name: 'Podium' });
+  expect(podium.parentElement).toHaveClass('flex-1', 'min-h-[220px]');
+  const weights = screen.getByRole('group', { name: 'Pondération' });
+  expect(podium.compareDocumentPosition(weights) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 });
 
 test('constellation : repli SVG sans WebGL, un astre et une entrée de légende par modèle', () => {

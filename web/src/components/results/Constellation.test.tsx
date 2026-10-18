@@ -12,9 +12,10 @@ function hover(detail: ConstellationHover | null) {
   });
 }
 
-test('légende claire : « vitesse de rotation » au lieu de « orbite », plus de zoom', () => {
+test('légende claire : « plus près du centre = débit plus élevé », plus de zoom', () => {
   render(<Constellation models={MODELS} />);
-  expect(screen.getByText(/Taille = qualité · Vitesse de rotation = débit/)).toBeInTheDocument();
+  expect(screen.getByText(/Taille = qualité · Plus près du centre = débit plus élevé/)).toBeInTheDocument();
+  expect(screen.queryByText(/Vitesse de rotation = débit/)).toBeNull();
   expect(screen.getByText(/Survolez un astre pour son nom/)).toBeInTheDocument();
   expect(screen.queryByText(/ZOOMER/i)).toBeNull();
   expect(screen.queryByText(/ORBITE = DÉBIT/i)).toBeNull();
@@ -27,8 +28,10 @@ test('icône d’aide à côté du titre, qui explique comment lire la scène', 
   const text = document.getElementById(help.getAttribute('aria-describedby')!)?.textContent ?? '';
   expect(text).toMatch(/taille suit la qualité \(note sur 100\)/);
   expect(text).toMatch(/gris et plus petit, il n’est pas encore noté/);
-  expect(text).toMatch(/vitesse de rotation suit le débit médian/);
-  expect(text).toMatch(/orbites suivent le classement, le premier au plus près du centre/);
+  expect(text).toMatch(/distance au centre suit le débit médian/);
+  expect(text).toMatch(/le modèle le plus proche du centre a le plus haut débit/);
+  expect(text).toMatch(/sans débit mesuré sont sur les orbites extérieures/);
+  expect(text).not.toMatch(/orbites suivent le classement/);
 });
 
 test('survol : étiquette avec nom, qualité, débit et couleur du modèle ; « Pas encore noté » ; disparaît ensuite', () => {

@@ -8,7 +8,7 @@ import { Card } from '../components/ui/Card';
 import { CategoryHeatmap } from '../components/results/CategoryHeatmap';
 import { Constellation } from '../components/results/Constellation';
 import { Podium } from '../components/results/Podium';
-import { QualitySpeedChart } from '../components/results/QualitySpeedChart';
+import { QualitySpeedChart, QualitySpeedHeading } from '../components/results/QualitySpeedChart';
 import { RankingTable } from '../components/results/RankingTable';
 import { PublicResponses } from '../components/sharing/PublicResponses';
 import { StaticPodium } from '../components/sharing/StaticPodium';
@@ -17,9 +17,6 @@ import type { RankedRow } from '../lib/ranking';
 import { FanoutFallback } from '../three/FanoutFallback';
 import { createFanoutScene } from '../three/fanout-scene';
 import { ThreeStage } from '../three/ThreeStage';
-
-/** Nombre de modèles tracés dans le nuage qualité et vitesse (les mieux classés) ; la matrice par catégorie les montre tous. */
-const CHART_MODELS = 6;
 
 /** Date de fin de la série, en toutes lettres (ex. « 15 octobre 2026 »). */
 const testDate = (iso: string | null): string | null =>
@@ -93,7 +90,6 @@ function Notice({ title, text }: { title: string; text?: string }) {
 function ShareContent({ share }: { share: PublicShare }) {
   // Rang et score global viennent du serveur : avec les coûts masqués, un recalcul donnerait un autre score.
   const rows: RankedRow[] = useMemo(() => share.models.map((model) => ({ model, rank: model.rank, global: model.global })), [share.models]);
-  const chartModels = useMemo(() => share.models.slice(0, CHART_MODELS), [share.models]);
   const { run } = share;
   const date = testDate(run.completedAt);
   const plural = run.modelCount > 1 ? 's' : '';
@@ -136,31 +132,22 @@ function ShareContent({ share }: { share: PublicShare }) {
 
       <main className="mx-auto flex max-w-[1100px] flex-col gap-5 px-4 py-6 pb-16 sm:px-8">
         <VerdictCards verdicts={share.verdicts} />
-        {/* Comme dans l'application : constellation et podium côte à côte, à la même hauteur. La constellation n'est
-            pas imprimée (version imprimable) : le podium reprend alors toute la largeur. */}
-        <div className="grid gap-4 lg:grid-cols-[1.4fr_1fr] print:block">
-          <Constellation models={share.models} className="no-print" />
-          <Card className="flex flex-col gap-4">
-            <h2 className="m-0 font-display text-base font-bold text-white">
-              Podium <span className="ml-1 font-mono text-[11px] font-medium text-mute">score global pondéré</span>
-            </h2>
-            <div className="no-print">
-              <Podium rows={rows} />
-            </div>
-            <StaticPodium rows={rows} />
-          </Card>
-        </div>
+        {/* Podium sur toute la largeur, juste sous les verdicts : marches centrées, de largeur raisonnable. */}
+        <Card className="flex flex-col gap-4">
+          <h2 className="m-0 font-display text-base font-bold text-white">
+            Podium <span className="ml-1 font-mono text-[11px] font-medium text-mute">score global pondéré</span>
+          </h2>
+          <div className="no-print h-[280px]">
+            <Podium rows={rows} />
+          </div>
+          <StaticPodium rows={rows} />
+        </Card>
+        {/* Constellation sur toute la largeur sous le podium, un peu plus haute sur grand écran ; absente de la version imprimable. */}
+        <Constellation models={share.models} className="no-print lg:min-h-[440px]" />
         {/* Nuage puis matrice, chacun sur toute la largeur : la matrice a besoin de place pour ses colonnes. */}
         <Card className="min-w-0">
-          <h2 className="m-0 mb-2 font-display text-sm font-bold text-white">
-            Qualité et vitesse <span className="ml-1 font-mono text-[11px] font-medium text-mute">en haut à droite : idéal</span>
-          </h2>
-          {rows.length > CHART_MODELS ? (
-            <p className="m-0 mb-2 text-xs text-mute">
-              {CHART_MODELS} premiers modèles sur {rows.length} ; la matrice par catégorie les montre tous.
-            </p>
-          ) : null}
-          <QualitySpeedChart models={chartModels} />
+          <QualitySpeedHeading />
+          <QualitySpeedChart models={share.models} />
         </Card>
         <Card className="min-w-0">
           <h2 className="m-0 mb-2 font-display text-sm font-bold text-white">

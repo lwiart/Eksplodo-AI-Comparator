@@ -94,6 +94,22 @@ test('Partager : verdicts proposés à partir du classement, modifiables ; créa
   expect(screen.getByText(/ne pourra plus être réaffiché/)).toBeInTheDocument();
 });
 
+test('verdicts proposés marqués « auto » (recalculés à l’affichage) ; changer la phrase les fige, changer le titre non', async () => {
+  const user = userEvent.setup();
+  renderDialog();
+  await screen.findByLabelText('Titre de la page');
+  const [first, second] = screen.getAllByRole('group', { name: /^Verdict / });
+  await user.type(within(first!).getByLabelText('Titre du verdict'), ' !');
+  const phrase = within(second!).getByRole('textbox', { name: /Phrase/ });
+  await user.clear(phrase);
+  await user.type(phrase, 'Alpha, de loin.');
+  await user.click(screen.getByRole('button', { name: 'Créer le lien' }));
+  const post = await waitFor(() => apiFetch.mock.calls.find((c) => c[1]?.method === 'POST')!);
+  const [global, quality] = post[1].body.verdicts;
+  expect(global).toMatchObject({ label: 'Meilleur compromis !', auto: 'global' });
+  expect(quality).toEqual({ label: 'Meilleure qualité', modelId: 'a', text: 'Alpha, de loin.' });
+});
+
 test('« Le moins cher » n’est pas proposé sans aucun coût, même coûts affichés', async () => {
   rankingBody = { ...ranking, models: ranking.models.map((m) => ({ ...m, raw: { ...m.raw, meanCostUsd: null } })) };
   const user = userEvent.setup();

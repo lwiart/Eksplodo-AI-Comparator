@@ -6,10 +6,14 @@ import { runs } from './runs.js';
 const now = () => sql`CURRENT_TIMESTAMP(3)`;
 
 /** Verdict rédigé par l'Admin, affiché sur la page publique (modèle désigné ou non). */
+/** `auto` : verdict proposé automatiquement, recalculé à chaque affichage (modèle et phrase) ; absent : verdict figé. */
+export type VerdictAuto = 'global' | 'quality' | 'cost';
+
 export interface ShareVerdict {
   label: string;
   modelId: string | null;
   text: string;
+  auto?: VerdictAuto;
 }
 
 /** Liens de partage public d'une série ; seule l'empreinte SHA-256 du jeton est stockée. */

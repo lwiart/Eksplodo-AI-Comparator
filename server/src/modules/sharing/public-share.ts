@@ -2,7 +2,7 @@ import { and, asc, eq, sql } from 'drizzle-orm';
 import type { Db } from '../../db/client.js';
 import { models, providers } from '../../db/schema/catalog.js';
 import { results, runModels, runTests, runs } from '../../db/schema/runs.js';
-import { shareLinks } from '../../db/schema/sharing.js';
+import { shareLinks, type ShareVerdict, type VerdictAuto } from '../../db/schema/sharing.js';
 import { NotFoundError } from '../../errors.js';
 import { roundUsd } from '../../lib/money.js';
 import type { Weights } from '../runs/runs.service.js';
@@ -165,11 +165,16 @@ export async function loadPublicShare(db: Db, token: string): Promise<PublicShar
   }));
 
   const byModel = new Map(ordered.map((m) => [m.modelId, m]));
+  const live = liveVerdicts(ordered, rankOf, showCosts);
   const verdicts = link.verdicts.map((v) => {
-    const model = v.modelId === null ? undefined : byModel.get(v.modelId);
+    // Verdict proposé automatiquement : modèle et phrase suivent le classement du jour (requalifications, notes corrigées…).
+    const kind = autoKindOf(v, byModel);
+    const fresh = kind ? live[kind] : null;
+    const modelId = fresh ? fresh.modelId : v.modelId;
+    const model = modelId === null ? undefined : byModel.get(modelId);
     return {
       label: v.label,
-      text: v.text,
+      text: fresh ? fresh.text : v.text,
       model: model ? { key: keyOf.get(model.modelId)!, name: model.name, color: model.color } : null,
     };
   });
@@ -228,5 +233,56 @@ export async function loadPublicShare(db: Db, token: string): Promise<PublicShar
     models: publicModels,
     verdicts,
     responses,
+  };
+}
+
+/** Titres et phrases d'origine des verdicts proposés : reconnaissent les liens créés avant le marqueur `auto`. */
+const OUT_OF = String.raw` \(\d+(?:[.,]\d+)? sur 10{1,2}\)\.`; // note sur 10 (anciens liens) ou sur 100
+const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
+const AUTO_PATTERNS: Record<VerdictAuto, { label: string; text: (name: string) => RegExp }> = {
+  global: { label: 'Meilleur compromis', text: (n) => new RegExp(`^${escape(n)} a le meilleur score global${OUT_OF}$`) },
+  quality: { label: 'Meilleure qualité', text: (n) => new RegExp(`^${escape(n)} obtient la meilleure qualité${OUT_OF}$`) },
+  cost: { label: 'Le moins cher', text: (n) => new RegExp(`^${escape(n)} est le moins cher par réponse\\.$`) },
+};
+
+/** Nature automatique d'un verdict : marqueur enregistré, sinon titre et phrase d'origine restés intacts. */
+export function autoKindOf(v: ShareVerdict, byModel: Map<string, { name: string }>): VerdictAuto | null {
+  if (v.auto) return v.auto;
+  const name = v.modelId === null ? undefined : byModel.get(v.modelId)?.name;
+  if (name === undefined) return null;
+  for (const kind of Object.keys(AUTO_PATTERNS) as VerdictAuto[]) {
+    const p = AUTO_PATTERNS[kind];
+    if (v.label.trim() === p.label && p.text(name).test(v.text.trim())) return kind;
+  }
+  return null;
+}
+
+type LiveModel = { modelId: string; name: string; quality: number | null; raw: { meanCostUsd: number | null } };
+
+/**
+ * Verdicts recalculés sur le classement courant, avec les mêmes règles que les propositions de l'éditeur : meilleur score
+ * global, meilleure qualité, plus petit coût moyen (seulement si le lien publie les coûts).
+ */
+function liveVerdicts(
+  ordered: LiveModel[],
+  rankOf: Map<string, { rank: number | null; global: number | null }>,
+  showCosts: boolean,
+): Record<VerdictAuto, { modelId: string; text: string } | null> {
+  const rows = ordered.filter((m) => rankOf.get(m.modelId)?.global != null);
+  const pick = (value: (m: LiveModel) => number | null, better: (a: number, b: number) => boolean) => {
+    let found: { m: LiveModel; v: number } | null = null;
+    for (const m of rows) {
+      const v = value(m);
+      if (v !== null && (found === null || better(v, found.v))) found = { m, v };
+    }
+    return found;
+  };
+  const top = pick((m) => rankOf.get(m.modelId)!.global, (a, b) => a > b);
+  const quality = pick((m) => m.quality, (a, b) => a > b);
+  const cheap = showCosts ? pick((m) => m.raw.meanCostUsd, (a, b) => a < b) : null;
+  return {
+    global: top && { modelId: top.m.modelId, text: `${top.m.name} a le meilleur score global (${Math.round(top.v)} sur 100).` },
+    quality: quality && { modelId: quality.m.modelId, text: `${quality.m.name} obtient la meilleure qualité (${Math.round(quality.v)} sur 100).` },
+    cost: cheap && { modelId: cheap.m.modelId, text: `${cheap.m.name} est le moins cher par réponse.` },
   };
 }

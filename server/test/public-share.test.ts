@@ -241,6 +241,45 @@ test('verdict dont le modèle a été retiré : model null, sans erreur', async 
   expect(json.models[0].modelId).toBe('m1');
 });
 
+test('verdicts proposés automatiquement : recalculés sur le classement du jour ; textes réécrits laissés tels quels', async () => {
+  const s = await setup();
+  // Verdicts figés à la création du lien, quand B semblait meilleur (avant une requalification, par exemple).
+  const verdicts = [
+    { label: 'Meilleur compromis', auto: 'global', modelId: s.mB.id, text: 'Modèle B a le meilleur score global (98 sur 100).' },
+    { label: 'Meilleure qualité', modelId: s.mB.id, text: 'Modèle B obtient la meilleure qualité (9.8 sur 10).' }, // ancien lien, sans marqueur
+    { label: 'Meilleur compromis', modelId: s.mB.id, text: 'Modèle B, notre préféré.' }, // réécrit : figé
+    { label: 'Le moins cher', auto: 'cost', modelId: s.mB.id, text: 'Modèle B est le moins cher par réponse.' },
+  ];
+  const hidden = (await s.pub((await s.create({ verdicts, showCosts: false })).token)).json();
+  const top = hidden.models[0];
+  expect(top.name).toBe('Modèle A');
+  expect(hidden.verdicts[0]).toEqual({
+    label: 'Meilleur compromis',
+    text: `Modèle A a le meilleur score global (${Math.round(top.global)} sur 100).`,
+    model: { key: 'm1', name: 'Modèle A', color: '#aa0001' },
+  });
+  expect(hidden.verdicts[1].text).toBe(`Modèle A obtient la meilleure qualité (${Math.round(top.quality)} sur 100).`);
+  expect(hidden.verdicts[1].model.name).toBe('Modèle A');
+  expect(hidden.verdicts[2]).toMatchObject({ text: 'Modèle B, notre préféré.', model: { name: 'Modèle B' } });
+  // Coûts masqués : le verdict de coût n'est pas recalculé (il révélerait l'ordre des coûts).
+  expect(hidden.verdicts[3]).toMatchObject({ text: 'Modèle B est le moins cher par réponse.', model: { name: 'Modèle B' } });
+  const shown = (await s.pub((await s.create({ verdicts, showCosts: true })).token)).json();
+  expect(shown.verdicts[3]).toMatchObject({ text: 'Modèle A est le moins cher par réponse.', model: { name: 'Modèle A' } });
+});
+
+test('marqueur auto inconnu refusé à la création du lien', async () => {
+  const s = await setup();
+  const res = await s.call('POST', '/api/share-links', {
+    runId: s.runId,
+    title: 'T',
+    intro: null,
+    verdicts: [{ label: 'X', auto: 'vitesse', modelId: null, text: 'Y' }],
+    showCosts: false,
+    showResponses: false,
+  });
+  expect(res.statusCode).toBe(400);
+});
+
 test('score global et rang : pondération complète de la série, coût compris même si showCosts est faux', async () => {
   const s = await setup();
   const hidden = (await s.pub((await s.create({ showCosts: false })).token)).json();

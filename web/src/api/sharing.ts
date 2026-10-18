@@ -1,7 +1,9 @@
 import { apiFetch } from './client';
 
 // Types miroirs de server/src/modules/sharing/share-links.service.ts.
-export type ShareVerdict = { label: string; modelId: string | null; text: string };
+/** `auto` : verdict proposé automatiquement, recalculé à chaque affichage de la page publique (modèle et phrase). */
+export type VerdictAuto = 'global' | 'quality' | 'cost';
+export type ShareVerdict = { label: string; modelId: string | null; text: string; auto?: VerdictAuto };
 
 export type ShareLink = {
   id: string;

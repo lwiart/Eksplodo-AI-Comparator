@@ -3,8 +3,8 @@ import { createInteractionGate } from './interaction-gate';
 import type { SceneFactory } from './useThreeScene';
 
 /**
- * Données de la constellation : un astre par modèle, dans l'ordre des orbites (le premier au plus près du centre).
- * `quality` est la note sur 100 (nulle : modèle non noté), `tokensPerS` le débit médian.
+ * Données de la constellation : un astre par modèle, dans l'ordre du classement. `quality` est la note sur 100
+ * (nulle : modèle non noté), `tokensPerS` le débit médian (nul : inconnu), qui fixe l'orbite (voir `orbitRanks`).
  */
 export type ConstellationData = {
   models: { id: string; color: string; quality: number | null; tokensPerS: number | null }[];
@@ -37,10 +37,29 @@ export function astreColor(color: string, quality: number | null): string {
   return quality === null || !Number.isFinite(quality) ? UNRATED_COLOR : color;
 }
 
-/** Rayon de l'orbite du i-ième astre : régulier, resserré au-delà de MAX_ORBIT. */
+/** Rayon de la i-ième orbite (0 = la plus proche du centre) : régulier, resserré au-delà de MAX_ORBIT. */
 export function orbitRadius(index: number, count: number): number {
   const step = Math.min(ORBIT_STEP, (MAX_ORBIT - FIRST_ORBIT) / Math.max(1, count - 1));
   return FIRST_ORBIT + index * step;
+}
+
+/**
+ * Orbite de chaque modèle, dans l'ordre reçu : 0 = la plus proche du centre. Par débit médian décroissant (le plus
+ * rapide au plus près du centre) ; les modèles sans débit connu sur les orbites extérieures. À égalité, l'ordre reçu
+ * (celui du classement) départage.
+ */
+export function orbitRanks(models: { tokensPerS: number | null }[]): number[] {
+  const known = (t: number | null): t is number => t !== null && Number.isFinite(t);
+  const order = models
+    .map((m, i) => ({ i, t: m.tokensPerS }))
+    .sort((a, b) => {
+      if (known(a.t) && known(b.t)) return b.t - a.t || a.i - b.i;
+      if (known(a.t) !== known(b.t)) return known(a.t) ? -1 : 1;
+      return a.i - b.i;
+    });
+  const ranks = new Array<number>(models.length);
+  order.forEach(({ i }, rank) => (ranks[i] = rank));
+  return ranks;
 }
 
 /** Vitesse d'orbite croissante avec le débit (relatif au plus haut débit), bornée ; débit inconnu : la plus lente. */
@@ -116,8 +135,10 @@ const HALO_OPACITY_HOVER = 0.32; // l'astre survolé est mis en valeur, sans mou
 type Astre = { id: string; key: string; size: number; radius: number; speed: number; phase: number; mesh: Mesh; halo: Mesh; ring: Mesh };
 
 /**
- * « Constellation » : un astre par modèle (taille = qualité, vitesse de rotation = débit, couleur du modèle, gris sans note),
- * orbites dans l'ordre reçu (le premier au plus près du centre), des particules du centre vers les astres.
+ * « Constellation » : un astre par modèle (taille = qualité, couleur du modèle, gris sans note), des particules du centre
+ * vers les astres. Distance au centre = débit médian : le plus rapide sur l'orbite la plus proche, les modèles sans débit
+ * à l'extérieur. La vitesse de rotation suit aussi le débit, comme un système planétaire où les astres proches du centre
+ * tournent plus vite : les deux indices se renforcent au lieu de se contredire.
  * Sur grand écran, l'astre survolé est mis en valeur et signalé par `CONSTELLATION_HOVER_EVENT` sur le canevas ;
  * la caméra ne fait que dériver lentement.
  */
@@ -256,10 +277,11 @@ export const constellationScene: SceneFactory = ({ THREE, canvas, width, height,
       }
     });
     const maxTps = Math.max(0, ...models.map((m) => m.tokensPerS ?? 0));
+    const ranks = orbitRanks(models);
     astres = models.map((m, i) => {
       const color = new THREE.Color(astreColor(m.color, m.quality));
       const radius = astreRadius(m.quality);
-      const R = orbitRadius(i, models.length);
+      const R = orbitRadius(ranks[i]!, models.length);
       const mesh = new THREE.Mesh(
         new THREE.SphereGeometry(radius, 40, 40),
         new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.45, roughness: 0.35 }),

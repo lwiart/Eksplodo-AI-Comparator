@@ -27,3 +27,15 @@ test('podium : un nom très long peut passer à la ligne dans la marche (min-w-0
   expect(name).toHaveClass('min-w-0', 'break-words');
   expect(within(screen.getByRole('list', { name: 'Podium' })).getByRole('listitem')).toHaveClass('min-w-0');
 });
+
+test('podium : pleine hauteur de sa zone, 1re marche en haut, 2e et 3e moins hautes, marches centrées et bornées en largeur', () => {
+  render(<Podium rows={rankedRows(MODELS, DEFAULTS)} />);
+  const list = screen.getByRole('list', { name: 'Podium' });
+  // Le podium prend la hauteur de son conteneur, alignées en bas ; centré, sans s'étirer sur une zone très large.
+  expect(list).toHaveClass('h-full', 'items-end', 'justify-center', 'mx-auto');
+  const [second, first, third] = within(list).getAllByRole('listitem');
+  expect(first).toHaveClass('h-full');
+  expect(second).toHaveClass('h-[84%]');
+  expect(third).toHaveClass('h-[70%]');
+  for (const step of [first, second, third]) expect(step).toHaveClass('flex-1', 'max-w-[210px]');
+});
