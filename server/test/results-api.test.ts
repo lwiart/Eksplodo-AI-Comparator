@@ -143,10 +143,23 @@ test('API ranking et answers ; Utilisateur : réponses manuelles masquées tant 
   // Réponses côte à côte d'un test à réponse attendue : visibles, avec notes et justification du juge.
   const expected = await get(`/api/runs/${runId}/answers/${rtExpected}`, user);
   expect(expected.statusCode).toBe(200);
-  expect(expected.json().test).toEqual({ name: 'Capitale', category: 'Culture', userPrompt: 'Capitale de la France ?', scoringMethod: 'expected', attachments: [] });
+  // Détail du test figé : consignes et résultat attendu, pour la fenêtre « détail du test ».
+  expect(expected.json().test).toEqual({
+    name: 'Capitale',
+    category: 'Culture',
+    tags: [],
+    systemPrompt: null,
+    userPrompt: 'Capitale de la France ?',
+    temperature: expect.any(Number),
+    maxTokens: expect.any(Number),
+    scoringMethod: 'expected',
+    scoringConfig: { mode: 'exact', expected: 'Paris', ignoreCase: true, ignoreAccents: false },
+    attachments: [],
+  });
   expect(expected.json().answers).toEqual([
     {
       resultId: ids.expA,
+      modelId: mA.id,
       modelName: 'Modèle A',
       color: '#aa0001',
       repetition: 1,
@@ -168,8 +181,9 @@ test('API ranking et answers ; Utilisateur : réponses manuelles masquées tant 
 
   // Test manuel non noté par l'Utilisateur : ni texte, ni métrique, ni note (celles des autres évaluateurs orienteraient
   // sa notation à l'aveugle) ; l'Admin voit tout.
-  const hiddenAnswer = (resultId: string, modelName: string, color: string) => ({
+  const hiddenAnswer = (resultId: string, modelId: string, modelName: string, color: string) => ({
     resultId,
+    modelId,
     modelName,
     color,
     repetition: 1,
@@ -188,7 +202,7 @@ test('API ranking et answers ; Utilisateur : réponses manuelles masquées tant 
   });
   const hidden = await get(`/api/runs/${runId}/answers/${rtManual}`, user);
   expect(hidden.json().test.scoringMethod).toBe('manual');
-  expect(hidden.json().answers).toEqual([hiddenAnswer(ids.manA, 'Modèle A', '#aa0001'), hiddenAnswer(ids.manB, 'Modèle B', '#aa0002')]);
+  expect(hidden.json().answers).toEqual([hiddenAnswer(ids.manA, mA.id, 'Modèle A', '#aa0001'), hiddenAnswer(ids.manB, mB.id, 'Modèle B', '#aa0002')]);
   const asAdmin = await get(`/api/runs/${runId}/answers/${rtManual}`, admin);
   expect(asAdmin.json().answers[0]).toMatchObject({
     responseText: 'Haïku de A\nsur deux lignes',

@@ -1,6 +1,6 @@
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { expect, test } from 'vitest';
+import { expect, test, vi } from 'vitest';
 import { CategoryHeatmap, scoreColor } from './CategoryHeatmap';
 import { DASH } from './format';
 import { MODELS, RANKING, model } from './ranking.fixtures';
@@ -85,4 +85,25 @@ test('matrice vide : message plutôt qu’un tableau', () => {
   render(<CategoryHeatmap models={[MODELS[3]!]} categories={RANKING.categories} />);
   expect(screen.getByText('Pas encore de note par catégorie.')).toBeInTheDocument();
   expect(screen.queryByRole('table')).toBeNull();
+});
+
+test('notes cliquables avec onSelect : choix de la case (Qualité = toutes catégories), second clic pour désélectionner', async () => {
+  const user = userEvent.setup();
+  const onSelect = vi.fn();
+  const models = [model({ modelId: 'a', name: 'Alpha', quality: 70, byCategory: { Rédaction: 80, Extraction: 60 } })];
+  const { rerender } = render(<CategoryHeatmap models={models} categories={['Rédaction', 'Extraction']} onSelect={onSelect} />);
+  await user.click(screen.getByRole('button', { name: 'Alpha · Rédaction : 80 sur 100' }));
+  expect(onSelect).toHaveBeenLastCalledWith({ modelId: 'a', category: 'Rédaction' });
+  await user.click(screen.getByRole('button', { name: 'Alpha · Qualité : 70 sur 100' }));
+  expect(onSelect).toHaveBeenLastCalledWith({ modelId: 'a', category: null });
+  rerender(<CategoryHeatmap models={models} categories={['Rédaction', 'Extraction']} onSelect={onSelect} selected={{ modelId: 'a', category: 'Rédaction' }} />);
+  const chosen = screen.getByRole('button', { name: 'Alpha · Rédaction : 80 sur 100' });
+  expect(chosen).toHaveAttribute('aria-pressed', 'true');
+  await user.click(chosen);
+  expect(onSelect).toHaveBeenLastCalledWith(null);
+});
+
+test('sans onSelect : aucune note cliquable', () => {
+  render(<CategoryHeatmap models={[model({ modelId: 'a', name: 'Alpha', quality: 80, byCategory: { Rédaction: 80 } })]} categories={['Rédaction']} />);
+  expect(screen.queryByRole('button', { name: /Alpha · Rédaction/ })).toBeNull();
 });

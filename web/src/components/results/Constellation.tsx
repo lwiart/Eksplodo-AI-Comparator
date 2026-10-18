@@ -98,8 +98,9 @@ export function Constellation({ models, className = '' }: { models: RankingModel
           </div>
         )}
       </div>
-      <div className="absolute top-3.5 left-4 z-30 flex items-center gap-2">
-        <h2 className="m-0 font-display text-sm font-bold text-white">Constellation des modèles</h2>
+      {/* Même position et même corps que le titre « Podium » (marge de 16 px de la carte) : les deux titres s'alignent. */}
+      <div className="absolute top-4 left-4 z-30 flex items-center gap-2">
+        <h2 className="m-0 font-display text-base leading-6 font-bold text-white">Constellation des modèles</h2>
         <InfoTip label="Constellation">
           Chaque astre est un modèle, de sa couleur. Sa taille suit la qualité (note sur 100) ; gris et plus petit, il n’est
           pas encore noté. Sa distance au centre suit le débit médian en tokens par seconde : le modèle le plus proche du

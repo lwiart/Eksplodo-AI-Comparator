@@ -1,5 +1,19 @@
 import type { RankedRow } from '../../lib/ranking';
+import { InfoTip } from '../ui/InfoTip';
+import { DEFINITIONS } from './definitions';
 import { score } from './format';
+
+/** Titre du bloc Podium, avec son aide « ? » (même corps et même hauteur de ligne que celui de la constellation). */
+export function PodiumHeading() {
+  return (
+    <div className="flex items-center gap-2">
+      <h2 className="m-0 font-display text-base leading-6 font-bold text-white">Podium</h2>
+      <InfoTip label="Podium" width="w-80">
+        Les trois modèles qui ont le meilleur score global. {DEFINITIONS.global}
+      </InfoTip>
+    </div>
+  );
+}
 
 /**
  * Hauteur de chaque marche, en part de la hauteur du podium : la 1re touche le haut de la zone, la 2e et la 3e un peu

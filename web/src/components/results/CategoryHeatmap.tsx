@@ -28,7 +28,7 @@ export function heatmapModels(models: RankingModel[], categories: string[]): Ran
   return models.filter((m) => categories.some((c) => m.byCategory[c] != null));
 }
 
-type Column = { key: string; label: string; value: (m: RankingModel) => number | null };
+type Column = { key: string; label: string; category: string | null; value: (m: RankingModel) => number | null };
 
 /** Modèles triés par note décroissante dans la colonne (sans note : en fin) ; à égalité, l'ordre reçu est conservé. */
 export function sortByColumn(models: RankingModel[], value: (m: RankingModel) => number | null): RankingModel[] {
@@ -38,6 +38,9 @@ export function sortByColumn(models: RankingModel[], value: (m: RankingModel) =>
 
 const QUALITY_KEY = 'quality';
 
+/** Case choisie : un modèle et une catégorie (`null` : la colonne Qualité, toutes catégories). */
+export type HeatmapSelection = { modelId: string; category: string | null };
+
 /** Colonne des modèles, fixe au défilement ; l'ombre pleine couvre les interstices entre cases, sous lesquels les notes défileraient. */
 const MODEL_CELL = 'heatmap-model sticky left-0 z-10 bg-night-1 px-2 shadow-[0_0_0_3px_var(--color-night-1)]';
 
@@ -46,13 +49,25 @@ const MODEL_CELL = 'heatmap-model sticky left-0 z-10 bg-night-1 px-2 shadow-[0_0
  * chaque case porte la note entière sur un fond coloré selon la note. Un clic sur un en-tête trie par cette colonne,
  * un second revient à l'ordre du classement. Le tableau défile horizontalement, la colonne des modèles restant fixe.
  */
-export function CategoryHeatmap({ models, categories }: { models: RankingModel[]; categories: string[] }) {
+export function CategoryHeatmap({
+  models,
+  categories,
+  selected = null,
+  onSelect,
+}: {
+  models: RankingModel[];
+  categories: string[];
+  /** Case mise en avant (filtre des réponses en cours). */
+  selected?: HeatmapSelection | null;
+  /** Rend les notes cliquables : un clic choisit la case, un second clic sur la même la désélectionne. */
+  onSelect?: (selection: HeatmapSelection | null) => void;
+}) {
   const hintId = useId();
   const [sortKey, setSortKey] = useState<string | null>(null);
   const columns: Column[] = useMemo(
     () => [
-      ...categories.map((c) => ({ key: `category:${c}`, label: c, value: (m: RankingModel) => m.byCategory[c] ?? null })),
-      { key: QUALITY_KEY, label: 'Qualité', value: (m: RankingModel) => m.quality },
+      ...categories.map((c) => ({ key: `category:${c}`, label: c, category: c, value: (m: RankingModel) => m.byCategory[c] ?? null })),
+      { key: QUALITY_KEY, label: 'Qualité', category: null, value: (m: RankingModel) => m.quality },
     ],
     [categories],
   );
@@ -66,6 +81,7 @@ export function CategoryHeatmap({ models, categories }: { models: RankingModel[]
     <div data-testid="category-heatmap">
       <p id={hintId} className="no-print m-0 mb-2 text-xs text-mute">
         Cliquez sur une catégorie ou sur « Qualité » pour trier les modèles ; un second clic revient à l'ordre du classement.
+        {onSelect ? ' Cliquez sur une note pour afficher plus bas les réponses de ce modèle dans cette catégorie.' : null}
       </p>
       <div className="heatmap-scroll overflow-x-auto">
         <table aria-label="Qualité par catégorie de test" aria-describedby={hintId} className="heatmap-table border-separate border-spacing-[3px] text-xs">
@@ -118,18 +134,32 @@ export function CategoryHeatmap({ models, categories }: { models: RankingModel[]
                 {columns.map((col) => {
                   const v = col.value(m);
                   const label = `${m.name} · ${col.label} : ${v === null ? 'pas de note' : `${score(v)} sur 100`}`;
+                  const isSelected = selected !== null && selected.modelId === m.modelId && selected.category === col.category;
+                  const clickable = onSelect !== undefined && v !== null;
                   return (
                     <td
                       key={col.key}
-                      title={label}
-                      aria-label={label}
-                      className={`heatmap-cell rounded-md px-1.5 py-2 text-center font-mono text-[13px] font-semibold ${col.key === QUALITY_KEY ? 'heatmap-quality ring-1 ring-white/30 ring-inset' : ''} ${
+                      title={clickable ? `${label} · voir les réponses` : label}
+                      aria-label={clickable ? undefined : label}
+                      className={`heatmap-cell rounded-md text-center font-mono text-[13px] font-semibold ${clickable ? 'p-0' : 'px-1.5 py-2'} ${col.key === QUALITY_KEY ? 'heatmap-quality ring-1 ring-white/30 ring-inset' : ''} ${
                         v === null ? 'heatmap-empty bg-white/5 font-normal text-mute' : ''
-                      }`}
+                      } ${isSelected ? 'outline-2 outline-offset-1 outline-white' : ''}`}
                       // Couleur en ligne : la règle d'impression qui assombrit les textes clairs ne l'atteint pas.
                       style={v === null ? undefined : { backgroundColor: scoreColor(v), color: '#fff' }}
                     >
-                      {score(v)}
+                      {clickable ? (
+                        <button
+                          type="button"
+                          aria-label={label}
+                          aria-pressed={isSelected}
+                          onClick={() => onSelect(isSelected ? null : { modelId: m.modelId, category: col.category })}
+                          className="w-full cursor-pointer rounded-md border-0 bg-transparent px-1.5 py-2 font-mono text-[13px] font-semibold text-inherit hover:bg-white/15 focus-visible:outline-2 focus-visible:outline-white"
+                        >
+                          {score(v)}
+                        </button>
+                      ) : (
+                        score(v)
+                      )}
                     </td>
                   );
                 })}

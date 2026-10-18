@@ -3,6 +3,7 @@ import { poolOf, type Db } from './db/client.js';
 import { runMigrations } from './db/migrate.js';
 import type { Clock } from './lib/clock.js';
 import { ensureBootstrapAdmin } from './modules/auth/bootstrap.js';
+import { upgradeLegacyKeys } from './modules/catalog/key-upgrade.js';
 import { seedProviders } from './modules/catalog/seed.js';
 
 const DEFAULT_LOCK_TIMEOUT_SEC = 120;
@@ -48,7 +49,7 @@ export async function withStartupLock<T>(
   }
 }
 
-/** Migrations puis amorçage du premier Admin, sérialisés entre processus par le même verrou. */
+/** Migrations, amorçage du premier Admin et conversion des anciennes clés, sérialisés entre processus par le même verrou. */
 export async function prepareDatabase(deps: {
   db: Db;
   config: AppConfig;
@@ -68,6 +69,11 @@ export async function prepareDatabase(deps: {
         ...(deps.logger ? { logger: deps.logger } : {}),
       });
       await seedProviders(deps.db, deps.clock());
+      const keys = await upgradeLegacyKeys(deps.db, deps.config.encryptionKey);
+      if (keys.upgraded > 0) deps.logger?.info(`Clés des fournisseurs converties au format lié au fournisseur : ${keys.upgraded}`);
+      if (keys.unreadable > 0) {
+        deps.logger?.warn(`Clés des fournisseurs illisibles, non converties (à ressaisir) : ${keys.unreadable}`);
+      }
     },
     deps.lockTimeoutSec,
   );

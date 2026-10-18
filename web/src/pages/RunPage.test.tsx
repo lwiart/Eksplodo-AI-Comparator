@@ -367,9 +367,9 @@ test('série terminée : tableau des métriques par modèle', async () => {
   renderPage('user', { ...PROGRESS, status: 'completed', etaSeconds: 0, running: [] });
   const table = within(await screen.findByRole('table', { name: 'Métriques par modèle' }));
   const opus = within(table.getByRole('rowheader', { name: 'Claude Opus' }).closest('tr')!);
-  expect(opus.getAllByRole('cell').map((c) => c.textContent)).toEqual(['2', '2', '500 ms', '60 tokens/s', '0,003 $']);
+  expect(opus.getAllByRole('cell').map((c) => c.textContent)).toEqual(['2', '2', '500 ms', '60 tokens/s', '0,003 $', '—']);
   const gpt = within(table.getByRole('rowheader', { name: 'GPT Test' }).closest('tr')!);
-  expect(gpt.getAllByRole('cell').map((c) => c.textContent)).toEqual(['3', '0', '2 s', '20 tokens/s', '0,015 $']);
+  expect(gpt.getAllByRole('cell').map((c) => c.textContent)).toEqual(['3', '0', '2 s', '20 tokens/s', '0,015 $', '—']);
   expect(screen.queryByRole('progressbar')).toBeNull();
   expect(screen.queryByTestId('live-flow-fallback')).toBeNull();
 });

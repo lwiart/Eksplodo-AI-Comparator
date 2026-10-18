@@ -116,7 +116,7 @@ export function createRunsRepo(db: Db) {
     /** Tests de la série dans l'ordre des positions (nom tiré de l'instantané). */
     async runTestsOf(runId: string) {
       return db
-        .select({ id: runTests.id, name: snapshotName })
+        .select({ id: runTests.id, name: snapshotName, category: snapshotCategory })
         .from(runTests)
         .where(eq(runTests.runId, runId))
         .orderBy(asc(runTests.position));

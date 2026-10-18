@@ -323,3 +323,57 @@ test('réponse tronquée : message orange avec la cause et l’indication de rel
   const error = within(screen.getByRole('article', { name: 'GPT Test, répétition 1' })).getByText(/Requête refusée/);
   expect(error).toHaveClass('[overflow-wrap:anywhere]', 'text-bad');
 });
+
+test('filtre de la matrice : tests de la catégorie et réponses du modèle seulement ; « Retirer le filtre »', async () => {
+  const user = userEvent.setup();
+  const onClear = vi.fn();
+  const tests = [
+    { runTestId: 'rt1', testName: 'Résumer un CCTP', category: 'Rédaction' },
+    { runTestId: 'rt2', testName: 'Extraire', category: 'Extraction' },
+    { runTestId: 'rt3', testName: 'Lettre', category: 'Rédaction' },
+  ];
+  answersBody = {
+    test: TEST_INFO,
+    answers: [answer({ modelId: 'm1' }), answer({ resultId: 'a2', modelId: 'm2', modelName: 'GPT Test' })],
+  };
+  render(
+    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+      <MemoryRouter>
+        <SideBySide runId="r1" tests={tests} isAdmin={false} filter={{ modelId: 'm1', modelName: 'Claude Opus', category: 'Rédaction' }} onClearFilter={onClear} />
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+  expect(await screen.findByRole('article', { name: 'Claude Opus, répétition 1' })).toBeInTheDocument();
+  expect(screen.queryByRole('article', { name: 'GPT Test, répétition 1' })).toBeNull();
+  expect(screen.getByRole('status')).toHaveTextContent('Filtre : Claude Opus · Rédaction (2 tests)');
+  const options = within(screen.getByLabelText('Test')).getAllByRole('option').map((o) => o.textContent);
+  expect(options).toEqual(['Résumer un CCTP', 'Lettre']);
+  await user.click(screen.getByRole('button', { name: 'Retirer le filtre' }));
+  expect(onClear).toHaveBeenCalled();
+});
+
+test('nom du test cliquable : détail avec consigne système, prompt et résultat attendu', async () => {
+  const user = userEvent.setup();
+  answersBody = {
+    test: {
+      ...TEST_INFO,
+      tags: ['marchés'],
+      systemPrompt: 'Tu es juriste.',
+      temperature: 0.2,
+      maxTokens: 1200,
+      scoringMethod: 'expected',
+      scoringConfig: { mode: 'contains', items: ['délai', 'pénalités'], ignoreCase: true },
+    },
+    answers: [answer({ modelId: 'm1' })],
+  };
+  renderBlock(false);
+  await user.click(await screen.findByRole('button', { name: '« Résumer un CCTP »' }));
+  const dialog = within(await screen.findByRole('dialog', { name: 'Résumer un CCTP' }));
+  expect(dialog.getByText('Tu es juriste.')).toBeInTheDocument();
+  expect(dialog.getByText('Résume.')).toBeInTheDocument();
+  expect(dialog.getByText('Réponse attendue')).toBeInTheDocument();
+  expect(dialog.getByText(/La réponse doit contenir/)).toBeInTheDocument();
+  expect(dialog.getAllByRole('listitem').map((li) => li.textContent)).toEqual(['délai', 'pénalités']);
+  expect(dialog.getByText('1 200 tokens')).toBeInTheDocument();
+  expect(dialog.getByText('marchés')).toBeInTheDocument();
+});

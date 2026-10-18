@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { MODELS_KEY, listModels } from '../../api/catalog';
 import { messageForError } from '../../api/messages';
@@ -24,10 +24,14 @@ import { SelectField } from '../ui/SelectField';
 import { costPerAnswer, DASH, score, tokensPerSecond } from './format';
 import { Markdown } from './Markdown';
 import { RaterSpread } from './RaterSpread';
+import { TestDetailDialog } from './TestDetailDialog';
 
 type Tab = 'side' | 'blind' | 'spread';
 
-export type SideBySideTest = { runTestId: string; testName: string };
+export type SideBySideTest = { runTestId: string; testName: string; category?: string };
+
+/** Filtre posé depuis la matrice « Qualité par catégorie de test » : un modèle, une catégorie (`null` : toutes). */
+export type AnswersFilter = { modelId: string; modelName: string; category: string | null };
 
 /** Note imposée saisie : `undefined` quand ce n'est pas un nombre entier compris entre 0 et 100. */
 export function parseOverride(raw: string): number | undefined {
@@ -240,6 +244,8 @@ export function SideBySide({
   isAdmin,
   judgePending = 0,
   pollMs = false,
+  filter = null,
+  onClearFilter,
 }: {
   runId: string;
   tests: SideBySideTest[];
@@ -247,11 +253,21 @@ export function SideBySide({
   judgePending?: number;
   /** Intervalle de relecture des réponses (celui du classement pendant la série), `false` une fois tout rendu. */
   pollMs?: number | false;
+  /** Filtre de la matrice : seuls les tests de la catégorie et les réponses du modèle sont montrés. */
+  filter?: AnswersFilter | null;
+  onClearFilter?: () => void;
 }) {
   const queryClient = useQueryClient();
   const [selected, setSelected] = useState('');
   const [tab, setTab] = useState<Tab>('side');
-  const runTestId = tests.some((t) => t.runTestId === selected) ? selected : (tests[0]?.runTestId ?? '');
+  const [detailOpen, setDetailOpen] = useState(false);
+  const cardRef = useRef<HTMLDivElement>(null);
+  const shown = filter?.category ? tests.filter((t) => t.category === filter.category) : tests;
+  const runTestId = shown.some((t) => t.runTestId === selected) ? selected : (shown[0]?.runTestId ?? '');
+  // Un clic dans la matrice amène la liste des réponses à l'écran.
+  useEffect(() => {
+    if (filter) cardRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+  }, [filter]);
   const answers = useQuery({
     queryKey: answersKey(runId, runTestId),
     queryFn: () => getAnswers(runId, runTestId),
@@ -260,10 +276,11 @@ export function SideBySide({
   });
   const tabs: Tab[] = isAdmin ? ['side', 'blind', 'spread'] : ['side', 'blind'];
   const hiddenCount = answers.data?.answers.filter((a) => a.hiddenUntilScored).length ?? 0;
+  const visible = answers.data?.answers.filter((a) => !a.hiddenUntilScored && (!filter || a.modelId === filter.modelId)) ?? [];
   const method = answers.data?.test.scoringMethod;
   // Relance du juge proposée seulement sur un test noté par le juge (le serveur refuse les autres : `not_rescorable`).
   const canRescore = isAdmin && method === 'judge';
-  const testIndex = tests.findIndex((t) => t.runTestId === runTestId);
+  const testIndex = shown.findIndex((t) => t.runTestId === runTestId);
 
   // Une note imposée ou une relance change les réponses et le classement (la progression suit le juge en attente).
   const refresh = () =>
@@ -275,13 +292,21 @@ export function SideBySide({
 
   if (tests.length === 0) return null;
   return (
-    <Card className="flex flex-col gap-4">
+    <Card ref={cardRef} className="flex scroll-mt-4 flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="m-0 font-display text-base font-bold text-white">
           Réponses côte à côte
           {answers.data ? (
             <small className="ml-2 font-mono text-[11px] font-medium text-mute">
-              test {testIndex + 1} / {tests.length} · « {answers.data.test.name} »
+              test {testIndex + 1} / {shown.length} ·{' '}
+              <button
+                type="button"
+                title="Voir le détail du test : prompts et résultat attendu"
+                onClick={() => setDetailOpen(true)}
+                className="cursor-pointer border-0 bg-transparent p-0 font-mono text-[11px] font-medium text-peach underline decoration-dotted underline-offset-2 hover:text-white"
+              >
+                « {answers.data.test.name} »
+              </button>
             </small>
           ) : null}
         </h2>
@@ -292,7 +317,26 @@ export function SideBySide({
         ) : null}
       </div>
 
-      <SelectField label="Test" value={runTestId} options={tests.map((t) => ({ value: t.runTestId, label: t.testName }))} onChange={(e) => setSelected(e.target.value)} />
+      {filter ? (
+        <div role="status" className="flex flex-wrap items-center gap-2 rounded-2xl border border-orange/50 bg-orange/10 px-3 py-2 text-sm text-white">
+          <span>
+            Filtre : <b>{filter.modelName}</b> · {filter.category ?? 'toutes les catégories'} ({shown.length} test{shown.length > 1 ? 's' : ''})
+          </span>
+          <Button variant="ghost" className="ml-auto px-3 py-1 text-xs" onClick={onClearFilter}>
+            Retirer le filtre
+          </Button>
+        </div>
+      ) : null}
+
+      <div className="flex flex-wrap items-end gap-2">
+        <SelectField label="Test" value={runTestId} options={shown.map((t) => ({ value: t.runTestId, label: t.testName }))} onChange={(e) => setSelected(e.target.value)} />
+        {answers.data ? (
+          <Button variant="ghost" onClick={() => setDetailOpen(true)}>
+            Détail du test
+          </Button>
+        ) : null}
+      </div>
+      {answers.data && detailOpen ? <TestDetailDialog test={answers.data.test} open={detailOpen} onOpenChange={setDetailOpen} /> : null}
 
       <div role="tablist" aria-label="Vue des réponses" className="flex flex-wrap gap-1.5">
         {tabs.map((t) => (
@@ -345,7 +389,10 @@ export function SideBySide({
                     </Link>
                   </div>
                 ) : null}
-                {answers.data.answers.filter((a) => !a.hiddenUntilScored).map((a) => (
+                {filter && visible.length === 0 && hiddenCount === 0 ? (
+                  <p className="m-0 text-sm text-mute md:col-span-2 xl:col-span-3">Aucune réponse de {filter.modelName} pour ce test.</p>
+                ) : null}
+                {visible.map((a) => (
                   <div key={a.resultId} className="flex flex-col gap-1.5">
                     <AnswerCard answer={a} method={answers.data.test.scoringMethod} isAdmin={isAdmin} onOverride={refresh} />
                     {canRescore && a.status === 'done' ? <ResultRescore runId={runId} resultId={a.resultId} onQueued={refresh} /> : null}

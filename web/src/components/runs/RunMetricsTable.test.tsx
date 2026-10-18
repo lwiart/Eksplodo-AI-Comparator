@@ -62,5 +62,12 @@ test('réponses masquées avant notation (mesures nulles) : réussites comptées
   ]);
   render(<RunMetricsTable rows={rows} />);
   const cells = within(screen.getByRole('row', { name: /A/ })).getAllByRole('cell');
-  expect(cells.map((c) => c.textContent)).toEqual(['2', '0', '—', '—', '—']);
+  expect(cells.map((c) => c.textContent)).toEqual(['2', '0', '—', '—', '—', '—']);
+});
+
+test('colonne « Tarif entrée / sortie (1 M tokens) » : tarif du catalogue, « — » s’il est inconnu', () => {
+  render(<RunMetricsTable rows={[row({}), row({ id: 'y', modelId: 'm2', modelName: 'B' })]} prices={new Map([['m1', { inputPricePerM: 2.5, outputPricePerM: 12 }]])} />);
+  expect(screen.getByRole('columnheader', { name: 'Tarif entrée / sortie (1 M tokens)' })).toBeInTheDocument();
+  expect(within(screen.getByRole('row', { name: /^A/ })).getAllByRole('cell').at(-1)).toHaveTextContent('2,5 / 12 $');
+  expect(within(screen.getByRole('row', { name: /^B/ })).getAllByRole('cell').at(-1)).toHaveTextContent('—');
 });

@@ -148,14 +148,15 @@ export async function seedProvider(
   overrides: Partial<ProviderRow> & { apiKey?: string; encryptionKey?: Buffer } = {},
 ): Promise<ProviderRow> {
   const { apiKey, encryptionKey, ...rest } = overrides;
-  const sealed = apiKey === undefined ? {} : sealApiKey(apiKey, encryptionKey ?? testConfig().encryptionKey);
   const id = rest.id ?? randomUUID();
+  const baseUrl = rest.baseUrl ?? 'https://api.example.test/v1';
+  const sealed = apiKey === undefined ? {} : sealApiKey(apiKey, encryptionKey ?? testConfig().encryptionKey, { id, baseUrl });
   await db.insert(providers).values({
     id,
     name: `Fournisseur ${id.slice(0, 8)}`,
     type: 'openai_compatible',
-    baseUrl: 'https://api.example.test/v1',
     ...rest,
+    baseUrl,
     ...sealed,
   });
   const [row] = await db.select().from(providers).where(eq(providers.id, id));

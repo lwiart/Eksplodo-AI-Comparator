@@ -3,7 +3,9 @@ import { hash as argonHash, verify as argonVerify } from '@node-rs/argon2';
 
 // Algorithm.Argon2id (valeur 2) : l'enum @node-rs/argon2 est `const enum`, on utilise la valeur numérique.
 const ARGON2ID = 2;
-const SECRET_VERSION = 'v1';
+/** v2 : chiffré lié à un contexte (données associées GCM). v1 : ancien format sans contexte, lu seulement pour conversion. */
+const SECRET_VERSION = 'v2';
+const LEGACY_VERSION = 'v1';
 const IV_BYTES = 12;
 const TAG_BYTES = 16;
 const KEY_BYTES = 32;
@@ -36,21 +38,25 @@ function assertKey(key: Buffer): void {
   }
 }
 
-/** Chiffre `plain` en AES-256-GCM ; format `v1.<iv>.<tag>.<chiffré>` (base64url). */
-export function encryptSecret(plain: string, key: Buffer): string {
+/**
+ * Chiffre `plain` en AES-256-GCM, lié à `context` (données associées) : le chiffré ne se déchiffre qu'avec ce même
+ * contexte, si bien qu'un chiffré recopié ailleurs ou un contexte modifié en base le rend illisible.
+ * Format `v2.<iv>.<tag>.<chiffré>` (base64url).
+ */
+export function encryptSecret(plain: string, key: Buffer, context: string): string {
   assertKey(key);
   const iv = randomBytes(IV_BYTES);
   const cipher = createCipheriv('aes-256-gcm', key, iv);
+  cipher.setAAD(Buffer.from(context, 'utf8'));
   const ciphertext = Buffer.concat([cipher.update(plain, 'utf8'), cipher.final()]);
   const tag = cipher.getAuthTag();
   return [SECRET_VERSION, iv.toString('base64url'), tag.toString('base64url'), ciphertext.toString('base64url')].join('.');
 }
 
-/** Déchiffre un secret produit par `encryptSecret`. Lève une erreur si la clé ou le contenu est invalide. */
-export function decryptSecret(payload: string, key: Buffer): string {
+function open(payload: string, key: Buffer, version: string, context: string | null): string {
   assertKey(key);
-  const [version, ivB64 = '', tagB64 = '', dataB64 = ''] = payload.split('.');
-  if (payload.split('.').length !== 4 || version !== SECRET_VERSION) {
+  const [found, ivB64 = '', tagB64 = '', dataB64 = ''] = payload.split('.');
+  if (payload.split('.').length !== 4 || found !== version) {
     throw new Error('Secret chiffré malformé');
   }
   const iv = Buffer.from(ivB64, 'base64url');
@@ -60,6 +66,22 @@ export function decryptSecret(payload: string, key: Buffer): string {
     throw new Error('Secret chiffré malformé');
   }
   const decipher = createDecipheriv('aes-256-gcm', key, iv, { authTagLength: TAG_BYTES });
+  if (context !== null) decipher.setAAD(Buffer.from(context, 'utf8'));
   decipher.setAuthTag(tag);
   return Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString('utf8');
+}
+
+/** Déchiffre un secret produit par `encryptSecret` avec le même `context`. Lève une erreur sinon (clé, contexte ou contenu). */
+export function decryptSecret(payload: string, key: Buffer, context: string): string {
+  return open(payload, key, SECRET_VERSION, context);
+}
+
+/** Ancien format v1 (sans contexte) : `decryptSecret` le refuse. */
+export function isLegacySecret(payload: string): boolean {
+  return payload.startsWith(`${LEGACY_VERSION}.`);
+}
+
+/** Déchiffre un secret v1 : réservé à sa conversion en v2 au démarrage. */
+export function decryptLegacySecret(payload: string, key: Buffer): string {
+  return open(payload, key, LEGACY_VERSION, null);
 }

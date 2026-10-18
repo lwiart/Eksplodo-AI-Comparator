@@ -472,6 +472,7 @@ test('progress : compteurs, matrice test × modèle et activité', async () => {
     {
       runTestId: rtA,
       testName: 'A',
+      category: expect.any(String),
       cells: [
         { modelId: t.modelA.id, pending: 1, running: 0, done: 1, failed: 0, unsupported: 0, truncated: 0 },
         { modelId: t.modelB.id, pending: 1, running: 0, done: 1, failed: 0, unsupported: 0, truncated: 0 },
@@ -480,6 +481,7 @@ test('progress : compteurs, matrice test × modèle et activité', async () => {
     {
       runTestId: rtB,
       testName: 'B',
+      category: expect.any(String),
       cells: [
         { modelId: t.modelA.id, pending: 1, running: 0, done: 0, failed: 1, unsupported: 0, truncated: 0 },
         { modelId: t.modelB.id, pending: 1, running: 1, done: 0, failed: 0, unsupported: 0, truncated: 0 },

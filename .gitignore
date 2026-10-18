@@ -16,3 +16,5 @@ docs/reference-ao/
 
 # Archive de déploiement
 app.zip
+# Archive de déploiement (générée par git archive)
+app.zip

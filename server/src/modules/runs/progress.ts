@@ -42,7 +42,7 @@ export type RunProgress = {
     /** Durée et coût masqués : question manuelle que l'Utilisateur n'a pas encore notée. */
     hiddenUntilScored: boolean;
   }[];
-  matrix: { runTestId: string; testName: string; cells: MatrixCell[] }[];
+  matrix: { runTestId: string; testName: string; category: string; cells: MatrixCell[] }[];
   models: { id: string; name: string; color: string }[];
 };
 
@@ -67,7 +67,7 @@ export type ProgressInput = {
   run: RunRow;
   now: Date;
   models: { id: string; name: string; color: string }[];
-  runTests: { id: string; name: string }[];
+  runTests: { id: string; name: string; category: string }[];
   cells: { runTestId: string; modelId: string; status: ResultStatus; n: number }[];
   running: { modelId: string; testName: string }[];
   activity: (Omit<RunProgress['activity'][number], 'completedAt'> & { completedAt: Date | null })[];
@@ -119,6 +119,7 @@ export function buildProgress(input: ProgressInput): RunProgress {
     matrix: input.runTests.map((t) => ({
       runTestId: t.id,
       testName: t.name,
+      category: t.category,
       cells: input.models.map((m) => cellOf(t.id, m.id)),
     })),
     models: input.models,

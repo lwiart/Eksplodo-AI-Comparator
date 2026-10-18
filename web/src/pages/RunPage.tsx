@@ -1,13 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { lazy, Suspense, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
+import { MODELS_KEY, listModels } from '../api/catalog';
 import { messageForError } from '../api/messages';
 import { answersPrefix, getRanking, rankingKey } from '../api/results';
 import { RUNS_KEY, getRun, getRunProgress, getRunResults, renameRun, type RunProgress, type RunStatus, type RunSummary } from '../api/runs';
 import { useAuth } from '../auth/AuthProvider';
 import { ShareDialog } from '../components/sharing/ShareDialog';
 import { ActivityFeed } from '../components/runs/ActivityFeed';
-import { SideBySide, type SideBySideTest } from '../components/results/SideBySide';
+import type { HeatmapSelection } from '../components/results/CategoryHeatmap';
+import { SideBySide, type AnswersFilter, type SideBySideTest } from '../components/results/SideBySide';
 import { LiveMatrix } from '../components/runs/LiveMatrix';
 import { PauseNotice, RunControls } from '../components/runs/RunControls';
 import { RunMetricsTable } from '../components/runs/RunMetricsTable';
@@ -169,6 +171,7 @@ function ResultsSection({
     refetchInterval: pollMs,
     refetchOnWindowFocus: 'always',
   });
+  const [selection, setSelection] = useState<HeatmapSelection | null>(null);
   const hasQuality = ranking.data?.models.some((m) => m.quality !== null) ?? false;
   if (!show && !hasQuality && judgePending === 0) return null;
   if (ranking.isError)
@@ -181,15 +184,33 @@ function ResultsSection({
   return (
     <Suspense fallback={<p className="text-sm text-mute">Chargement du classement…</p>}>
       <div className="flex flex-col gap-4">
-        <ResultsView runId={runId} ranking={ranking.data} isAdmin={isAdmin} />
-        <SideBySide runId={runId} tests={tests} isAdmin={isAdmin} judgePending={judgePending} pollMs={pollMs} />
+        <ResultsView runId={runId} ranking={ranking.data} isAdmin={isAdmin} selection={selection} onSelect={setSelection} />
+        <SideBySide
+          runId={runId}
+          tests={tests}
+          isAdmin={isAdmin}
+          judgePending={judgePending}
+          pollMs={pollMs}
+          filter={filterOf(selection, ranking.data.models)}
+          onClearFilter={() => setSelection(null)}
+        />
       </div>
     </Suspense>
   );
 }
 
+/** Filtre des réponses tiré de la case choisie (le nom du modèle vient du classement). */
+function filterOf(selection: HeatmapSelection | null, models: { modelId: string; name: string }[]): AnswersFilter | null {
+  if (!selection) return null;
+  const model = models.find((m) => m.modelId === selection.modelId);
+  return model ? { modelId: model.modelId, modelName: model.name, category: selection.category } : null;
+}
+
 function CompletedView({ runId }: { runId: string }) {
   const results = useQuery({ queryKey: [...RUNS_KEY, runId, 'results'], queryFn: () => getRunResults(runId) });
+  // Tarifs du catalogue (la série ne les fige pas) : colonne « Tarif entrée / sortie ».
+  const catalog = useQuery({ queryKey: MODELS_KEY, queryFn: listModels });
+  const prices = useMemo(() => new Map((catalog.data ?? []).map((m) => [m.id, { inputPricePerM: m.inputPricePerM, outputPricePerM: m.outputPricePerM }])), [catalog.data]);
   if (results.isError)
     return (
       <p role="alert" className="text-sm text-bad">
@@ -197,7 +218,7 @@ function CompletedView({ runId }: { runId: string }) {
       </p>
     );
   if (results.isPending) return <p className="text-sm text-mute">Chargement des résultats…</p>;
-  return <RunMetricsTable rows={results.data} />;
+  return <RunMetricsTable rows={results.data} prices={prices} />;
 }
 
 const TITLE = 'm-0 font-display text-[30px] leading-[1.1] font-extrabold tracking-[-0.01em] text-white';
@@ -422,7 +443,7 @@ export function RunPage() {
                 isAdmin={isAdmin}
                 show={progress.data.status === 'completed'}
                 active={ACTIVE.includes(progress.data.status)}
-                tests={progress.data.matrix.map((m) => ({ runTestId: m.runTestId, testName: m.testName }))}
+                tests={progress.data.matrix.map((m) => ({ runTestId: m.runTestId, testName: m.testName, category: m.category }))}
                 judgePending={progress.data.judgePending}
               />
               {progress.data.status === 'completed' ? <CompletedView runId={id} /> : null}

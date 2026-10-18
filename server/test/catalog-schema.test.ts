@@ -105,8 +105,9 @@ describe('schéma du catalogue', () => {
 
   test('ligne brute d’un fournisseur muni d’une clé : jamais la clé en clair', async () => {
     const db = await testDb();
-    const sealed = sealApiKey('sk-test-0123456789abcd', encryptionKey);
-    await db.insert(providers).values({ id: randomUUID(), name: 'Clé', type: 'anthropic', baseUrl: 'https://a.example', ...sealed });
+    const id = randomUUID();
+    const sealed = sealApiKey('sk-test-0123456789abcd', encryptionKey, { id, baseUrl: 'https://a.example' });
+    await db.insert(providers).values({ id, name: 'Clé', type: 'anthropic', baseUrl: 'https://a.example', ...sealed });
     const [rows] = await poolOf(db).query('SELECT * FROM providers WHERE name = ?', ['Clé']);
     const json = JSON.stringify(rows);
     expect(json).not.toContain('sk-test');

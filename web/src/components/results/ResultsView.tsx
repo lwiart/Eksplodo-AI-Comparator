@@ -6,15 +6,28 @@ import { RUNS_KEY, updateRun, type Weights } from '../../api/runs';
 import { rankedRows, sameWeights } from '../../lib/ranking';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
-import { CategoryHeatmap } from './CategoryHeatmap';
+import { CategoryHeatmap, type HeatmapSelection } from './CategoryHeatmap';
 import { Constellation } from './Constellation';
-import { Podium } from './Podium';
+import { Podium, PodiumHeading } from './Podium';
 import { QualitySpeedChart, QualitySpeedHeading } from './QualitySpeedChart';
 import { RankingTable } from './RankingTable';
 import { WeightSliders } from './WeightSliders';
 
 /** Vue résultats d'une série : podium et pondération, graphes, classement ; le classement se recalcule sans appel serveur. */
-export default function ResultsView({ runId, ranking, isAdmin }: { runId: string; ranking: Ranking; isAdmin: boolean }) {
+export default function ResultsView({
+  runId,
+  ranking,
+  isAdmin,
+  selection = null,
+  onSelect,
+}: {
+  runId: string;
+  ranking: Ranking;
+  isAdmin: boolean;
+  /** Case de la matrice choisie : filtre les réponses affichées plus bas. */
+  selection?: HeatmapSelection | null;
+  onSelect?: (selection: HeatmapSelection | null) => void;
+}) {
   const queryClient = useQueryClient();
   const [weights, setWeights] = useState<Weights>(ranking.weights);
   const rows = useMemo(() => rankedRows(ranking.models, weights), [ranking.models, weights]);
@@ -36,10 +49,9 @@ export default function ResultsView({ runId, ranking, isAdmin }: { runId: string
       <div className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
         <Constellation models={ranking.models} />
         <Card className="flex flex-col gap-5">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <h2 className="m-0 font-display text-base font-bold text-white">
-              Podium <span className="ml-1 font-mono text-[11px] font-medium text-mute">score global pondéré</span>
-            </h2>
+          {/* Titre en haut de la carte (pas centré sur le bouton) : aligné sur celui de la constellation voisine. */}
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <PodiumHeading />
             {/* Télécharge le classeur XLSX de la série. */}
             <a
               href={exportXlsxUrl(runId)}
@@ -83,19 +95,18 @@ export default function ResultsView({ runId, ranking, isAdmin }: { runId: string
         </Card>
       </div>
 
-      {/* Nuage puis matrice, chacun sur toute la largeur : la matrice a besoin de place pour ses colonnes. */}
+      {/* Nuage, classement puis matrice, chacun sur toute la largeur : la matrice a besoin de place pour ses colonnes. */}
       <Card className="min-w-0">
         <QualitySpeedHeading />
         <QualitySpeedChart models={rankedModels} />
       </Card>
+      <RankingTable rows={rows} judgeName={ranking.judge?.modelName} />
       <Card className="min-w-0">
         <h2 className="m-0 mb-2 font-display text-sm font-bold text-white">
           Qualité par catégorie de test <span className="ml-1 font-mono text-[11px] font-medium text-mute">note moyenne sur 100</span>
         </h2>
-        <CategoryHeatmap models={rankedModels} categories={ranking.categories} />
+        <CategoryHeatmap models={rankedModels} categories={ranking.categories} selected={selection} onSelect={onSelect} />
       </Card>
-
-      <RankingTable rows={rows} judgeName={ranking.judge?.modelName} />
     </section>
   );
 }

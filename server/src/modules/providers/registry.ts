@@ -29,21 +29,46 @@ export class KeyMissingError extends AppError {
 
 export class KeyUnreadableError extends AppError {
   constructor() {
-    super('key_unreadable', 409, "Clé illisible (APP_ENCRYPTION_KEY a changé) : ressaisissez-la dans l'écran Fournisseurs");
+    super(
+      'key_unreadable',
+      409,
+      "Clé illisible (APP_ENCRYPTION_KEY ou le fournisseur ont été modifiés hors de l'application) : ressaisissez-la dans l'écran Fournisseurs",
+    );
   }
 }
 
 const KEY_PATTERN = /^[\x21-\x7E]{8,500}$/;
 const LAST4_MIN_LENGTH = 12;
 
-/** Valide et chiffre une clé API saisie par l'Admin. */
-export function sealApiKey(plain: string, encryptionKey: Buffer): { apiKeyEncrypted: string; apiKeyLast4: string | null } {
+export type KeyOwner = Pick<ProviderLike, 'id' | 'baseUrl'>;
+
+/**
+ * Contexte de chiffrement d'une clé : identifiant du fournisseur et hôte de son URL. Modifier l'un ou l'autre
+ * directement en base (sans passer par l'API, qui efface la clé quand l'hôte change) rend la clé illisible : elle
+ * ne peut donc pas être détournée vers un autre serveur ni recopiée sur un autre fournisseur.
+ */
+export function keyContext(owner: KeyOwner): string {
+  let host = '';
+  try {
+    host = new URL(owner.baseUrl).host.toLowerCase();
+  } catch {
+    // URL invalide : hôte vide, la clé reste liée à l'identifiant.
+  }
+  return `aic:provider-key:${owner.id}:${host}`;
+}
+
+/** Valide et chiffre une clé API saisie par l'Admin, liée au fournisseur `owner` (voir `keyContext`). */
+export function sealApiKey(
+  plain: string,
+  encryptionKey: Buffer,
+  owner: KeyOwner,
+): { apiKeyEncrypted: string; apiKeyLast4: string | null } {
   const key = plain.trim();
   if (!KEY_PATTERN.test(key)) {
     throw new ValidationError('validation', 'Clé API invalide : 8 à 500 caractères imprimables, sans espace');
   }
   return {
-    apiKeyEncrypted: encryptSecret(key, encryptionKey),
+    apiKeyEncrypted: encryptSecret(key, encryptionKey, keyContext(owner)),
     apiKeyLast4: key.length >= LAST4_MIN_LENGTH ? key.slice(-4) : null,
   };
 }
@@ -55,16 +80,16 @@ export function createProviderRegistry(deps: {
   fetch?: typeof fetch;
   fakeSleep?: (ms: number, signal: AbortSignal) => Promise<void>;
 }) {
-  function decrypt(p: Pick<ProviderLike, 'apiKeyEncrypted'>): { state: KeyState; plain: string | null } {
+  function decrypt(p: Pick<ProviderLike, 'id' | 'baseUrl' | 'apiKeyEncrypted'>): { state: KeyState; plain: string | null } {
     if (!p.apiKeyEncrypted) return { state: 'missing', plain: null };
     try {
-      return { state: 'stored', plain: decryptSecret(p.apiKeyEncrypted, deps.encryptionKey) };
+      return { state: 'stored', plain: decryptSecret(p.apiKeyEncrypted, deps.encryptionKey, keyContext(p)) };
     } catch {
       return { state: 'unreadable', plain: null };
     }
   }
 
-  function keyStatus(p: Pick<ProviderLike, 'apiKeyEncrypted' | 'apiKeyLast4'>): KeyStatus {
+  function keyStatus(p: Pick<ProviderLike, 'id' | 'baseUrl' | 'apiKeyEncrypted' | 'apiKeyLast4'>): KeyStatus {
     const { state } = decrypt(p);
     return {
       state,

@@ -1,6 +1,6 @@
 import { useId } from 'react';
 import type { ResultRow } from '../../api/runs';
-import { formatNumber } from '../catalog/format';
+import { formatNumber, formatPricePair } from '../catalog/format';
 import { formatDuration } from '../tests/QuickTryPanel';
 import { Card } from '../ui/Card';
 
@@ -54,8 +54,11 @@ export function modelMetrics(rows: ResultRow[]): ModelMetrics[] {
 
 const dash = '—';
 
-/** Tableau des mesures par modèle d'une série terminée. */
-export function RunMetricsTable({ rows }: { rows: ResultRow[] }) {
+/** Tarif du catalogue d'un modèle, en dollars par million de tokens. */
+export type ModelPrice = { inputPricePerM: number; outputPricePerM: number };
+
+/** Tableau des mesures par modèle d'une série terminée, avec le tarif actuel de chaque modèle au catalogue. */
+export function RunMetricsTable({ rows, prices }: { rows: ResultRow[]; prices?: Map<string, ModelPrice> }) {
   const headingId = useId();
   const metrics = modelMetrics(rows);
   return (
@@ -64,7 +67,7 @@ export function RunMetricsTable({ rows }: { rows: ResultRow[] }) {
         <h2 id={headingId} className="m-0 font-display text-base font-bold text-white">
           Métriques par modèle
         </h2>
-        <p className="mt-1 mb-0 text-xs text-mute">Médianes calculées sur les réponses réussies.</p>
+        <p className="mt-1 mb-0 text-xs text-mute">Médianes calculées sur les réponses réussies. Tarifs : ceux du catalogue aujourd’hui.</p>
       </div>
       <div className="mt-3 overflow-x-auto">
         <table aria-labelledby={headingId} className="w-full border-collapse text-sm">
@@ -76,6 +79,7 @@ export function RunMetricsTable({ rows }: { rows: ResultRow[] }) {
               <th scope="col" className="px-4 py-3 text-right font-medium">Premier token médian</th>
               <th scope="col" className="px-4 py-3 text-right font-medium">Débit médian</th>
               <th scope="col" className="px-4 py-3 text-right font-medium">Coût moyen par réponse</th>
+              <th scope="col" className="px-4 py-3 text-right font-medium">Tarif entrée / sortie (1 M tokens)</th>
             </tr>
           </thead>
           <tbody>
@@ -95,6 +99,9 @@ export function RunMetricsTable({ rows }: { rows: ResultRow[] }) {
                 </td>
                 <td className="px-4 py-3 text-right font-mono text-xs text-ink">
                   {m.meanCostUsd === null ? dash : `${formatNumber(Number(m.meanCostUsd.toFixed(6)))} $`}
+                </td>
+                <td className="px-4 py-3 text-right font-mono text-xs text-ink">
+                  {formatPricePair(prices?.get(m.modelId)?.inputPricePerM ?? null, prices?.get(m.modelId)?.outputPricePerM ?? null) ?? dash}
                 </td>
               </tr>
             ))}

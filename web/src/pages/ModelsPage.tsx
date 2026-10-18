@@ -6,6 +6,7 @@ import { messageForError } from '../api/messages';
 import { useAuth } from '../auth/AuthProvider';
 import { formatContextShort, formatPricePair } from '../components/catalog/format';
 import { CapabilitiesBulkDialog } from '../components/catalog/CapabilitiesBulkDialog';
+import { PricesUpdateDialog } from '../components/catalog/PricesUpdateDialog';
 import { RemoteModelsDialog } from '../components/catalog/RemoteModelsDialog';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
@@ -67,6 +68,7 @@ export function ModelsPage() {
   const [providerId, setProviderId] = useState('');
   const [availableOnly, setAvailableOnly] = useState(false);
   const [checking, setChecking] = useState(false);
+  const [pricing, setPricing] = useState(false);
 
   const all = models.data ?? [];
   const providerOptions = [...new Map(all.map((m) => [m.providerId, m.providerName])).entries()].map(([value, label]) => ({ value, label }));
@@ -89,6 +91,14 @@ export function ModelsPage() {
               sans pièce jointe, une image et un PDF d’une page. Les colonnes Vision et PDF sont corrigées et enregistrées selon la réponse du
               fournisseur. Un résultat indéterminé ne change rien. Coût : quelques tokens par modèle.
             </InfoTip>
+            <Button variant="secondary" disabled={!rows.some((m) => m.available)} onClick={() => setPricing(true)}>
+              Mettre à jour les tarifs
+            </Button>
+            <InfoTip label="Mettre à jour les tarifs" width="w-80">
+              Relit la liste des modèles de chaque fournisseur (appel gratuit, sans tokens) pour les modèles disponibles affichés, puis montre
+              le tarif actuel et le tarif annoncé. Seuls les changements cochés sont enregistrés. Les modèles OpenRouter suivis par la
+              synchronisation quotidienne le restent.
+            </InfoTip>
             <AddModels />
           </div>
         ) : null}
@@ -96,13 +106,25 @@ export function ModelsPage() {
 
       <div className="mb-4 flex flex-wrap items-end gap-4">
         <SelectField label="Fournisseur" value={providerId} onChange={(e) => setProviderId(e.target.value)} options={[{ value: '', label: 'Tous' }, ...providerOptions]} />
-        <label className="flex items-center gap-2 pb-2.5 text-[13px] text-ink">
-          <input type="checkbox" checked={availableOnly} onChange={(e) => setAvailableOnly(e.target.checked)} />
-          Disponibles seulement
-        </label>
+        <div className="flex items-center gap-2 pb-2.5">
+          <label className="flex items-center gap-2 text-[13px] text-ink">
+            <input type="checkbox" checked={availableOnly} onChange={(e) => setAvailableOnly(e.target.checked)} />
+            Disponibles seulement
+          </label>
+          <InfoTip label="Disponibles seulement" width="w-80">
+            Le catalogue garde aussi les modèles qu’on ne peut pas appeler en ce moment. « Disponible » veut dire : le modèle est activé, son
+            fournisseur aussi, et la clé API du fournisseur est enregistrée et lisible. Les autres sont marqués « Indisponible » (ou
+            « Désactivé ») et ne peuvent pas entrer dans une nouvelle série.
+          </InfoTip>
+        </div>
       </div>
 
-      {isAdmin ? <CapabilitiesBulkDialog models={rows.filter((m) => m.available)} open={checking} onOpenChange={setChecking} /> : null}
+      {isAdmin ? (
+        <>
+          <CapabilitiesBulkDialog models={rows.filter((m) => m.available)} open={checking} onOpenChange={setChecking} />
+          <PricesUpdateDialog models={rows.filter((m) => m.available)} open={pricing} onOpenChange={setPricing} />
+        </>
+      ) : null}
 
       {models.isError ? (
         <p role="alert" className="text-sm text-bad">

@@ -232,11 +232,13 @@ export function createCatalogService(deps: CatalogServiceDeps) {
     },
 
     async createProvider(actor: Actor, input: ProviderInput): Promise<PublicProvider> {
-      const sealed = input.apiKey === undefined ? {} : sealApiKey(input.apiKey, deps.config.encryptionKey);
+      const id = randomUUID();
+      const sealed =
+        input.apiKey === undefined ? {} : sealApiKey(input.apiKey, deps.config.encryptionKey, { id, baseUrl: input.baseUrl });
       let row: ProviderRow;
       try {
         row = await providersRepo.insert({
-          id: randomUUID(),
+          id,
           name: input.name,
           type: input.type,
           baseUrl: input.baseUrl,
@@ -263,7 +265,7 @@ export function createCatalogService(deps: CatalogServiceDeps) {
       const columns: ProviderPatch = { ...rest };
       let keyChanged: 'replaced' | 'removed' | null = null;
       if (typeof apiKey === 'string') {
-        Object.assign(columns, sealApiKey(apiKey, deps.config.encryptionKey));
+        Object.assign(columns, sealApiKey(apiKey, deps.config.encryptionKey, { id, baseUrl: rest.baseUrl ?? current.baseUrl }));
         keyChanged = 'replaced';
       } else if (apiKey === null) {
         columns.apiKeyEncrypted = null;

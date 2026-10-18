@@ -234,7 +234,7 @@ test('ordre : verdicts, podium sur toute la largeur, constellation sur toute la 
   expect(screen.getByRole('list', { name: 'Légende de la constellation' })).toBeInTheDocument();
   const main = screen.getByRole('main');
   const verdicts = screen.getByRole('list', { name: 'Verdicts' });
-  const podiumCard = screen.getByRole('heading', { level: 2, name: 'Podium score global pondéré' }).parentElement!;
+  const podiumCard = screen.getByRole('heading', { level: 2, name: 'Podium' }).closest('.card-surface')!;
   const constellationCard = screen.getByTestId('constellation-fallback').closest('.no-print')!;
   const scatterCard = screen.getByTestId('quality-speed-chart').parentElement!;
   // Podium et constellation sont des enfants directs de la colonne : plus de grille côte à côte.
@@ -267,4 +267,43 @@ test('bandeau : répétitions au pluriel juste après le nombre de cas', async (
   renderPage();
   const facts = await screen.findByRole('list', { name: 'Informations sur la série' });
   expect(within(facts).getAllByRole('listitem')[0]).toHaveTextContent('4 modèles testés sur 2 cas, 3 répétitions');
+});
+
+test('pondération sous le podium : critères avec aide « ? », 0 % omis ; coût omis quand les coûts sont masqués', async () => {
+  mockFetch({ ...SHARE, weights: { quality: 80, speed: 5, cost: 15, reliability: 0 } });
+  const { unmount } = renderPage();
+  const list = await screen.findByRole('list', { name: 'Pondération du score global' });
+  expect(within(list).getAllByRole('listitem').map((li) => li.textContent)).toEqual(['Qualité?80 %', '|Vitesse?5 %', '|Coût?15 %']);
+  expect(within(list).getByRole('button', { name: 'Aide : Vitesse' })).toHaveAccessibleDescription(DEFINITIONS.speed);
+  expect(screen.getByRole('heading', { level: 2, name: 'Podium' }).closest('.card-surface')).toContainElement(list);
+  expect(screen.getByRole('button', { name: 'Aide : Podium' })).toBeInTheDocument();
+  unmount();
+  mockFetch({ ...SHARE, showCosts: false, weights: { quality: 80, speed: 5, cost: 15, reliability: 0 } });
+  renderPage();
+  const hidden = await screen.findByRole('list', { name: 'Pondération du score global' });
+  expect(within(hidden).queryByText('Coût')).toBeNull();
+});
+
+test('classement détaillé avant la matrice ; clic sur une note : réponses filtrées par modèle et catégorie', async () => {
+  const user = userEvent.setup();
+  const responses = [
+    { testName: 'Lettre', category: 'Rédaction', userPrompt: 'Écris.', answers: [
+      { modelKey: 'm1', repetition: 1, text: 'Lettre Alpha', finalScore: 90, judgeRationale: null },
+      { modelKey: 'm2', repetition: 1, text: 'Lettre Bravo', finalScore: 70, judgeRationale: null },
+    ] },
+    { testName: 'Énigme', category: 'Logique', userPrompt: 'Résous.', answers: [{ modelKey: 'm1', repetition: 1, text: 'Énigme Alpha', finalScore: 80, judgeRationale: null }] },
+  ];
+  mockFetch({ ...SHARE, responses });
+  renderPage();
+  const matrix = await screen.findByRole('table', { name: 'Qualité par catégorie de test' });
+  const ranking = screen.getByRole('heading', { name: /Classement détaillé/ });
+  expect(ranking.compareDocumentPosition(matrix) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  await user.click(within(matrix).getByRole('button', { name: /^Bravo · Rédaction/ }));
+  const section = within(screen.getByRole('region', { name: 'Réponses des modèles' }));
+  expect(section.getByRole('status')).toHaveTextContent('Filtre : Bravo · Rédaction (1 test)');
+  expect(section.getByText('Lettre Bravo')).toBeInTheDocument();
+  expect(section.queryByText('Lettre Alpha')).toBeNull();
+  expect(within(section.getByLabelText('Test')).getAllByRole('option').map((o) => o.textContent)).toEqual(['Lettre']);
+  await user.click(section.getByRole('button', { name: 'Retirer le filtre' }));
+  expect(section.getByText('Lettre Alpha')).toBeInTheDocument();
 });

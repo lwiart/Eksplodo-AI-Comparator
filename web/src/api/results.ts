@@ -1,5 +1,6 @@
 import { apiFetch } from './client';
 import type { ResultStatus, Weights } from './runs';
+import type { ScoringConfig } from './tests';
 
 // Types miroirs de server/src/modules/scoring/results.service.ts et aggregate.ts.
 export type ModelAggregate = {
@@ -36,6 +37,7 @@ export type Ranking = {
 
 export type Answer = {
   resultId: string;
+  modelId: string;
   modelName: string;
   color: string;
   repetition: number;
@@ -55,11 +57,25 @@ export type Answer = {
 
 export type ScoringMethod = 'expected' | 'judge' | 'manual';
 
+/** Détail du test figé au lancement de la série : consignes envoyées et résultat attendu. */
+export type AnswersTest = {
+  name: string;
+  category: string;
+  tags: string[];
+  systemPrompt: string | null;
+  userPrompt: string;
+  temperature: number;
+  maxTokens: number;
+  scoringMethod: ScoringMethod;
+  scoringConfig: ScoringConfig;
+  attachments: AnswerAttachment[];
+};
+
 /** `scoringMethod` : la relance du juge n'est proposée que sur un test noté par le juge. */
 /** Pièce jointe de l'instantané du test, repérée par sa position. */
 export type AnswerAttachment = { index: number; originalName: string; mime: string; pages: number | null };
 export type Answers = {
-  test: { name: string; category: string; userPrompt: string; scoringMethod: ScoringMethod; attachments: AnswerAttachment[] };
+  test: AnswersTest;
   answers: Answer[];
 };
 

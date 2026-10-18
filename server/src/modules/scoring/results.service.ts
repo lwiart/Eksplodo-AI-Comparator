@@ -7,7 +7,7 @@ import { readAttachment } from '../tests/attachments.js';
 import type { Actor } from '../auth/actor.js';
 import type { ResultStatus } from '../runs/runs.repo.js';
 import { maskHiddenRow, resultRowOf, type ResultRow, type Weights } from '../runs/runs.service.js';
-import type { ScoringMethod } from '../tests/scoring-config.js';
+import type { ScoringConfig, ScoringMethod } from '../tests/scoring-config.js';
 import { aggregateRun, rankModels, type AggregateInputRow, type ModelAggregate } from './aggregate.js';
 import { csvDocument, csvFileName, type CsvValue } from './csv.js';
 import { incompleteManualQuestions, incompleteManualQuestionsIn } from './manual.service.js';
@@ -26,6 +26,7 @@ export type Ranking = {
 
 export type Answer = {
   resultId: string;
+  modelId: string;
   modelName: string;
   color: string;
   repetition: number;
@@ -46,8 +47,21 @@ export type Answer = {
 /** `scoringMethod` : le client ne propose la relance du juge que sur un test noté par le juge. */
 /** Pièce jointe de l'instantané, repérée par sa position (ni identifiant ni chemin de stockage). */
 export type AnswerAttachment = { index: number; originalName: string; mime: string; pages: number | null };
+/** Détail du test tel qu'il a été figé au lancement : consignes envoyées et résultat attendu. */
+export type AnswersTest = {
+  name: string;
+  category: string;
+  tags: string[];
+  systemPrompt: string | null;
+  userPrompt: string;
+  temperature: number;
+  maxTokens: number;
+  scoringMethod: ScoringMethod;
+  scoringConfig: ScoringConfig;
+  attachments: AnswerAttachment[];
+};
 export type Answers = {
-  test: { name: string; category: string; userPrompt: string; scoringMethod: ScoringMethod; attachments: AnswerAttachment[] };
+  test: AnswersTest;
   answers: Answer[];
 };
 
@@ -288,14 +302,20 @@ export function createResultsService(deps: { db: Db; config: { dataDir: string }
         test: {
           name: rt.snapshot.name,
           category: rt.snapshot.category,
+          tags: rt.snapshot.tags ?? [],
+          systemPrompt: rt.snapshot.systemPrompt,
           userPrompt: rt.snapshot.userPrompt,
+          temperature: rt.snapshot.temperature,
+          maxTokens: rt.snapshot.maxTokens,
           scoringMethod: rt.snapshot.scoringMethod,
+          scoringConfig: rt.snapshot.scoringConfig,
           attachments: (rt.snapshot.attachments ?? []).map((a, index) => ({ index, originalName: a.originalName, mime: a.mime, pages: a.pages ?? null })),
         },
         answers: rows.map((r) => {
           const { row, scores } = visibleRow(r, hidden);
           return {
             resultId: row.id,
+            modelId: row.modelId,
             modelName: row.modelName,
             color: row.color,
             repetition: row.repetition,

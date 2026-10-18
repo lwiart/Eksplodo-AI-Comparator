@@ -96,7 +96,7 @@ export type RunProgress = {
     completedAt: string;
     hiddenUntilScored: boolean;
   }[];
-  matrix: { runTestId: string; testName: string; cells: MatrixCell[] }[];
+  matrix: { runTestId: string; testName: string; category: string; cells: MatrixCell[] }[];
   models: { id: string; name: string; color: string }[];
 };
 

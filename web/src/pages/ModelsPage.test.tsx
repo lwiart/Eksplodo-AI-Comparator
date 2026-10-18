@@ -125,3 +125,34 @@ test('Utilisateur : pas de bouton « Vérifier les capacités »', async () => {
   await screen.findByRole('link', { name: 'Claude Opus 5.5' });
   expect(screen.queryByRole('button', { name: 'Vérifier les capacités' })).toBeNull();
 });
+
+test('Admin : « Mettre à jour les tarifs » propose les tarifs annoncés par le fournisseur et enregistre ceux cochés', async () => {
+  const user = userEvent.setup();
+  const sonnet = { ...MODELS[0]!, id: 'm3', apiModelId: 'claude-sonnet-5-5', displayName: 'Claude Sonnet 5.5', inputPricePerM: 3, outputPricePerM: 15, priceSource: 'openrouter' };
+  const remote = (id: string, input: number | null, output: number | null) => ({ id, name: id, contextWindow: null, inputPricePerM: input, outputPricePerM: output, supportsVision: null, supportsPdf: null, alreadyAdded: true });
+  apiFetch.mockImplementation((path: string, init?: { method?: string }) => {
+    if (path === '/api/models') return Promise.resolve({ models: [...MODELS, sonnet] });
+    if (path === '/api/providers') return Promise.resolve({ providers: PROVIDERS });
+    if (path === '/api/providers/p1/remote-models') return Promise.resolve({ models: [remote('claude-opus-5-5', 4, 20), remote('claude-sonnet-5-5', 2.5, 12)] });
+    if (path === '/api/models/m3' && init?.method === 'PATCH') return Promise.resolve({ model: sonnet });
+    return Promise.reject(new Error(`appel inattendu ${path}`));
+  });
+  renderPage('admin');
+  await screen.findByRole('link', { name: 'Claude Sonnet 5.5' });
+  await user.click(screen.getByRole('button', { name: 'Mettre à jour les tarifs' }));
+  const dialog = within(await screen.findByRole('dialog', { name: 'Mettre à jour les tarifs' }));
+  const opus = within((await dialog.findByText('Claude Opus 5.5')).closest('tr')!);
+  expect(opus.getByText(/inchangé/)).toBeInTheDocument();
+  expect(opus.queryByRole('checkbox')).toBeNull();
+  const row = within(dialog.getByText('Claude Sonnet 5.5').closest('tr')!);
+  expect(row.getByText('3 / 15 $')).toBeInTheDocument();
+  expect(row.getByText('2,5 / 12 $')).toBeInTheDocument();
+  expect(row.getByRole('checkbox')).toBeChecked();
+  await user.click(dialog.getByRole('button', { name: 'Appliquer 1 changement' }));
+  expect(await dialog.findByText('1 tarif mis à jour.')).toBeInTheDocument();
+  // Le modèle suivi par la synchronisation OpenRouter le reste ; aucun appel payant (seule la liste des modèles est lue).
+  expect(apiFetch.mock.calls.filter((c) => c[1]?.method === 'PATCH')).toEqual([
+    ['/api/models/m3', { method: 'PATCH', body: { inputPricePerM: 2.5, outputPricePerM: 12, priceSource: 'openrouter' } }],
+  ]);
+  expect(apiFetch.mock.calls.some((c) => String(c[0]).includes('check-capabilities'))).toBe(false);
+});
