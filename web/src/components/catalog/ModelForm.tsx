@@ -1,7 +1,10 @@
 import { useEffect, useId, useState } from 'react';
-import type { ModelInput, PriceSource, PublicModel, RemoteModelView } from '../../api/catalog';
+import { checkCapabilities, type CapabilityCheck, type CapabilityResult, type ModelInput, type PriceSource, type PublicModel, type RemoteModelView } from '../../api/catalog';
+import { messageForError } from '../../api/messages';
 import { brandColor } from '../../lib/brand-colors';
+import { Button } from '../ui/Button';
 import { Field } from '../ui/Field';
+import { InfoTip } from '../ui/InfoTip';
 
 /** Brouillon de modèle : les nombres restent en texte tant que le formulaire est ouvert (saisie libre). */
 export type ModelDraft = {
@@ -153,6 +156,54 @@ export function ColorField({ value, onChange }: { value: string; onChange(color:
   );
 }
 
+type CheckState = { status: 'idle' } | { status: 'running' } | { status: 'done'; result: CapabilityCheck } | { status: 'failed'; message: string };
+
+const verdictTone = (r: CapabilityResult) => (r.supported === true ? 'text-good' : r.supported === false ? 'text-bad' : 'text-mute');
+
+/**
+ * « Vérifier les capacités » : trois tout petits appels réels (texte seul, image, PDF). Les cases suivent la réponse du
+ * fournisseur ; un résultat indéterminé (clé, délai, indisponibilité) les laisse telles quelles.
+ */
+function CapabilityCheckButton({ providerId, apiModelId, onResult }: { providerId: string; apiModelId: string; onResult(r: CapabilityCheck): void }) {
+  const [state, setState] = useState<CheckState>({ status: 'idle' });
+  const run = async () => {
+    setState({ status: 'running' });
+    try {
+      const result = await checkCapabilities(providerId, apiModelId.trim());
+      onResult(result);
+      setState({ status: 'done', result });
+    } catch (err) {
+      setState({ status: 'failed', message: messageForError(err) });
+    }
+  };
+  return (
+    <div className="col-span-full flex flex-col gap-1.5">
+      <div className="flex flex-wrap items-center gap-2">
+        <Button variant="secondary" disabled={apiModelId.trim() === '' || state.status === 'running'} onClick={() => void run()}>
+          {state.status === 'running' ? 'Vérification…' : 'Vérifier les capacités'}
+        </Button>
+        <InfoTip label="Vérifier les capacités" width="w-80">
+          Envoie au modèle trois très petits appels réels, avec la clé du fournisseur : un message sans pièce jointe (contrôle), une
+          image de 32 × 32 pixels et un PDF d’une page. Si le fournisseur accepte la pièce jointe, la case est cochée ; s’il la
+          refuse, elle est décochée et son message s’affiche. Si rien ne peut être conclu (clé refusée, délai dépassé, fournisseur
+          indisponible), les cases ne changent pas. Coût : quelques tokens ; durée : 20 secondes au plus.
+        </InfoTip>
+      </div>
+      {state.status === 'done' ? (
+        <ul aria-label="Résultat de la vérification" className="m-0 flex list-none flex-col gap-0.5 p-0 text-xs [overflow-wrap:anywhere]">
+          <li className={verdictTone(state.result.vision)}>Vision : {state.result.vision.message}</li>
+          <li className={verdictTone(state.result.pdf)}>PDF : {state.result.pdf.message}</li>
+        </ul>
+      ) : null}
+      {state.status === 'failed' ? (
+        <p role="alert" className="m-0 text-xs text-bad">
+          {state.message}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 type Props = {
   value: ModelDraft;
   onChange(value: ModelDraft): void;
@@ -160,10 +211,12 @@ type Props = {
   idEditable?: boolean;
   /** Adresse de l'API du fournisseur : sert à reconnaître la marque d'un modèle ajouté à la main. */
   providerBaseUrl?: string;
+  /** Fournisseur du modèle : active « Vérifier les capacités ». */
+  providerId?: string;
 };
 
 /** Formulaire compact d'un modèle : nom affiché, couleur, prix par million de tokens, capacités, contexte. */
-export function ModelForm({ value, onChange, idEditable = false, providerBaseUrl }: Props) {
+export function ModelForm({ value, onChange, idEditable = false, providerBaseUrl, providerId }: Props) {
   const set = <K extends keyof ModelDraft>(key: K, v: ModelDraft[K]) => {
     const next = { ...value, [key]: v };
     // Couleur restée par défaut : elle suit la marque reconnue dans l'identifiant ou le nom saisis.
@@ -199,6 +252,19 @@ export function ModelForm({ value, onChange, idEditable = false, providerBaseUrl
         <input type="checkbox" checked={value.supportsPdf} onChange={(e) => set('supportsPdf', e.target.checked)} />
         PDF
       </label>
+      {providerId ? (
+        <CapabilityCheckButton
+          providerId={providerId}
+          apiModelId={value.apiModelId}
+          onResult={(r) =>
+            onChange({
+              ...value,
+              supportsVision: r.vision.supported ?? value.supportsVision,
+              supportsPdf: r.pdf.supported ?? value.supportsPdf,
+            })
+          }
+        />
+      ) : null}
     </div>
   );
 }

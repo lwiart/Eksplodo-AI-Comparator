@@ -181,7 +181,7 @@ function EditPanel({ model, onDone }: { model: Model; onDone(): void }) {
   return (
     <Card className="flex flex-col gap-4">
       <h2 className="m-0 font-display text-lg font-bold text-white">Modifier le modèle</h2>
-      <ModelForm value={draft} onChange={setDraft} />
+      <ModelForm providerId={model.providerId} value={draft} onChange={setDraft} />
       <div className="flex items-center gap-2">
         <label htmlFor="model-enabled" className="text-[13px] text-ink">
           Actif

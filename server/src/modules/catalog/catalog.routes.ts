@@ -48,6 +48,7 @@ const price = z
   .max(100_000)
   .refine((v) => Math.abs(v * 10_000 - Math.round(v * 10_000)) < 1e-6, { message: '4 décimales au plus' });
 const displayName = z.string().trim().min(1).max(200);
+const checkCapabilitiesBody = z.object({ apiModelId: z.string().trim().min(1).max(200) }).strict();
 const color = z.string().regex(/^#[0-9A-Fa-f]{6}$/, 'couleur #RRGGBB attendue');
 const contextWindow = z.number().int().positive().nullable();
 
@@ -101,6 +102,12 @@ export function registerCatalogRoutes(app: FastifyInstance, service: CatalogServ
   app.post('/api/providers/:id/test', admin, async (req) => {
     const { id } = idParams.parse(req.params);
     return service.testConnection(id);
+  });
+
+  app.post('/api/providers/:id/check-capabilities', admin, async (req) => {
+    const { id } = idParams.parse(req.params);
+    const { apiModelId } = checkCapabilitiesBody.parse(req.body);
+    return { capabilities: await service.checkCapabilities(id, apiModelId) };
   });
 
   app.get('/api/providers/:id/remote-models', admin, async (req) => {

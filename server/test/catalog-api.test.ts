@@ -2,7 +2,7 @@ import { eq } from 'drizzle-orm';
 import { afterEach, describe, expect, test } from 'vitest';
 import { models } from '../src/db/schema/catalog.js';
 import { auditLog } from '../src/db/schema/core.js';
-import { fakeFetch } from './helpers/fake-fetch.js';
+import { fakeFetch, sseResponse } from './helpers/fake-fetch.js';
 import { uniqueRemoteModels } from '../src/modules/catalog/catalog.service.js';
 import { buildTestApp, loginAs, seedModel, seedProvider, seedUser, type TestApp } from './helpers/test-app.js';
 
@@ -192,6 +192,32 @@ describe('fournisseurs', () => {
         expect.objectContaining({ id: 'mistral-small', alreadyAdded: false }),
       ]),
     );
+  });
+
+  test('vérifier les capacités : texte et image acceptés, PDF refusé comme chez DeepSeek ; droits et saisie contrôlés', async () => {
+    const f = fakeFetch({
+      [`POST ${BASE}/chat/completions`]: async (req) => {
+        const body = await req.text();
+        if (body.includes('file_data')) {
+          return new Response(JSON.stringify({ error: { message: 'messages[0]: file must have a file_id or file_data' } }), { status: 400 });
+        }
+        return sseResponse('openai/text.sse');
+      },
+    });
+    const { post, db, user } = await setup({ fetch: f });
+    const p = await seedProvider(db, { apiKey: KEY });
+    const res = await post(`/api/providers/${p.id}/check-capabilities`, { apiModelId: 'deepseek-flash' });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().capabilities).toEqual({
+      vision: { supported: true, message: 'Image acceptée par le modèle.' },
+      pdf: { supported: false, message: 'PDF refusé : Requête refusée par le fournisseur : messages[0]: file must have a file_id or file_data' },
+    });
+    expect(f.calls).toHaveLength(3);
+    expect(res.body).not.toContain(KEY);
+    expect((await post(`/api/providers/${p.id}/check-capabilities`, { apiModelId: '  ' })).statusCode).toBe(400);
+    expect((await post(`/api/providers/${p.id}/check-capabilities`, { apiModelId: 'm' }, user)).statusCode).toBe(403);
+    const sansCle = await seedProvider(db, { name: 'Sans clé' });
+    expect((await post(`/api/providers/${sansCle.id}/check-capabilities`, { apiModelId: 'm' })).statusCode).toBe(409);
   });
 
   test('remote-models : un identifiant répété par le fournisseur (Eden AI) n’apparaît qu’une fois', async () => {

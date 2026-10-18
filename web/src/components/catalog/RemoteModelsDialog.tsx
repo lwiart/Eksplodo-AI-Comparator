@@ -162,7 +162,7 @@ export function RemoteModelsDialog({ providerId, providerBaseUrl, open, onOpenCh
                       </label>
                       {entry ? (
                         <div className="mt-3">
-                          <ModelForm value={entry.draft} onChange={(d) => edit(entry.key, d)} />
+                          <ModelForm providerId={providerId} value={entry.draft} onChange={(d) => edit(entry.key, d)} />
                         </div>
                       ) : null}
                       {errors[m.id] ? (
@@ -180,7 +180,7 @@ export function RemoteModelsDialog({ providerId, providerBaseUrl, open, onOpenCh
 
         {manualEntries.map((entry) => (
           <div key={entry.key} className="rounded-xl border border-line p-3">
-            <ModelForm idEditable providerBaseUrl={providerBaseUrl} value={entry.draft} onChange={(d) => edit(entry.key, d)} />
+            <ModelForm idEditable providerId={providerId} providerBaseUrl={providerBaseUrl} value={entry.draft} onChange={(d) => edit(entry.key, d)} />
             {errors[entry.key] ? (
               <p role="alert" className="m-0 mt-2 text-xs text-bad">
                 {errors[entry.key]}

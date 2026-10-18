@@ -2,18 +2,22 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { expect, test, vi } from 'vitest';
+
+const apiFetch = vi.hoisted(() => vi.fn());
+vi.mock('../../api/client', async (importOriginal) => ({ ...(await importOriginal<typeof import('../../api/client')>()), apiFetch }));
 import type { RemoteModelView } from '../../api/catalog';
 import { ColorField, draftFromRemote, emptyDraft, ModelForm, parseHex, type ModelDraft } from './ModelForm';
 
 const remote = (id: string, name: string): RemoteModelView =>
   ({ id, name, contextWindow: null, inputPricePerM: null, outputPricePerM: null, supportsVision: null, supportsPdf: null, alreadyAdded: false }) as RemoteModelView;
 
-function Harness({ initial, baseUrl, spy }: { initial: ModelDraft; baseUrl?: string; spy?: (d: ModelDraft) => void }) {
+function Harness({ initial, baseUrl, spy, providerId }: { initial: ModelDraft; baseUrl?: string; spy?: (d: ModelDraft) => void; providerId?: string }) {
   const [draft, setDraft] = useState(initial);
   return (
     <ModelForm
       idEditable
       providerBaseUrl={baseUrl}
+      providerId={providerId}
       value={draft}
       onChange={(d) => {
         setDraft(d);
@@ -92,4 +96,40 @@ test('ajout à la main : la couleur suit la marque saisie tant qu’elle n’a p
 test('ajout à la main chez un fournisseur de marque : sa couleur d’emblée', () => {
   expect(emptyDraft(2, 'https://api.anthropic.com').color).toBe('#D97757');
   expect(emptyDraft(2).color).toBe('#4FD1A5');
+});
+
+test('« Vérifier les capacités » : cases suivant la réponse du fournisseur, indéterminé laissé tel quel, aide « ? »', async () => {
+  const user = userEvent.setup();
+  apiFetch.mockResolvedValueOnce({
+    capabilities: {
+      vision: { supported: true, message: 'Image acceptée par le modèle.' },
+      pdf: { supported: false, message: 'PDF refusé : file must have a file_id or file_data' },
+    },
+  });
+  render(<Harness initial={{ ...emptyDraft(0), apiModelId: 'deepseek-flash', supportsPdf: true }} providerId="p1" />);
+  expect(screen.getByRole('button', { name: 'Aide : Vérifier les capacités' })).toHaveAccessibleDescription(/trois très petits appels réels/);
+  await user.click(screen.getByRole('button', { name: 'Vérifier les capacités' }));
+  expect(apiFetch).toHaveBeenCalledWith('/api/providers/p1/check-capabilities', { method: 'POST', body: { apiModelId: 'deepseek-flash' } });
+  const result = await screen.findByRole('list', { name: 'Résultat de la vérification' });
+  expect(result).toHaveTextContent('Vision : Image acceptée par le modèle.');
+  expect(result).toHaveTextContent('PDF : PDF refusé : file must have a file_id or file_data');
+  expect(screen.getByRole('checkbox', { name: 'Vision (images)' })).toBeChecked();
+  expect(screen.getByRole('checkbox', { name: 'PDF' })).not.toBeChecked();
+
+  // Indéterminé (clé refusée…) : les cases ne bougent pas.
+  apiFetch.mockResolvedValueOnce({
+    capabilities: { vision: { supported: null, message: 'Indéterminé : clé refusée' }, pdf: { supported: null, message: 'Indéterminé : clé refusée' } },
+  });
+  await user.click(screen.getByRole('button', { name: 'Vérifier les capacités' }));
+  await screen.findByText('Vision : Indéterminé : clé refusée');
+  expect(screen.getByRole('checkbox', { name: 'Vision (images)' })).toBeChecked();
+  expect(screen.getByRole('checkbox', { name: 'PDF' })).not.toBeChecked();
+});
+
+test('« Vérifier les capacités » absent sans fournisseur, désactivé sans identifiant API', () => {
+  const { unmount } = render(<Harness initial={emptyDraft(0)} />);
+  expect(screen.queryByRole('button', { name: 'Vérifier les capacités' })).toBeNull();
+  unmount();
+  render(<Harness initial={emptyDraft(0)} providerId="p1" />);
+  expect(screen.getByRole('button', { name: 'Vérifier les capacités' })).toBeDisabled();
 });

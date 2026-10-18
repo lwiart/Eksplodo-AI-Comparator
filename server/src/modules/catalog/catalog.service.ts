@@ -10,6 +10,7 @@ import type { Actor } from '../auth/actor.js';
 import { isOpenRouter } from '../providers/openrouter.js';
 import { ProviderError, readableDetail } from '../providers/errors.js';
 import { brandColor } from './brand-colors.js';
+import { checkCapabilities as probeCapabilities, type CapabilityCheck } from './capabilities.js';
 import { KeyMissingError, KeyUnreadableError, sealApiKey, type KeyState, type Registry } from '../providers/registry.js';
 import type { RemoteModel } from '../providers/types.js';
 import { KNOWN_PRICES } from './known-prices.js';
@@ -310,6 +311,13 @@ export function createCatalogService(deps: CatalogServiceDeps) {
         }
         throw err;
       }
+    },
+
+    /** Vérifie, par de tout petits appels réels, si le modèle accepte une image et un PDF (voir capabilities.ts). */
+    async checkCapabilities(id: string, apiModelId: string): Promise<CapabilityCheck> {
+      const p = await requireProvider(id);
+      const adapter = registry.adapterFor(p); // lève key_missing / key_unreadable (409) avant tout appel réseau
+      return probeCapabilities(adapter, apiModelId);
     },
 
     async remoteModels(id: string): Promise<RemoteModelView[]> {

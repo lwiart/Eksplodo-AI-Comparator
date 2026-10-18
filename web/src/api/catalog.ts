@@ -127,6 +127,16 @@ export function testProvider(id: string): Promise<ConnectionTest> {
   return apiFetch(`/api/providers/${enc(id)}/test`, { method: 'POST' });
 }
 
+/** `supported` : `true` accepté, `false` refusé par le fournisseur, `null` indéterminé (clé, délai, indisponibilité). */
+export type CapabilityResult = { supported: boolean | null; message: string };
+export type CapabilityCheck = { vision: CapabilityResult; pdf: CapabilityResult };
+
+/** Trois tout petits appels réels (texte seul, image, PDF) pour savoir ce que le modèle accepte. */
+export async function checkCapabilities(providerId: string, apiModelId: string): Promise<CapabilityCheck> {
+  return (await apiFetch<{ capabilities: CapabilityCheck }>(`/api/providers/${enc(providerId)}/check-capabilities`, { method: 'POST', body: { apiModelId } }))
+    .capabilities;
+}
+
 export async function listRemoteModels(id: string): Promise<RemoteModelView[]> {
   return (await apiFetch<{ models: RemoteModelView[] }>(`/api/providers/${enc(id)}/remote-models`)).models;
 }
