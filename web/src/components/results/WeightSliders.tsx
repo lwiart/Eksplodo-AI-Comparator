@@ -2,6 +2,8 @@ import * as Slider from '@radix-ui/react-slider';
 import { useRef } from 'react';
 import type { Weights } from '../../api/runs';
 import { rebalance, sameWeights, type WeightKey } from '../../lib/ranking';
+import { InfoTip } from '../ui/InfoTip';
+import { DEFINITIONS } from './definitions';
 
 const LABELS: [WeightKey, string][] = [
   ['quality', 'Qualité'],
@@ -28,11 +30,17 @@ export function WeightSliders({ value, onChange }: { value: Weights; onChange(ne
   };
   return (
     <div role="group" aria-label="Pondération" className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-4">
-      {LABELS.map(([key, label]) => (
+      {/* Bulles de la colonne de droite ouvertes vers la gauche pour rester dans la carte. */}
+      {LABELS.map(([key, label], i) => (
         <div key={key} className="flex flex-col gap-2">
-          <div className="flex justify-between text-xs text-mute">
-            <span>{label}</span>
-            <b className="font-mono font-semibold text-white">{value[key]} %</b>
+          <div className="flex items-center justify-between gap-1 text-xs text-mute">
+            <span className="inline-flex items-center gap-1.5">
+              {label}
+              <InfoTip label={label} align={i % 2 === 1 ? 'right' : 'left'}>
+                {DEFINITIONS[key]}
+              </InfoTip>
+            </span>
+            <b className="font-mono font-semibold whitespace-nowrap text-white">{value[key]} %</b>
           </div>
           <Slider.Root
             min={0}

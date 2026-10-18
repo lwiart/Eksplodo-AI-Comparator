@@ -659,6 +659,34 @@ test('PATCH : corps vide, pondération dont la somme ≠ 100, plafond à 5 déci
   expect((await t.patch(`/api/runs/${runId}`, { budgetUsd: 1.2345 })).json().run.budgetUsd).toBe(1.2345);
 });
 
+test('PATCH name : renommage (espaces retirés, ancien nom audité), nom vide ou trop long → 400, Utilisateur → 403', async () => {
+  const t = await setup();
+  const runId = await t.createRun(['Un'], { budgetUsd: 2 });
+
+  const renamed = await t.patch(`/api/runs/${runId}`, { name: '  Comparatif de novembre  ' });
+  expect(renamed.statusCode).toBe(200);
+  expect(renamed.json().run).toMatchObject({ id: runId, name: 'Comparatif de novembre', budgetUsd: 2 });
+  expect((await t.get(`/api/runs/${runId}`)).json().run.name).toBe('Comparatif de novembre');
+  expect((await t.get('/api/runs', t.user)).json().runs.map((r: { name: string }) => r.name)).toEqual(['Comparatif de novembre']);
+  // Le renommage laisse plafond et pondération intacts ; l'audit garde l'ancien nom.
+  expect(await t.runRow(runId)).toMatchObject({ budgetUsd: 2, weights: { quality: 50, speed: 20, cost: 20, reliability: 10 } });
+  const [entry] = await t.db.select().from(auditLog).where(eq(auditLog.action, 'run_updated'));
+  expect(entry).toMatchObject({ targetType: 'run', targetId: runId, details: { name: 'Comparatif de novembre', previousName: 'Série' } });
+
+  // Nom vide (après retrait des espaces), trop long ou d'un autre type : refusé, nom inchangé.
+  for (const name of ['', '   ', 'x'.repeat(201), 42, null]) {
+    const res = await t.patch(`/api/runs/${runId}`, { name });
+    expect(res.statusCode, JSON.stringify(name)).toBe(400);
+    expect(res.json().error.code).toBe('validation');
+  }
+  // 200 caractères : la borne de la création est acceptée.
+  expect((await t.patch(`/api/runs/${runId}`, { name: 'n'.repeat(200) })).json().run.name).toBe('n'.repeat(200));
+
+  // Réservé à l'Admin.
+  expect((await t.patch(`/api/runs/${runId}`, { name: 'Piratée' }, t.user)).statusCode).toBe(403);
+  expect((await t.runRow(runId)).name).toBe('n'.repeat(200));
+});
+
 test('relancer les erreurs : error et timeout repassent pending avec attempts 0, puis done', async () => {
   const t = await setup();
   const runId = await t.createRun(['Bonjour', 'Panne']);

@@ -20,7 +20,7 @@ export type RunInput = {
   weights?: Weights;
 };
 
-export type RunPatch = { budgetUsd?: number | null; weights?: Weights };
+export type RunPatch = { name?: string; budgetUsd?: number | null; weights?: Weights };
 
 export type StatusCounts = {
   pending: number;
@@ -175,4 +175,9 @@ export async function addRunModels(id: string, modelIds: string[]): Promise<RunS
 
 export async function updateRun(id: string, patch: RunPatch): Promise<RunSummary> {
   return (await apiFetch<{ run: RunSummary }>(`/api/runs/${enc(id)}`, { method: 'PATCH', body: patch })).run;
+}
+
+/** Renommage d'une série (Admin) : nom de 1 à 200 caractères, espaces de début et de fin retirés par le serveur. */
+export function renameRun(id: string, name: string): Promise<RunSummary> {
+  return updateRun(id, { name });
 }

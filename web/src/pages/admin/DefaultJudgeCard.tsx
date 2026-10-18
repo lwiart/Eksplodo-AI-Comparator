@@ -37,7 +37,7 @@ export function DefaultJudgeCard() {
             value={value}
             disabled={settings.isPending || models.isPending}
             onChange={(e) => setChoice(e.target.value)}
-            options={[{ value: '', label: 'Aucun' }, ...options.map((m) => ({ value: m.id, label: m.displayName }))]}
+            options={[{ value: '', label: 'Aucun' }, ...options.map((m) => ({ value: m.id, label: `${m.displayName} (${m.providerName})` }))]}
           />
         </div>
         <Button variant="primary" disabled={choice === null || choice === saved || save.isPending} onClick={() => save.mutate()}>

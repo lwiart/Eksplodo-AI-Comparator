@@ -8,23 +8,42 @@ import { useErrorSummary } from '../api/errors';
 import { messageForError } from '../api/messages';
 import { TODO_KEY, countToScore, getTodo } from '../api/scoring';
 import { ROLE_LABELS, useAuth, type PublicUser } from '../auth/AuthProvider';
+import { InfoTip } from '../components/ui/InfoTip';
 import { applyAnimationsPreference, getAnimationsPreference, setAnimationsPreference } from './preferences';
 
-type NavItem = { to: string; label: string; icon: string; end?: boolean; badge?: number; badgeLabel?: string };
+/** `pinned` : entrée gardée en tête de sa section, hors du tri alphabétique ; `help` : courte description (icône « ? »). */
+type NavItem = { to: string; label: string; icon: string; help: string; end?: boolean; pinned?: boolean; badge?: number; badgeLabel?: string };
 
 const EXPLORE: NavItem[] = [
-  { to: '/', label: 'Tableau de bord', icon: '◎', end: true },
-  { to: '/series', label: 'Séries', icon: '▶' },
-  { to: '/modeles', label: 'Modèles', icon: '✦' },
+  {
+    to: '/',
+    label: 'Tableau de bord',
+    icon: '◎',
+    end: true,
+    pinned: true,
+    help: 'Vue d’ensemble : dernières séries, dépenses du mois et évolution de la qualité des modèles.',
+  },
+  { to: '/series', label: 'Séries', icon: '▶', help: 'Les comparatifs : des tests passés sur plusieurs modèles, avec leurs réponses, leurs notes et leur classement.' },
+  { to: '/modeles', label: 'Modèles', icon: '✦', help: 'Catalogue des modèles disponibles : prix, capacités et statistiques de chacun.' },
 ];
-const TO_SCORE: NavItem = { to: '/a-noter', label: 'À noter', icon: '✎' };
+const TO_SCORE: NavItem = {
+  to: '/a-noter',
+  label: 'À noter',
+  icon: '✎',
+  help: 'Les questions qui attendent vos notes manuelles, données à l’aveugle sans voir le nom des modèles.',
+};
 const ADMIN: NavItem[] = [
-  { to: '/admin/utilisateurs', label: 'Utilisateurs', icon: '☻' },
-  { to: '/admin/fournisseurs', label: 'Fournisseurs', icon: '⌁' },
-  { to: '/admin/tests', label: 'Tests', icon: '✎' },
-  { to: '/admin/suites', label: 'Suites', icon: '☰' },
-  { to: '/admin/partages', label: 'Liens de partage', icon: '⇪' },
-  { to: '/admin/erreurs', label: 'Journal des erreurs', icon: '⚠' },
+  { to: '/admin/utilisateurs', label: 'Utilisateurs', icon: '☻', help: 'Comptes, rôles et invitations par e-mail.' },
+  {
+    to: '/admin/fournisseurs',
+    label: 'Fournisseurs',
+    icon: '⌁',
+    help: 'Connexions aux API des fournisseurs d’IA (clés chiffrées), ajout de modèles et juge par défaut.',
+  },
+  { to: '/admin/tests', label: 'Tests', icon: '✎', help: 'Les questions posées aux modèles : prompt, pièces jointes et méthode de notation.' },
+  { to: '/admin/suites', label: 'Suites', icon: '☰', help: 'Listes ordonnées de tests à lancer ensemble dans une série.' },
+  { to: '/admin/partages', label: 'Liens de partage', icon: '⇪', help: 'Liens publics en lecture seule vers les résultats d’une série, à activer ou couper.' },
+  { to: '/admin/erreurs', label: 'Journal des erreurs', icon: '⚠', help: 'Erreurs techniques de l’application, à consulter puis marquer comme traitées.' },
 ];
 
 function Brand() {
@@ -39,37 +58,48 @@ function Brand() {
   );
 }
 
+/** Entrées épinglées d'abord, puis ordre alphabétique français (« À noter » avec les « a ») : une nouvelle entrée se range d'elle-même. */
+const byLabel = (a: NavItem, b: NavItem) =>
+  Number(Boolean(b.pinned)) - Number(Boolean(a.pinned)) || a.label.localeCompare(b.label, 'fr', { sensitivity: 'base' });
+
 function NavSection({ title, items, onNavigate }: { title: string; items: NavItem[]; onNavigate?: () => void }) {
   return (
     <>
       <div className="mx-2 mt-[18px] mb-2 font-mono text-[10px] font-semibold tracking-[0.12em] text-mute">{title}</div>
-      {items.map((item) => (
-        <NavLink
-          key={item.to}
-          to={item.to}
-          end={item.end}
-          onClick={onNavigate}
-          className={({ isActive }) =>
-            `flex items-center gap-2.5 rounded-[10px] px-2.5 py-[9px] text-sm no-underline transition-colors ${
-              isActive
-                ? 'bg-gradient-to-r from-orange/20 to-orange/[0.02] text-white shadow-[inset_2px_0_0_var(--color-orange)]'
-                : 'text-ink hover:bg-blue/10'
-            }`
-          }
-        >
-          <span aria-hidden="true" className="w-[18px] text-center opacity-85">
-            {item.icon}
-          </span>
-          {item.label}
-          {item.badge ? (
-            <span
-              className="ml-auto rounded-full bg-bad/20 px-2 py-0.5 font-mono text-[11px] font-semibold text-bad"
-              aria-label={`${item.badge} ${item.badgeLabel ?? ''}`.trim()}
-            >
-              {item.badge}
+      {[...items].sort(byLabel).map((item) => (
+        // L'aide est à côté du lien, pas dedans : un bouton ne peut pas être imbriqué dans un lien.
+        <div key={item.to} className="relative flex items-center">
+          <NavLink
+            to={item.to}
+            end={item.end}
+            onClick={onNavigate}
+            className={({ isActive }) =>
+              `flex min-w-0 flex-1 items-center gap-2.5 rounded-[10px] py-[9px] pr-8 pl-2.5 text-sm no-underline transition-colors ${
+                isActive
+                  ? 'bg-gradient-to-r from-orange/20 to-orange/[0.02] text-white shadow-[inset_2px_0_0_var(--color-orange)]'
+                  : 'text-ink hover:bg-blue/10'
+              }`
+            }
+          >
+            <span aria-hidden="true" className="w-[18px] text-center opacity-85">
+              {item.icon}
             </span>
-          ) : null}
-        </NavLink>
+            {item.label}
+            {item.badge ? (
+              <span
+                className="ml-auto rounded-full bg-bad/20 px-2 py-0.5 font-mono text-[11px] font-semibold text-bad"
+                aria-label={`${item.badge} ${item.badgeLabel ?? ''}`.trim()}
+              >
+                {item.badge}
+              </span>
+            ) : null}
+          </NavLink>
+          <span className="absolute right-2">
+            <InfoTip label={item.label} align="right" width="w-[196px]">
+              {item.help}
+            </InfoTip>
+          </span>
+        </div>
       ))}
     </>
   );
@@ -197,12 +227,12 @@ export function AppShell({ children }: { children?: ReactNode }) {
 
   return (
     <div className="relative min-h-screen min-[800px]:flex">
-      <aside className={`${SIDEBAR} sticky top-0 hidden h-screen w-[232px] shrink-0 min-[800px]:flex`}>
+      <aside className={`${SIDEBAR} no-print sticky top-0 hidden h-screen w-[232px] shrink-0 min-[800px]:flex`}>
         <SidebarBody user={user} />
       </aside>
 
       <Dialog.Root open={drawerOpen} onOpenChange={setDrawerOpen}>
-        <header className="flex items-center justify-between border-b border-line bg-night-0/55 px-4 py-2.5 backdrop-blur-lg min-[800px]:hidden">
+        <header className="no-print flex items-center justify-between border-b border-line bg-night-0/55 px-4 py-2.5 backdrop-blur-lg min-[800px]:hidden">
           <Link to="/" className="font-mono text-[15px] font-semibold text-white no-underline">
             Eksplodo
           </Link>
@@ -237,7 +267,8 @@ export function AppShell({ children }: { children?: ReactNode }) {
         </Dialog.Portal>
       </Dialog.Root>
 
-      <main className="min-w-0 flex-1 px-4 pt-[22px] pb-[60px] min-[800px]:px-7">{children ?? <Outlet />}</main>
+      {/* `app-main` : imprimé sur fond blanc, textes sombres (theme.css), menu masqué. */}
+      <main className="app-main min-w-0 flex-1 px-4 pt-[22px] pb-[60px] min-[800px]:px-7">{children ?? <Outlet />}</main>
     </div>
   );
 }

@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
 import { messageForError } from '../../api/messages';
-import { exportCsvUrl, rankingKey, type Ranking } from '../../api/results';
+import { exportXlsxUrl, rankingKey, type Ranking } from '../../api/results';
 import { RUNS_KEY, updateRun, type Weights } from '../../api/runs';
 import { rankedRows, sameWeights } from '../../lib/ranking';
 import { Button } from '../ui/Button';
@@ -43,8 +43,9 @@ export default function ResultsView({ runId, ranking, isAdmin }: { runId: string
             <h2 className="m-0 font-display text-base font-bold text-white">
               Podium <span className="ml-1 font-mono text-[11px] font-medium text-mute">score global pondéré</span>
             </h2>
+            {/* Télécharge le classeur XLSX de la série. */}
             <a
-              href={exportCsvUrl(runId)}
+              href={exportXlsxUrl(runId)}
               download
               className="inline-flex items-center justify-center rounded-full border border-line-strong bg-night-2/70 px-4 py-2 text-[13px] font-semibold text-white no-underline hover:bg-night-2"
             >
@@ -96,7 +97,7 @@ export default function ResultsView({ runId, ranking, isAdmin }: { runId: string
         </Card>
         <Card>
           <h2 className="m-0 mb-2 font-display text-sm font-bold text-white">
-            Par catégorie <span className="ml-1 font-mono text-[11px] font-medium text-mute">qualité moyenne sur 100</span>
+            Qualité par catégorie de test <span className="ml-1 font-mono text-[11px] font-medium text-mute">note moyenne sur 100</span>
           </h2>
           <CategoryChart models={chartModels} categories={ranking.categories} />
         </Card>

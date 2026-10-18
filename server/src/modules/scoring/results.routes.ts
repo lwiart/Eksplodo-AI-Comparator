@@ -3,7 +3,9 @@ import { z } from 'zod';
 import { contentDisposition, wantsInline } from '../../lib/http.js';
 import type { ResultsService } from './results.service.js';
 
-const idParams = z.object({ id: z.string().uuid() });
+const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+
+const idParams =z.object({ id: z.string().uuid() });
 const answersParams = z.object({ id: z.string().uuid(), runTestId: z.string().uuid() });
 const attachmentParams = answersParams.extend({ index: z.coerce.number().int().min(0).max(99) });
 
@@ -37,6 +39,16 @@ export function registerResultsRoutes(app: FastifyInstance, service: ResultsServ
     const { fileName, body } = await service.exportCsv(id, req.actor!);
     return reply
       .header('content-type', 'text/csv; charset=utf-8')
+      .header('content-disposition', contentDisposition(fileName))
+      .header('cache-control', 'private, no-store')
+      .send(body);
+  });
+
+  app.get('/api/runs/:id/export.xlsx', connected, async (req, reply) => {
+    const { id } = idParams.parse(req.params);
+    const { fileName, body } = await service.exportXlsx(id, req.actor!);
+    return reply
+      .header('content-type', XLSX_MIME)
       .header('content-disposition', contentDisposition(fileName))
       .header('cache-control', 'private, no-store')
       .send(body);

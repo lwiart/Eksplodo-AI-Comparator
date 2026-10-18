@@ -36,7 +36,7 @@ export function QualitySpeedChart({ models }: { models: RankingModel[] }) {
   return (
     <div role="img" aria-label="Nuage qualité et vitesse des modèles" data-testid="quality-speed-chart" className="h-[280px] w-full">
       <ResponsiveContainer width="100%" height="100%">
-        <ScatterChart margin={{ top: 12, right: 24, bottom: 24, left: 0 }}>
+        <ScatterChart margin={{ top: 12, right: 24, bottom: 24, left: 4 }}>
           <CartesianGrid stroke={GRID_STROKE} />
           <ReferenceArea
             x1={IDEAL_FROM}
@@ -59,7 +59,18 @@ export function QualitySpeedChart({ models }: { models: RankingModel[] }) {
             stroke={GRID_STROKE}
             label={{ value: 'Vitesse (note sur 100)', position: 'insideBottom', offset: -12, fill: '#7FA3B5', fontSize: 11 }}
           />
-          <YAxis type="number" dataKey="quality" name="Qualité" domain={[0, 100]} ticks={[0, 20, 40, 60, 80, 100]} tick={AXIS_TICK} stroke={GRID_STROKE} width={36} />
+          {/* Axe élargi : le titre vertical se place à gauche des graduations sans les chevaucher. */}
+          <YAxis
+            type="number"
+            dataKey="quality"
+            name="Qualité"
+            domain={[0, 100]}
+            ticks={[0, 20, 40, 60, 80, 100]}
+            tick={AXIS_TICK}
+            stroke={GRID_STROKE}
+            width={58}
+            label={{ value: 'Qualité (note sur 100)', angle: -90, position: 'insideLeft', offset: 10, fill: '#7FA3B5', fontSize: 11, style: { textAnchor: 'middle' } }}
+          />
           <ZAxis range={[110, 110]} />
           <Tooltip cursor={{ stroke: GRID_STROKE }} content={<PointTooltip />} />
           {/* Légende en haut : en bas, elle chevauchait le titre de l'axe des vitesses. */}

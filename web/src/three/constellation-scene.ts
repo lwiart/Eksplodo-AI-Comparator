@@ -2,7 +2,10 @@ import type { BufferAttribute, Material, Mesh, Object3D } from 'three';
 import { createInteractionGate } from './interaction-gate';
 import type { SceneFactory } from './useThreeScene';
 
-/** Données de la constellation : un astre par modèle. `quality` est la note sur 100 (nulle : modèle non noté), `tokensPerS` le débit médian. */
+/**
+ * Données de la constellation : un astre par modèle, dans l'ordre des orbites (le premier au plus près du centre).
+ * `quality` est la note sur 100 (nulle : modèle non noté), `tokensPerS` le débit médian.
+ */
 export type ConstellationData = {
   models: { id: string; color: string; quality: number | null; tokensPerS: number | null }[];
 };
@@ -63,18 +66,60 @@ export function orbitPosition(radius: number, speed: number, phase: number, time
 
 const astreKey = (m: ConstellationData['models'][number]) => `${m.id}|${m.color}|${m.quality}|${m.tokensPerS}`;
 
+// ---------- survol : remontée vers React (testée) ----------
+
+/**
+ * Événement émis par le canevas (il remonte dans le DOM) quand l'astre survolé change ou se déplace à l'écran.
+ * `detail` vaut `null` quand plus aucun astre n'est survolé.
+ */
+export const CONSTELLATION_HOVER_EVENT = 'constellation-hover';
+/** Astre survolé : identifiant du modèle, centre à l'écran (px CSS, relatif au canevas) et rayon apparent du halo (px). */
+export type ConstellationHover = { id: string; x: number; y: number; r: number };
+
+/** Coordonnées normalisées (-1 à 1, y vers le haut) vers des pixels CSS du canevas (y vers le bas). */
+export function ndcToScreen(ndcX: number, ndcY: number, width: number, height: number): { x: number; y: number } {
+  return { x: ((ndcX + 1) / 2) * width, y: ((1 - ndcY) / 2) * height };
+}
+
+/** Même astre, déplacé de moins d'un demi-pixel : inutile de réémettre l'événement. */
+export function sameHover(a: ConstellationHover | null, b: ConstellationHover | null): boolean {
+  if (a === null || b === null) return a === b;
+  return a.id === b.id && Math.abs(a.x - b.x) < 0.5 && Math.abs(a.y - b.y) < 0.5 && Math.abs(a.r - b.r) < 0.5;
+}
+
+/**
+ * Place une étiquette de taille `label` au-dessus de l'astre (en dessous s'il manque de place), centrée sur lui
+ * et maintenue dans le cadre `box` avec une marge.
+ */
+export function placeLabel(
+  hover: Pick<ConstellationHover, 'x' | 'y' | 'r'>,
+  label: { w: number; h: number },
+  box: { w: number; h: number },
+  gap = 8,
+  margin = 8,
+): { left: number; top: number } {
+  const maxLeft = Math.max(margin, box.w - label.w - margin);
+  const left = Math.min(maxLeft, Math.max(margin, hover.x - label.w / 2));
+  const above = hover.y - hover.r - gap - label.h;
+  const below = Math.min(Math.max(margin, box.h - label.h - margin), hover.y + hover.r + gap);
+  return { left, top: above >= margin ? above : below };
+}
+
 // ---------- scène (ne fait que dessiner) ----------
 
 const FOV = 48;
 const CAM = { y: 2.6, z: 9.5 };
-const DIVE = 0.75; // part du trajet vers l'astre survolé
 const HUB_COLOR = 0xffb48a;
+const HALO_OPACITY = 0.12;
+const HALO_OPACITY_HOVER = 0.32; // l'astre survolé est mis en valeur, sans mouvement de caméra
 
-type Astre = { key: string; radius: number; speed: number; phase: number; mesh: Mesh; halo: Mesh; ring: Mesh };
+type Astre = { id: string; key: string; size: number; radius: number; speed: number; phase: number; mesh: Mesh; halo: Mesh; ring: Mesh };
 
 /**
- * « Constellation » : un astre par modèle (taille = qualité, vitesse d'orbite = débit, couleur du modèle, gris sans note),
- * des particules du centre vers les astres ; sur grand écran, la caméra plonge vers l'astre survolé.
+ * « Constellation » : un astre par modèle (taille = qualité, vitesse de rotation = débit, couleur du modèle, gris sans note),
+ * orbites dans l'ordre reçu (le premier au plus près du centre), des particules du centre vers les astres.
+ * Sur grand écran, l'astre survolé est mis en valeur et signalé par `CONSTELLATION_HOVER_EVENT` sur le canevas ;
+ * la caméra ne fait que dériver lentement.
  */
 export const constellationScene: SceneFactory = ({ THREE, canvas, width, height, isMobile, pixelRatio }) => {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
@@ -132,8 +177,78 @@ export const constellationScene: SceneFactory = ({ THREE, canvas, width, height,
     });
   };
 
+  // ---------- interaction : survol d'un astre (grand écran seulement), signalé à React par un événement ----------
+  const ray = new THREE.Raycaster();
+  const ndc = new THREE.Vector2();
+  const projected = new THREE.Vector3();
+  let pointer: { x: number; y: number } | null = null; // pointeur en coordonnées normalisées, nul hors du canevas
+  let hovered: Astre | null = null;
+  let lastHover: ConstellationHover | null = null;
+  let listeners: Array<() => void> = [];
+  const on = <E extends keyof HTMLElementEventMap>(type: E, fn: (e: HTMLElementEventMap[E]) => void) => {
+    canvas.addEventListener(type, fn as EventListener);
+    listeners.push(() => canvas.removeEventListener(type, fn as EventListener));
+  };
+  const haloMaterial = (a: Astre) => a.halo.material as Material & { opacity: number };
+
+  /** Position à l'écran d'un astre : centre et rayon apparent de son halo. */
+  function screenOf(a: Astre): ConstellationHover {
+    projected.copy(a.mesh.position).project(camera);
+    const c = ndcToScreen(projected.x, projected.y, size.w, size.h);
+    projected.copy(a.mesh.position).setY(a.mesh.position.y + a.size).project(camera);
+    const top = ndcToScreen(projected.x, projected.y, size.w, size.h);
+    return { id: a.id, x: c.x, y: c.y, r: Math.abs(c.y - top.y) };
+  }
+
+  /** Émet l'événement de survol si l'astre survolé ou sa position à l'écran a changé. */
+  function emitHover() {
+    const next = hovered ? screenOf(hovered) : null;
+    if (sameHover(lastHover, next)) return;
+    lastHover = next;
+    canvas.dispatchEvent(new CustomEvent<ConstellationHover | null>(CONSTELLATION_HOVER_EVENT, { bubbles: true, detail: next }));
+  }
+
+  function setHovered(a: Astre | null) {
+    if (hovered && hovered !== a) haloMaterial(hovered).opacity = HALO_OPACITY;
+    hovered = a;
+    if (a) haloMaterial(a).opacity = HALO_OPACITY_HOVER;
+    canvas.style.cursor = a ? 'help' : '';
+    emitHover();
+  }
+
+  /** Astre sous le pointeur ; les astres tournent, d'où un nouvel essai à chaque image tant que le pointeur reste sur le canevas. */
+  function pick() {
+    if (!pointer) return setHovered(null);
+    ndc.set(pointer.x, pointer.y);
+    ray.setFromCamera(ndc, camera);
+    const hit = ray.intersectObjects(
+      astres.map((a) => a.halo),
+      false,
+    )[0];
+    setHovered(hit ? (astres.find((a) => a.halo === hit.object) ?? null) : null);
+  }
+
+  function detachInteraction() {
+    listeners.forEach((off) => off());
+    listeners = [];
+    pointer = null;
+    setHovered(null);
+  }
+  function attachInteraction() {
+    on('pointermove', (e) => {
+      const r = canvas.getBoundingClientRect();
+      if (r.width === 0 || r.height === 0) return;
+      pointer = { x: ((e.clientX - r.left) / r.width) * 2 - 1, y: -((e.clientY - r.top) / r.height) * 2 + 1 };
+      pick();
+    });
+    on('pointerleave', () => {
+      pointer = null;
+      setHovered(null);
+    });
+  }
+
   function build(models: ConstellationData['models']) {
-    hovered = null;
+    setHovered(null);
     astres.forEach((a) => {
       for (const o of [a.mesh, a.halo, a.ring]) {
         scene.remove(o);
@@ -149,14 +264,17 @@ export const constellationScene: SceneFactory = ({ THREE, canvas, width, height,
         new THREE.SphereGeometry(radius, 40, 40),
         new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.45, roughness: 0.35 }),
       );
-      const halo = new THREE.Mesh(new THREE.SphereGeometry(radius * 1.9, 24, 24), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.12 }));
+      const halo = new THREE.Mesh(
+        new THREE.SphereGeometry(radius * 1.9, 24, 24),
+        new THREE.MeshBasicMaterial({ color, transparent: true, opacity: HALO_OPACITY }),
+      );
       const ring = new THREE.Mesh(
         new THREE.RingGeometry(R - 0.006, R + 0.006, 160),
         new THREE.MeshBasicMaterial({ color: 0x3fa2e0, transparent: true, opacity: 0.16, side: THREE.DoubleSide }),
       );
       ring.rotation.x = Math.PI / 2;
       scene.add(mesh, halo, ring);
-      return { key: astreKey(m), radius: R, speed: orbitSpeed(m.tokensPerS, maxTps), phase: i * 1.1, mesh, halo, ring };
+      return { id: m.id, key: astreKey(m), size: radius * 1.9, radius: R, speed: orbitSpeed(m.tokensPerS, maxTps), phase: i * 1.1, mesh, halo, ring };
     });
     needHalfW = (astres.length ? orbitRadius(astres.length - 1, astres.length) : FIRST_ORBIT) + 0.9;
     fit(size.w, size.h);
@@ -168,45 +286,6 @@ export const constellationScene: SceneFactory = ({ THREE, canvas, width, height,
     if (!same) build(models);
   }
 
-  // ---------- interaction : la caméra plonge vers l'astre survolé (grand écran seulement) ----------
-  const ray = new THREE.Raycaster();
-  const ndc = new THREE.Vector2();
-  const look = new THREE.Vector3(); // point visé (lissé)
-  const aim = new THREE.Vector3();
-  const home = new THREE.Vector3();
-  const dive = new THREE.Vector3();
-  const diveOffset = new THREE.Vector3(0, 0.9, 3.2);
-  let hovered: Astre | null = null;
-  let zoom = 0;
-  let listeners: Array<() => void> = [];
-  const on = <E extends keyof HTMLElementEventMap>(type: E, fn: (e: HTMLElementEventMap[E]) => void) => {
-    canvas.addEventListener(type, fn as EventListener);
-    listeners.push(() => canvas.removeEventListener(type, fn as EventListener));
-  };
-  function detachInteraction() {
-    listeners.forEach((off) => off());
-    listeners = [];
-    hovered = null;
-    canvas.style.cursor = '';
-  }
-  function attachInteraction() {
-    on('pointermove', (e) => {
-      const r = canvas.getBoundingClientRect();
-      if (r.width === 0 || r.height === 0) return;
-      ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
-      ray.setFromCamera(ndc, camera);
-      const hit = ray.intersectObjects(
-        astres.map((a) => a.halo),
-        false,
-      )[0];
-      hovered = hit ? (astres.find((a) => a.halo === hit.object) ?? null) : null;
-      canvas.style.cursor = hovered ? 'zoom-in' : '';
-    });
-    on('pointerleave', () => {
-      hovered = null;
-      canvas.style.cursor = '';
-    });
-  }
   const gate =
     typeof window.matchMedia === 'function'
       ? createInteractionGate(window.matchMedia('(min-width: 1024px)'), { attach: attachInteraction, detach: detachInteraction })
@@ -220,6 +299,7 @@ export const constellationScene: SceneFactory = ({ THREE, canvas, width, height,
       const p = orbitPosition(a.radius, a.speed, a.phase, time);
       a.mesh.position.set(p.x, p.y, p.z);
       a.halo.position.copy(a.mesh.position);
+      a.halo.updateMatrixWorld();
       a.mesh.rotation.y += dt * 1.2;
     }
 
@@ -243,16 +323,12 @@ export const constellationScene: SceneFactory = ({ THREE, canvas, width, height,
     }
     attr.needsUpdate = true;
 
-    // Caméra : dérive lente ; plongée vers l'astre survolé, retour au repos sinon.
-    const ease = 1 - Math.exp(-dt * 4);
-    zoom += ((hovered ? 1 : 0) - zoom) * ease;
-    if (hovered) aim.copy(hovered.mesh.position);
-    else aim.set(0, 0, 0);
-    look.lerp(aim, ease);
-    home.set(Math.sin(time * 0.08) * 1.2 * fitScale, CAM.y * fitScale, CAM.z * fitScale);
-    dive.copy(look).add(diveOffset);
-    camera.position.copy(home).lerp(dive, zoom * DIVE);
-    camera.lookAt(look);
+    // Caméra : simple dérive lente autour du centre ; plus de plongée vers l'astre survolé (l'affichage ne « saute » plus).
+    camera.position.set(Math.sin(time * 0.08) * 1.2 * fitScale, CAM.y * fitScale, CAM.z * fitScale);
+    camera.lookAt(0, 0, 0);
+    camera.updateMatrixWorld();
+    // Survol rejoué à chaque image : l'astre peut quitter le pointeur, l'étiquette suit sa position.
+    if (pointer) pick();
   }
 
   return {
@@ -263,6 +339,7 @@ export const constellationScene: SceneFactory = ({ THREE, canvas, width, height,
     resize(w, h) {
       renderer.setSize(w, h, false);
       fit(w, h);
+      if (pointer) pick();
     },
     setData,
     dispose() {

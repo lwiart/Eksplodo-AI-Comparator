@@ -468,3 +468,91 @@ test('notes du juge rendues alors que la série reste active : dernière relectu
   await waitFor(() => expect(answersCalls()).toBe(answersBefore + 1));
   expect(rankingCalls()).toBe(rankingBefore + 1);
 });
+
+/** PATCH du nom : la série renvoyée (et relue ensuite) porte le nouveau nom. */
+function acceptRename() {
+  const base = apiFetch.getMockImplementation()!;
+  apiFetch.mockImplementation((path: string, init?: { method?: string; body?: { name?: string } }) => {
+    if (path === '/api/runs/r1' && init?.method === 'PATCH') {
+      summary = { ...summary, name: init.body!.name! };
+      return Promise.resolve({ run: summary });
+    }
+    return base(path, init);
+  });
+}
+const patchCalls = () => apiFetch.mock.calls.filter((c) => c[0] === '/api/runs/r1' && c[1]?.method === 'PATCH');
+const runGets = () => apiFetch.mock.calls.filter((c) => c[0] === '/api/runs/r1' && !c[1]).length;
+
+test('Admin : renommer la série depuis le crayon, Entrée enregistre et relit la série', async () => {
+  const user = userEvent.setup();
+  acceptRename();
+  renderPage();
+  await screen.findByRole('heading', { level: 1, name: 'Polyvalence octobre' });
+  const gets = runGets();
+  await user.click(screen.getByRole('button', { name: 'Renommer la série' }));
+  const field = screen.getByRole('textbox', { name: 'Nom de la série' });
+  expect(field).toHaveValue('Polyvalence octobre');
+  expect(field).toHaveFocus();
+  await user.clear(field);
+  await user.type(field, '  Comparatif de novembre {Enter}');
+  expect(await screen.findByRole('heading', { level: 1, name: 'Comparatif de novembre' })).toBeInTheDocument();
+  expect(screen.queryByRole('textbox', { name: 'Nom de la série' })).toBeNull();
+  expect(patchCalls()).toEqual([['/api/runs/r1', { method: 'PATCH', body: { name: 'Comparatif de novembre' } }]]);
+  await waitFor(() => expect(runGets()).toBeGreaterThan(gets)); // cache de la série invalidé
+});
+
+test('Admin : clic sur le titre pour éditer, perte du focus enregistre', async () => {
+  const user = userEvent.setup();
+  acceptRename();
+  renderPage();
+  await user.click(await screen.findByRole('heading', { level: 1, name: 'Polyvalence octobre' }));
+  const field = screen.getByRole('textbox', { name: 'Nom de la série' });
+  await user.clear(field);
+  await user.type(field, 'Série renommée');
+  await user.tab();
+  expect(await screen.findByRole('heading', { level: 1, name: 'Série renommée' })).toBeInTheDocument();
+  expect(patchCalls()).toHaveLength(1);
+});
+
+test('Admin : Échap annule sans appel ; nom vide refusé avec un message', async () => {
+  const user = userEvent.setup();
+  acceptRename();
+  renderPage();
+  await user.click(await screen.findByRole('heading', { level: 1, name: 'Polyvalence octobre' }));
+  await user.type(screen.getByRole('textbox', { name: 'Nom de la série' }), 'Brouillon{Escape}');
+  expect(screen.getByRole('heading', { level: 1, name: 'Polyvalence octobre' })).toBeInTheDocument();
+  expect(screen.queryByRole('textbox', { name: 'Nom de la série' })).toBeNull();
+
+  await user.click(screen.getByRole('button', { name: 'Renommer la série' }));
+  const field = screen.getByRole('textbox', { name: 'Nom de la série' });
+  expect(field).toHaveValue('Polyvalence octobre'); // le brouillon annulé n'est pas repris
+  await user.clear(field);
+  await user.type(field, '   {Enter}');
+  expect(screen.getByRole('alert')).toHaveTextContent('Le nom de la série ne peut pas être vide.');
+  expect(field).toHaveAttribute('aria-invalid', 'true');
+  expect(field).toHaveAccessibleDescription('Le nom de la série ne peut pas être vide.');
+  expect(patchCalls()).toHaveLength(0);
+});
+
+test('Admin : erreur du serveur affichée, le champ reste ouvert', async () => {
+  const user = userEvent.setup();
+  const base = apiFetch.getMockImplementation()!;
+  apiFetch.mockImplementation((path: string, init?: { method?: string }) =>
+    path === '/api/runs/r1' && init?.method === 'PATCH' ? Promise.reject({ code: 'forbidden' }) : base(path, init),
+  );
+  renderPage();
+  await user.click(await screen.findByRole('heading', { level: 1, name: 'Polyvalence octobre' }));
+  const field = screen.getByRole('textbox', { name: 'Nom de la série' });
+  await user.type(field, ' bis{Enter}');
+  expect(await screen.findByRole('alert')).toHaveTextContent("Vous n'avez pas les droits nécessaires pour cette action.");
+  expect(screen.getByRole('textbox', { name: 'Nom de la série' })).toHaveValue('Polyvalence octobre bis');
+});
+
+test('Utilisateur : titre sans renommage', async () => {
+  const user = userEvent.setup();
+  renderPage('user');
+  const title = await screen.findByRole('heading', { level: 1, name: 'Polyvalence octobre' });
+  expect(screen.queryByRole('button', { name: 'Renommer la série' })).toBeNull();
+  await user.click(title);
+  expect(screen.queryByRole('textbox', { name: 'Nom de la série' })).toBeNull();
+});

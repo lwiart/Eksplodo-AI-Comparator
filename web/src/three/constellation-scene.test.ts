@@ -14,7 +14,10 @@ import {
   astreColor,
   astreRadius,
   flowCount,
+  ndcToScreen,
   orbitPosition,
+  placeLabel,
+  sameHover,
   orbitRadius,
   orbitSpeed,
   starCount,
@@ -56,6 +59,35 @@ test('orbites : régulières, plafonnées, positions sur le cercle ; particules 
   expect(Math.abs(p.y)).toBeLessThanOrEqual(0.08);
   expect(flowCount(true)).toBe(flowCount(false) / 2);
   expect(starCount(true)).toBe(starCount(false) / 2);
+});
+
+test('survol : coordonnées écran, événement réémis seulement si l’astre change ou bouge d’au moins un demi-pixel', () => {
+  expect(ndcToScreen(-1, 1, 800, 400)).toEqual({ x: 0, y: 0 });
+  expect(ndcToScreen(1, -1, 800, 400)).toEqual({ x: 800, y: 400 });
+  expect(ndcToScreen(0, 0, 800, 400)).toEqual({ x: 400, y: 200 });
+
+  const a = { id: 'a', x: 100, y: 50, r: 10 };
+  expect(sameHover(null, null)).toBe(true);
+  expect(sameHover(a, null)).toBe(false);
+  expect(sameHover(null, a)).toBe(false);
+  expect(sameHover(a, { ...a, x: 100.3 })).toBe(true);
+  expect(sameHover(a, { ...a, x: 101 })).toBe(false);
+  expect(sameHover(a, { ...a, r: 12 })).toBe(false);
+  expect(sameHover(a, { ...a, id: 'b' })).toBe(false);
+});
+
+test('étiquette : au-dessus de l’astre et centrée, en dessous s’il manque de place, toujours dans le cadre', () => {
+  const box = { w: 600, h: 360 };
+  const label = { w: 120, h: 24 };
+  // Au-dessus : top = y - r - écart - hauteur ; centrée sur x.
+  expect(placeLabel({ x: 300, y: 200, r: 10 }, label, box)).toEqual({ left: 240, top: 158 });
+  // Trop près du haut : en dessous.
+  expect(placeLabel({ x: 300, y: 20, r: 10 }, label, box)).toEqual({ left: 240, top: 38 });
+  // Bords gauche et droit : maintenue dans le cadre avec la marge.
+  expect(placeLabel({ x: 10, y: 200, r: 10 }, label, box).left).toBe(8);
+  expect(placeLabel({ x: 595, y: 200, r: 10 }, label, box).left).toBe(600 - 120 - 8);
+  // Cadre trop petit en hauteur : jamais sous le bas du cadre.
+  expect(placeLabel({ x: 300, y: 30, r: 40 }, label, { w: 600, h: 60 }).top).toBe(60 - 24 - 8);
 });
 
 test('sans WebGL : repli SVG avec un astre par modèle', async () => {

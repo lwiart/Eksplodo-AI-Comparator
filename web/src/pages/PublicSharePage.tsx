@@ -14,14 +14,18 @@ import { StaticPodium } from '../components/sharing/StaticPodium';
 import { VerdictCards } from '../components/sharing/VerdictCards';
 import type { RankedRow } from '../lib/ranking';
 import { FanoutFallback } from '../three/FanoutFallback';
-import { fanoutScene } from '../three/fanout-scene';
+import { createFanoutScene } from '../three/fanout-scene';
 import { ThreeStage } from '../three/ThreeStage';
 
 /** Nombre de modèles tracés dans les graphes (les mieux classés). */
 const CHART_MODELS = 6;
 
-const monthYear = (iso: string | null): string | null =>
-  iso ? new Date(iso).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' }) : null;
+/** Date de fin de la série, en toutes lettres (ex. « 15 octobre 2026 »). */
+const testDate = (iso: string | null): string | null =>
+  iso ? new Date(iso).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' }) : null;
+
+/** Même animation que la page de connexion ; le bandeau étant moins haut, ses textes sont agrandis pour rester lisibles. */
+const shareScene = createFanoutScene({ textScale: 2.2 });
 
 function Brand() {
   return (
@@ -90,7 +94,7 @@ function ShareContent({ share }: { share: PublicShare }) {
   const rows: RankedRow[] = useMemo(() => share.models.map((model) => ({ model, rank: model.rank, global: model.global })), [share.models]);
   const chartModels = useMemo(() => share.models.slice(0, CHART_MODELS), [share.models]);
   const { run } = share;
-  const date = monthYear(run.completedAt);
+  const date = testDate(run.completedAt);
   const plural = run.modelCount > 1 ? 's' : '';
   const facts = [
     `${run.modelCount} modèle${plural} testé${plural} sur ${run.testCount} cas`,
@@ -100,22 +104,30 @@ function ShareContent({ share }: { share: PublicShare }) {
 
   return (
     <Frame auditUrl={share.auditUrl} printable>
-      <section className="relative border-b border-line">
-        {/* Sur petit écran, la gerbe passerait sous le titre et gênerait la lecture : réservée aux grands écrans. */}
-        <div className="no-print hidden lg:block">
-          <ThreeStage factory={fanoutScene} fallback={<FanoutFallback className="h-full w-full lg:translate-x-[18%]" />} />
+      <section className="relative border-b border-line lg:flex lg:min-h-[480px] lg:items-center">
+        {/* Sur petit écran, la gerbe passerait sous le titre et gênerait la lecture : réservée aux grands écrans. Sur grand
+            écran, elle occupe une bande à droite, plus étroite que 1024 px : la scène s'y centre, à l'écart du texte. */}
+        <div data-testid="share-gerbe" className="no-print absolute inset-y-0 right-0 hidden w-[42%] max-w-[880px] lg:block">
+          <ThreeStage factory={shareScene} fallback={<FanoutFallback className="h-full w-full" />} />
         </div>
-        <div className="relative z-10 mx-auto max-w-[1100px] px-4 py-14 sm:px-8 sm:py-20">
-          <div className="max-w-[40rem]">
+        <div className="relative z-10 mx-auto w-full max-w-[1100px] px-4 py-14 sm:px-8 sm:py-20">
+          {/* Sur grand écran, le texte s'arrête avant la bande de la gerbe (58 % de la largeur, moins le retrait du conteneur
+              centré et une marge) : un titre long passe à la ligne au lieu de passer sous l'animation. */}
+          <div data-testid="share-intro" className="max-w-[40rem] lg:max-w-[min(40rem,calc(58vw_-_max(0px,(100vw_-_1100px)/2)_-_56px))]">
             {run.completedAt === null ? (
               <span className="mr-2 inline-block rounded-full border border-line-strong bg-night-2/70 px-3 py-1 font-mono text-[11px] font-semibold text-sky">Résultats provisoires</span>
             ) : null}
             {date ? (
-              <span className="inline-block rounded-full border border-orange/50 bg-orange/10 px-3 py-1 font-mono text-[11px] font-semibold text-peach">Résultats de {date}</span>
+              <span className="inline-block rounded-full border border-orange/50 bg-orange/10 px-3 py-1 font-mono text-[11px] font-semibold text-peach">Date du test : {date}</span>
             ) : null}
-            <h1 className="mt-3.5 mb-0 font-display text-3xl leading-[1.1] font-extrabold tracking-[-0.01em] text-white sm:text-5xl">{share.title}</h1>
+            <h1 className="mt-3.5 mb-0 font-display text-3xl leading-[1.1] font-extrabold tracking-[-0.01em] [overflow-wrap:anywhere] text-white sm:text-5xl">{share.title}</h1>
             {share.intro ? <p className="mt-4 mb-0 text-[15px] leading-relaxed whitespace-pre-line text-[#b9d4e1]">{share.intro}</p> : null}
-            <p className="mt-4 mb-0 font-mono text-xs text-mute">{facts.join(' · ')}</p>
+            {/* Une information par ligne : nombre de modèles et de cas, juge, coût. */}
+            <ul aria-label="Informations sur la série" className="mt-4 mb-0 flex list-none flex-col gap-1 p-0 font-mono text-xs text-mute">
+              {facts.map((fact) => (
+                <li key={fact}>{fact}</li>
+              ))}
+            </ul>
           </div>
         </div>
       </section>
@@ -145,7 +157,7 @@ function ShareContent({ share }: { share: PublicShare }) {
           </Card>
           <Card className="min-w-0">
             <h2 className="m-0 mb-2 font-display text-sm font-bold text-white">
-              Par catégorie <span className="ml-1 font-mono text-[11px] font-medium text-mute">qualité moyenne sur 100</span>
+              Qualité par catégorie de test <span className="ml-1 font-mono text-[11px] font-medium text-mute">note moyenne sur 100</span>
             </h2>
             <CategoryChart models={chartModels} categories={share.categories} />
           </Card>

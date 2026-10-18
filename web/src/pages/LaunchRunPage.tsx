@@ -373,7 +373,7 @@ export function LaunchRunPage() {
                     setJudgeTouched(true);
                     setJudgeId(e.target.value);
                   }}
-                  options={[{ value: '', label: 'Aucun' }, ...availableModels.map((m) => ({ value: m.id, label: m.displayName }))]}
+                  options={[{ value: '', label: 'Aucun' }, ...availableModels.map((m) => ({ value: m.id, label: `${m.displayName} (${m.providerName})` }))]}
                 />
                 {judgeRequired && judgeId === '' ? (
                   <p role="alert" className="m-0 text-xs text-bad">

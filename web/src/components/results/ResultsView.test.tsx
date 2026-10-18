@@ -3,6 +3,7 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { cloneElement, type ReactElement } from 'react';
 import { beforeAll, beforeEach, expect, test, vi } from 'vitest';
+import { DEFINITIONS } from './definitions';
 import { MODELS, RANKING, model } from './ranking.fixtures';
 import ResultsView from './ResultsView';
 
@@ -67,7 +68,38 @@ test('Admin : enregistrer la pondération envoie PATCH weights', async () => {
 test('Utilisateur : bouton d’enregistrement absent, export présent', () => {
   renderView(false);
   expect(screen.queryByRole('button', { name: /Enregistrer comme pondération/ })).toBeNull();
-  expect(screen.getByRole('link', { name: 'Exporter' })).toHaveAttribute('href', '/api/runs/r1/export.csv');
+  const exportLink = screen.getByRole('link', { name: 'Exporter' });
+  // Classeur XLSX, téléchargé (attribut download conservé).
+  expect(exportLink).toHaveAttribute('href', '/api/runs/r1/export.xlsx');
+  expect(exportLink).toHaveAttribute('download');
+});
+
+test('graphes : titre « Qualité par catégorie de test » et libellé de l’axe des qualités', () => {
+  renderView(false);
+  expect(screen.getByRole('heading', { level: 2, name: 'Qualité par catégorie de test note moyenne sur 100' })).toBeInTheDocument();
+  expect(screen.queryByRole('heading', { name: /^Par catégorie/ })).toBeNull();
+  expect(screen.getByTestId('quality-speed-chart').textContent).toContain('Qualité (note sur 100)');
+});
+
+test('pondération : une icône d’aide par curseur, avec la définition du critère', () => {
+  renderView(false);
+  const group = within(screen.getByRole('group', { name: 'Pondération' }));
+  const helps: [string, string][] = [
+    ['Qualité', DEFINITIONS.quality],
+    ['Vitesse', DEFINITIONS.speed],
+    ['Coût', DEFINITIONS.cost],
+    ['Fiabilité', DEFINITIONS.reliability],
+  ];
+  for (const [label, text] of helps) expect(group.getByRole('button', { name: `Aide : ${label}` })).toHaveAccessibleDescription(text);
+  // Les curseurs gardent leur nom accessible.
+  for (const [label] of helps) expect(group.getByRole('slider', { name: label })).toBeInTheDocument();
+});
+
+test('classement détaillé : aides sur les en-têtes et définitions imprimables', () => {
+  renderView(false);
+  expect(table().getByRole('button', { name: 'Aide : Qualité' })).toHaveAccessibleDescription(DEFINITIONS.quality);
+  expect(table().getByRole('button', { name: 'Aide : Fiabilité' })).toHaveAccessibleDescription(DEFINITIONS.reliability);
+  expect(screen.getByRole('region', { name: 'Définitions' })).toHaveClass('print-only');
 });
 
 test('plus de six modèles : les graphes l’indiquent', () => {

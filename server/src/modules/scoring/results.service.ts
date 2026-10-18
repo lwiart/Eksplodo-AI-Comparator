@@ -12,6 +12,7 @@ import { aggregateRun, rankModels, type AggregateInputRow, type ModelAggregate }
 import { csvDocument, csvFileName, type CsvValue } from './csv.js';
 import { incompleteManualQuestions, incompleteManualQuestionsIn } from './manual.service.js';
 import { finalScore } from './override.js';
+import { buildRunWorkbook, xlsxFileName } from './xlsx.js';
 
 export type RankingModel = ModelAggregate & { name: string; color: string; providerName: string };
 
@@ -205,7 +206,38 @@ export function createResultsService(deps: { db: Db; config: { dataDir: string }
     };
   };
 
-  return {
+  /** Lignes de l'export (CSV et feuille Résultats) : une par résultat, mêmes règles de masquage que `GET /api/runs/:id/results`. */
+  async function exportLines(runId: string, actor: Actor): Promise<{ run: { name: string }; lines: CsvValue[][] }> {
+    const [run, rows, hidden] = await Promise.all([requireRun(runId), detailedRows(eq(results.runId, runId)), hiddenFor(actor, runId)]);
+    const lines: CsvValue[][] = rows.map((r) => {
+      const { row, scores } = visibleRow(r, hidden);
+      return [
+        run.name,
+        row.testName,
+        row.category,
+        row.modelName,
+        row.repetition,
+        STATUS_LABELS[row.status],
+        scores.finalScore,
+        scores.autoScore,
+        scores.manualAvg,
+        scores.overrideScore,
+        row.ttftMs,
+        row.totalMs,
+        row.tokensPerS,
+        row.inputTokens,
+        row.outputTokens,
+        row.reasoningTokens,
+        row.costUsd,
+        scores.judgeCostUsd,
+        row.errorMessage,
+        row.hiddenUntilScored ? HIDDEN_RESPONSE : row.responseText,
+      ];
+    });
+    return { run, lines };
+  }
+
+  const service = {
     /**
      * Agrégats par modèle sur toutes les réponses de la série. Pour un Utilisateur, les notes des questions manuelles qu'il
      * n'a pas complétées sont retirées : la qualité par catégorie d'un test manuel seul dans sa catégorie serait sinon la
@@ -301,35 +333,27 @@ export function createResultsService(deps: { db: Db; config: { dataDir: string }
 
     /** Export CSV : une ligne par résultat, mêmes règles de masquage que `GET /api/runs/:id/results`. */
     async exportCsv(runId: string, actor: Actor): Promise<{ fileName: string; body: string }> {
-      const [run, rows, hidden] = await Promise.all([requireRun(runId), detailedRows(eq(results.runId, runId)), hiddenFor(actor, runId)]);
-      const lines: CsvValue[][] = rows.map((r) => {
-        const { row, scores } = visibleRow(r, hidden);
-        return [
-          run.name,
-          row.testName,
-          row.category,
-          row.modelName,
-          row.repetition,
-          STATUS_LABELS[row.status],
-          scores.finalScore,
-          scores.autoScore,
-          scores.manualAvg,
-          scores.overrideScore,
-          row.ttftMs,
-          row.totalMs,
-          row.tokensPerS,
-          row.inputTokens,
-          row.outputTokens,
-          row.reasoningTokens,
-          row.costUsd,
-          scores.judgeCostUsd,
-          row.errorMessage,
-          row.hiddenUntilScored ? HIDDEN_RESPONSE : row.responseText,
-        ];
-      });
+      const { run, lines } = await exportLines(runId, actor);
       return { fileName: csvFileName(run.name), body: csvDocument([CSV_HEADER, ...lines]) };
     },
+
+    /**
+     * Export XLSX : classement (celui de `ranking`, pondération de la série), lignes du CSV typées et définitions des
+     * critères ; mêmes règles de masquage que le classement et le CSV.
+     */
+    async exportXlsx(runId: string, actor: Actor): Promise<{ fileName: string; body: Buffer }> {
+      const [{ run, lines }, rank] = await Promise.all([exportLines(runId, actor), service.ranking(runId, actor)]);
+      const body = await buildRunWorkbook({
+        runName: run.name,
+        weights: rank.weights,
+        models: rank.models,
+        resultHeader: CSV_HEADER,
+        resultLines: lines,
+      });
+      return { fileName: xlsxFileName(run.name), body };
+    },
   };
+  return service;
 }
 
 export type ResultsService = ReturnType<typeof createResultsService>;

@@ -36,8 +36,20 @@ const ease = (k: number, dt: number) => 1 - Math.pow(1 - k, dt * 60);
 type Pulser = { g: Group; update(t: number, dt: number): void; onSend(): void; onScore(score: number): void };
 type Label = { sprite: Sprite; set(text: string, color?: string): void };
 
-/** « Un prompt, huit réponses » : le prompt part vers huit modèles, le juge note, puis on recommence. */
-export const fanoutScene: SceneFactory = ({ THREE, canvas, width, height, isMobile, pixelRatio }) => {
+export type FanoutOptions = {
+  /** Agrandissement des légendes sous la bulle et la jauge (« PROMPTS, DOCUMENTS, CODE… », « JUGE IA ») : 1 sur la page de connexion. */
+  textScale?: number;
+};
+
+/**
+ * « Un prompt, huit réponses » : le prompt part vers huit modèles, le juge note, puis on recommence. `textScale` agrandit
+ * les deux légendes quand la scène tient dans un bandeau moins haut que la page de connexion (page publique de résultats).
+ */
+export function createFanoutScene({ textScale = 1 }: FanoutOptions = {}): SceneFactory {
+  return (ctx) => fanout(ctx, textScale);
+}
+
+const fanout = ({ THREE, canvas, width, height, isMobile, pixelRatio }: Parameters<SceneFactory>[0], textScale: number): ReturnType<SceneFactory> => {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
   renderer.setPixelRatio(pixelRatio);
   renderer.setSize(width, height, false);
@@ -61,8 +73,10 @@ export const fanoutScene: SceneFactory = ({ THREE, canvas, width, height, isMobi
     const tan = Math.tan((PROMPT_FOV / 2) * (Math.PI / 180));
     const centered = w < CENTERED_BELOW;
     const camX = centered ? SCENE_CENTER_X : 0;
+    // Les légendes agrandies débordent davantage : la demi-largeur à cadrer grandit avec elles.
+    const halfW = SCENE_HALF_W + 1.2 * (textScale - 1);
     const dist = centered
-      ? Math.max(BASE_DIST, SCENE_HALF_W / (tan * aspect))
+      ? Math.max(BASE_DIST, halfW / (tan * aspect))
       : BASE_DIST * Math.max(1, NEED_HALF_RIGHT / (BASE_DIST * tan * aspect));
     camera.aspect = aspect;
     camera.position.set(OFFSET_X + camX, 0, dist);
@@ -84,8 +98,8 @@ export const fanoutScene: SceneFactory = ({ THREE, canvas, width, height, isMobi
     return { g, tex };
   }
 
-  function label(text: string, opts: { color?: string; size?: number; w?: number; h?: number } = {}): Label {
-    const { color = '#d8ecf5', size = 42, w = 512, h = 96 } = opts;
+  function label(text: string, opts: { color?: string; size?: number; w?: number; h?: number; scale?: number } = {}): Label {
+    const { color = '#d8ecf5', size = 42, w = 512, h = 96, scale = 1 } = opts;
     const { g, tex } = canvasTexture(w, h);
     const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false }));
     let current = text;
@@ -101,7 +115,7 @@ export const fanoutScene: SceneFactory = ({ THREE, canvas, width, height, isMobi
     };
     draw();
     redraws.push(draw); // les polices s'affichent après coup : on redessine une fois chargées
-    sprite.scale.set((w / h) * 0.42, 0.42, 1);
+    sprite.scale.set((w / h) * 0.42 * scale, 0.42 * scale, 1);
     return {
       sprite,
       set(txt, col = color) {
@@ -288,7 +302,7 @@ export const fanoutScene: SceneFactory = ({ THREE, canvas, width, height, isMobi
   judge.g.position.copy(JUDGE);
   root.add(prompt.g, judge.g);
   for (const [txt, x] of [['PROMPTS, DOCUMENTS, CODE…', PX] as const, ['JUGE IA', JX] as const]) {
-    const lb = label(txt, { size: 30, color: '#fff', w: 640 });
+    const lb = label(txt, { size: 30, color: '#fff', w: 640, scale: textScale });
     lb.sprite.position.set(x, -1.6, 0);
     root.add(lb.sprite);
   }
@@ -551,3 +565,6 @@ export const fanoutScene: SceneFactory = ({ THREE, canvas, width, height, isMobi
     },
   };
 };
+
+/** Scène de la page de connexion (textes à leur taille d'origine). */
+export const fanoutScene: SceneFactory = createFanoutScene();

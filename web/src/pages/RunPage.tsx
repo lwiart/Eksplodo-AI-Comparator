@@ -1,9 +1,9 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { lazy, Suspense, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { messageForError } from '../api/messages';
 import { answersPrefix, getRanking, rankingKey } from '../api/results';
-import { RUNS_KEY, getRun, getRunProgress, getRunResults, type RunProgress, type RunStatus, type RunSummary } from '../api/runs';
+import { RUNS_KEY, getRun, getRunProgress, getRunResults, renameRun, type RunProgress, type RunStatus, type RunSummary } from '../api/runs';
 import { useAuth } from '../auth/AuthProvider';
 import { ShareDialog } from '../components/sharing/ShareDialog';
 import { ActivityFeed } from '../components/runs/ActivityFeed';
@@ -200,6 +200,146 @@ function CompletedView({ runId }: { runId: string }) {
   return <RunMetricsTable rows={results.data} />;
 }
 
+const TITLE = 'm-0 font-display text-[30px] leading-[1.1] font-extrabold tracking-[-0.01em] text-white';
+/** Même borne que le serveur (création et renommage d'une série). */
+const NAME_MAX = 200;
+
+function PencilIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 20h9" />
+      <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+    </svg>
+  );
+}
+
+/**
+ * Titre de la série ; pour l'Admin, renommage sur place : crayon au survol, clic sur le titre ou le crayon pour éditer,
+ * Entrée ou perte du focus enregistre, Échap annule. Nom vide refusé sans appel serveur.
+ */
+function RunTitle({ run, editable }: { run: RunSummary; editable: boolean }) {
+  const queryClient = useQueryClient();
+  const inputId = useId();
+  const errorId = `${inputId}-error`;
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(run.name);
+  const [error, setError] = useState<string | null>(null);
+  /** Entrée ou Échap déjà traités : la perte du focus qui suit ne doit pas enregistrer une seconde fois. */
+  const handled = useRef(false);
+
+  const rename = useMutation({
+    mutationFn: (name: string) => renameRun(run.id, name),
+    onSuccess: async (updated) => {
+      queryClient.setQueryData([...RUNS_KEY, run.id], updated);
+      setEditing(false);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: [...RUNS_KEY, run.id], exact: true }),
+        queryClient.invalidateQueries({ queryKey: RUNS_KEY, exact: true }),
+      ]);
+    },
+    onError: (err) => {
+      handled.current = false;
+      setError(messageForError(err));
+    },
+  });
+
+  const start = () => {
+    handled.current = false;
+    setDraft(run.name);
+    setError(null);
+    setEditing(true);
+  };
+  const cancel = () => {
+    setEditing(false);
+    setDraft(run.name);
+    setError(null);
+  };
+  const save = () => {
+    if (rename.isPending) return;
+    const name = draft.trim();
+    if (name === '') {
+      setError('Le nom de la série ne peut pas être vide.');
+      return;
+    }
+    if (name === run.name) {
+      cancel();
+      return;
+    }
+    setError(null);
+    handled.current = true; // la perte du focus au démontage du champ ne relance pas l'enregistrement
+    rename.mutate(name);
+  };
+
+  if (!editable) return <h1 className={TITLE}>{run.name}</h1>;
+
+  if (editing)
+    return (
+      <div className="flex min-w-0 flex-col gap-1">
+        <label htmlFor={inputId} className="sr-only">
+          Nom de la série
+        </label>
+        <input
+          id={inputId}
+          autoFocus
+          onFocus={(e) => e.currentTarget.select()}
+          value={draft}
+          maxLength={NAME_MAX}
+          readOnly={rename.isPending}
+          aria-busy={rename.isPending || undefined}
+          aria-invalid={error ? true : undefined}
+          aria-describedby={error ? errorId : undefined}
+          onChange={(e) => {
+            setDraft(e.target.value);
+            if (error) setError(null);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              save();
+            } else if (e.key === 'Escape') {
+              e.preventDefault();
+              handled.current = true;
+              cancel();
+            }
+          }}
+          onBlur={() => {
+            if (handled.current) {
+              handled.current = false;
+              return;
+            }
+            save();
+          }}
+          style={{ width: `${Math.max(draft.length, 8) + 2}ch` }}
+          className={`${TITLE} max-w-full rounded-lg border bg-night-0/60 px-2 py-0.5 ${error ? 'border-bad/60' : 'border-line-strong'}`}
+        />
+        {error ? (
+          <p id={errorId} role="alert" className="m-0 text-xs text-bad">
+            {error}
+          </p>
+        ) : null}
+      </div>
+    );
+
+  // Titre et crayon frères dans l'en-tête (le crayon hors du titre : le nom accessible du titre reste le nom de la série) ;
+  // le crayon apparaît au survol du titre (`peer`), à son propre survol et au focus clavier.
+  return (
+    <>
+      <h1 className={`${TITLE} peer cursor-text`} title="Cliquer pour renommer" onClick={start}>
+        {run.name}
+      </h1>
+      <button
+        type="button"
+        aria-label="Renommer la série"
+        title="Renommer la série"
+        onClick={start}
+        className="-ml-2 rounded-full p-1.5 text-mute opacity-0 transition-opacity peer-hover:opacity-100 hover:text-white hover:opacity-100 focus-visible:opacity-100"
+      >
+        <PencilIcon />
+      </button>
+    </>
+  );
+}
+
 /** Page d'une série : en-tête, suivi en direct (interrogé toutes les 2 s) puis mesures par modèle une fois terminée. */
 export function RunPage() {
   const { id = '' } = useParams();
@@ -237,7 +377,7 @@ export function RunPage() {
       ) : (
         <>
           <header className="mb-4 flex flex-wrap items-center gap-3">
-            <h1 className="m-0 font-display text-[30px] leading-[1.1] font-extrabold tracking-[-0.01em] text-white">{run.data.name}</h1>
+            <RunTitle run={run.data} editable={isAdmin} />
             {status ? <RunStatusChip status={status} /> : null}
             {isAdmin ? (
               <Button className="ml-auto" onClick={() => setSharing(true)}>

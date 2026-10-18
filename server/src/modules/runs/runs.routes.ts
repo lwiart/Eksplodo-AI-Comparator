@@ -23,9 +23,12 @@ const weights = z
   .optional();
 const modelIds = z.array(z.string().uuid()).min(1).max(50).refine(unique, 'Un modèle ne peut figurer qu\'une fois dans la série');
 
+/** Nom d'une série : mêmes bornes à la création et au renommage. */
+const runName = z.string().trim().min(1).max(200);
+
 const runBody = z
   .object({
-    name: z.string().trim().min(1).max(200),
+    name: runName,
     suiteId: z.string().uuid().optional(),
     testIds: z.array(z.string().uuid()).min(1).max(500).refine(unique, 'Un test ne peut figurer qu\'une fois dans la série'),
     modelIds,
@@ -49,9 +52,9 @@ const rescoreBody = z
   .refine((b) => b.scope !== 'test' || b.runTestId !== undefined, { message: 'runTestId requis pour recalculer un test', path: ['runTestId'] })
   .refine((b) => b.scope !== 'result' || b.resultId !== undefined, { message: 'resultId requis pour recalculer un résultat', path: ['resultId'] });
 const patchBody = z
-  .object({ budgetUsd, weights })
+  .object({ name: runName.optional(), budgetUsd, weights })
   .strict()
-  .refine((b) => b.budgetUsd !== undefined || b.weights !== undefined, 'Aucune modification demandée');
+  .refine((b) => b.name !== undefined || b.budgetUsd !== undefined || b.weights !== undefined, 'Aucune modification demandée');
 
 export function registerRunsRoutes(app: FastifyInstance, service: RunsService): void {
   const admin = { preHandler: app.requireAdmin };

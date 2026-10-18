@@ -174,3 +174,25 @@ test('EXPLORER : le compteur « À noter » est rafraîchi toutes les 60 s', asy
     vi.useRealTimers();
   }
 });
+
+test('menu : Tableau de bord en tête, puis chaque section par ordre alphabétique', () => {
+  renderShell('admin');
+  const explore = ['Tableau de bord', 'À noter', 'Modèles', 'Séries'];
+  const admin = ['Fournisseurs', 'Journal des erreurs', 'Liens de partage', 'Suites', 'Tests', 'Utilisateurs'];
+  const links = [...explore, ...admin].map((name) => screen.getByRole('link', { name: new RegExp(`^${name}`) }));
+  // Chaque lien précède le suivant dans le document : ordre attendu respecté, sections comprises.
+  for (let i = 1; i < links.length; i++) {
+    expect(links[i - 1]!.compareDocumentPosition(links[i]!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  }
+});
+
+test('menu : chaque entrée a son icône « ? » avec une courte description, hors du lien', () => {
+  renderShell('admin');
+  for (const name of ['Tableau de bord', 'Séries', 'Modèles', 'À noter', 'Utilisateurs', 'Fournisseurs', 'Tests', 'Suites', 'Liens de partage', 'Journal des erreurs']) {
+    const help = screen.getByRole('button', { name: `Aide : ${name}` });
+    expect(help.closest('a')).toBeNull();
+    expect(screen.getByRole('link', { name: new RegExp(`^${name}`) })).toBeInTheDocument();
+    expect(help).toHaveAccessibleDescription(/\S{3,}/);
+  }
+  expect(screen.getByRole('button', { name: 'Aide : Suites' })).toHaveAccessibleDescription('Listes ordonnées de tests à lancer ensemble dans une série.');
+});

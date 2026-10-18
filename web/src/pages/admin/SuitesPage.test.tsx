@@ -151,3 +151,19 @@ test('nom déjà pris : message dédié', async () => {
   await user.click(screen.getByRole('button', { name: 'Enregistrer' }));
   expect(await screen.findByText('Une suite porte déjà ce nom.')).toBeInTheDocument();
 });
+
+test('édition : fil d’Ariane « Suites / nom », « Suites » referme l’éditeur et ramène à la liste', async () => {
+  const user = userEvent.setup();
+  renderPage();
+  expect(screen.queryByRole('navigation', { name: 'Fil d’Ariane' })).toBeNull();
+  await user.click(await screen.findByRole('button', { name: 'Modifier Marchés publics' }));
+  const crumbs = screen.getByRole('navigation', { name: 'Fil d’Ariane' });
+  expect(crumbs).toHaveTextContent('Suites / Marchés publics');
+  await user.click(within(crumbs).getByRole('button', { name: 'Suites' }));
+  expect(screen.queryByRole('navigation', { name: 'Fil d’Ariane' })).toBeNull();
+  expect(screen.queryByLabelText('Nom')).toBeNull();
+  expect(screen.getByRole('button', { name: 'Modifier Marchés publics' })).toBeInTheDocument();
+  // Nouvelle suite : libellé dédié.
+  await user.click(screen.getByRole('button', { name: 'Nouvelle suite' }));
+  expect(screen.getByRole('navigation', { name: 'Fil d’Ariane' })).toHaveTextContent('Suites / Nouvelle suite');
+});

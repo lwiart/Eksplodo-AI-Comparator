@@ -273,6 +273,19 @@ export function SuitesPage() {
       </header>
 
       {draft ? (
+        <nav aria-label="Fil d’Ariane" className="mb-2 font-mono text-xs text-mute">
+          {/* L'éditeur s'ouvre sur la page des suites : « Suites » le referme et ramène à la liste. */}
+          <button
+            type="button"
+            onClick={() => setDraft(null)}
+            className="cursor-pointer border-0 bg-transparent p-0 font-mono text-xs text-mute hover:text-white"
+          >
+            Suites
+          </button>
+          {` / ${draft.id === null ? 'Nouvelle suite' : draft.name.trim() || 'Suite sans nom'}`}
+        </nav>
+      ) : null}
+      {draft ? (
         <SuiteEditor
           draft={draft}
           onChange={setDraft}

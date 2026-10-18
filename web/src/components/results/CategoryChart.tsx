@@ -15,9 +15,19 @@ export function categoryRows(models: RankingModel[], categories: string[]): Reco
   });
 }
 
+/**
+ * Modèles ayant au moins une note de catégorie, du mieux noté au moins bien noté en qualité globale
+ * (sans qualité : en fin de liste) ; à égalité, l'ordre reçu est conservé.
+ * Chaque modèle est une série : le même ordre vaut dans chaque groupe de barres et dans la légende.
+ */
+export function categorySeries(models: RankingModel[], categories: string[]): RankingModel[] {
+  const quality = (m: RankingModel) => m.quality ?? Number.NEGATIVE_INFINITY;
+  return models.filter((m) => categories.some((c) => m.byCategory[c] != null)).sort((a, b) => quality(b) - quality(a));
+}
+
 /** Barres groupées : qualité moyenne (sur 100) de chaque modèle dans chaque catégorie de test. */
 export function CategoryChart({ models, categories }: { models: RankingModel[]; categories: string[] }) {
-  const scored = models.filter((m) => categories.some((c) => m.byCategory[c] != null));
+  const scored = categorySeries(models, categories);
   if (categories.length === 0 || scored.length === 0) return <p className="m-0 py-10 text-center text-sm text-mute">Pas encore de note par catégorie.</p>;
   const names = new Map(scored.map((m) => [m.modelId, m.name]));
   const nameOf = (key: unknown) => names.get(String(key)) ?? String(key);
@@ -28,7 +38,13 @@ export function CategoryChart({ models, categories }: { models: RankingModel[]; 
           <CartesianGrid stroke={GRID_STROKE} vertical={false} />
           <XAxis dataKey="category" tick={AXIS_TICK} stroke={GRID_STROKE} />
           <YAxis domain={[0, 100]} ticks={[0, 20, 40, 60, 80, 100]} tick={AXIS_TICK} stroke={GRID_STROKE} width={36} />
-          <Tooltip cursor={{ fill: 'rgba(63,162,224,0.08)' }} {...TOOLTIP_STYLE} formatter={(v, key) => [score(typeof v === 'number' ? v : null), nameOf(key)]} />
+          {/* Infobulle non partagée : seule la barre survolée (un modèle) est détaillée. */}
+          <Tooltip
+            shared={false}
+            cursor={{ fill: 'rgba(63,162,224,0.08)' }}
+            {...TOOLTIP_STYLE}
+            formatter={(v, key) => [score(typeof v === 'number' ? v : null), nameOf(key)]}
+          />
           <Legend formatter={(key) => <span className="text-xs text-ink">{nameOf(key)}</span>} iconType="circle" />
           {scored.map((m) => (
             <Bar key={m.modelId} dataKey={m.modelId} fill={m.color} radius={[4, 4, 0, 0]} isAnimationActive={false} />

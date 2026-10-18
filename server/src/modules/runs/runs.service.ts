@@ -70,7 +70,7 @@ export type RunSummary = {
 };
 
 /** Modification d'une série : plafond (`null` : sans plafond) et pondération par défaut. */
-export type RunPatch = { budgetUsd?: number | null; weights?: Weights };
+export type RunPatch = { name?: string; budgetUsd?: number | null; weights?: Weights };
 
 export type ResultRow = {
   id: string;
@@ -587,16 +587,20 @@ export function createRunsService(deps: RunsServiceDeps) {
       return summaryOf(id);
     },
 
-    /** Plafond et pondération par défaut ; relever le plafond ne reprend pas une série en pause. */
+    /**
+     * Nom, plafond et pondération par défaut ; relever le plafond ne reprend pas une série en pause. Un renommage garde
+     * l'ancien nom dans le journal d'audit.
+     */
     async update(actor: Actor, id: string, patch: RunPatch): Promise<RunSummary> {
-      await withLockedRun(id, async (tx) => {
+      await withLockedRun(id, async (tx, run) => {
         const values = {
+          ...(patch.name === undefined ? {} : { name: patch.name }),
           ...(patch.budgetUsd === undefined ? {} : { budgetUsd: patch.budgetUsd }),
           ...(patch.weights === undefined ? {} : { weights: patch.weights }),
         };
         if (Object.keys(values).length === 0) return;
         await tx.update(runs).set(values).where(eq(runs.id, id));
-        await auditRun(tx, actor, 'run_updated', id, patch);
+        await auditRun(tx, actor, 'run_updated', id, patch.name === undefined ? patch : { ...patch, previousName: run.name });
       });
       return summaryOf(id);
     },

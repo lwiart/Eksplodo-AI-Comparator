@@ -180,7 +180,7 @@ function RescorePanel({ runId, runTestId, onQueued }: { runId: string; runTestId
   const models = useQuery({ queryKey: MODELS_KEY, queryFn: listModels });
   const rescore = useMutation({ mutationFn: (body: RescoreBody) => rescoreRun(runId, body), onSuccess: onQueued });
   const judge = judgeId === '' ? {} : { judgeModelId: judgeId };
-  const options = [{ value: '', label: 'Juge de la série' }, ...(models.data ?? []).filter((m) => m.available).map((m) => ({ value: m.id, label: m.displayName }))];
+  const options = [{ value: '', label: 'Juge de la série' }, ...(models.data ?? []).filter((m) => m.available).map((m) => ({ value: m.id, label: `${m.displayName} (${m.providerName})` }))];
   return (
     <div className="flex flex-wrap items-end gap-3 rounded-2xl border border-line bg-night-0/30 p-3">
       <SelectField label="Juge pour la relance" value={judgeId} options={options} onChange={(e) => setJudgeId(e.target.value)} />

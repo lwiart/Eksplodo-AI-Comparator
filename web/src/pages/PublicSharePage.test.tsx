@@ -6,6 +6,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import type { PublicModel, PublicShare } from '../api/public-share';
 import { RootRoutes } from '../app/RootRoutes';
+import { DEFINITIONS } from '../components/results/definitions';
 import { MODELS } from '../components/results/ranking.fixtures';
 
 vi.mock('recharts', async (importOriginal) => ({
@@ -67,10 +68,18 @@ test('page publique : titre, verdicts, podium, graphes et classement ; seule GET
   expect(screen.getByRole('list', { name: 'Podium' })).toBeInTheDocument();
   expect(screen.getByTestId('quality-speed-chart')).toBeInTheDocument();
   expect(screen.getByTestId('category-chart')).toBeInTheDocument();
+  expect(screen.getByRole('heading', { level: 2, name: 'Qualité par catégorie de test note moyenne sur 100' })).toBeInTheDocument();
+  expect(screen.getByTestId('quality-speed-chart').textContent).toContain('Qualité (note sur 100)');
   // Rang et score global du serveur, pas un recalcul.
   const table = within(screen.getByRole('table', { name: 'Classement détaillé' }));
   expect(table.getByText('84')).toBeInTheDocument();
   expect(table.getByText('71')).toBeInTheDocument();
+  // Aides sur les en-têtes ; à l'impression, le bloc « Définitions » les remplace.
+  expect(table.getByRole('button', { name: 'Aide : Qualité' })).toHaveAccessibleDescription(DEFINITIONS.quality);
+  expect(table.getByRole('button', { name: 'Aide : Fiabilité' })).toHaveAccessibleDescription(DEFINITIONS.reliability);
+  const definitions = screen.getByRole('region', { name: 'Définitions' });
+  expect(definitions).toHaveClass('print-only');
+  expect(within(definitions).getByText(DEFINITIONS.cost)).toBeInTheDocument();
 
   expect(fetchSpy).toHaveBeenCalledTimes(1);
   expect(fetchSpy.mock.calls[0]![0]).toBe('/share/jeton123');
@@ -92,6 +101,8 @@ test('showCosts faux : pas de colonne coût ni de montant affiché, même si la 
   renderPage();
   await screen.findByRole('heading', { level: 1, name: SHARE.title });
   expect(screen.queryByRole('columnheader', { name: 'Coût moyen' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Aide : Coût' })).not.toBeInTheDocument();
+  expect(within(screen.getByRole('region', { name: 'Définitions' })).queryByText(DEFINITIONS.cost)).not.toBeInTheDocument();
   expect(screen.queryByText(/\$/)).not.toBeInTheDocument();
   expect(screen.queryByText(/coût total/i)).not.toBeInTheDocument();
 });
@@ -191,4 +202,18 @@ test('série non terminée : badge « Résultats provisoires » ; absent d’une
   renderPage();
   await screen.findByRole('heading', { level: 1, name: SHARE.title });
   expect(screen.queryByText('Résultats provisoires')).toBeNull();
+});
+
+test('bandeau : une information par ligne, et la gerbe dans une bande à droite', async () => {
+  mockFetch(SHARE);
+  renderPage();
+  const facts = await screen.findByRole('list', { name: 'Informations sur la série' });
+  const items = within(facts).getAllByRole('listitem').map((li) => li.textContent);
+  expect(items).toHaveLength(3);
+  expect(items[0]).toMatch(/modèles? testés? sur \d+ cas/);
+  expect(items[1]).toMatch(/^notés par un juge IA/);
+  expect(items[2]).toMatch(/^coût total de la série/);
+  expect(screen.getByTestId('share-gerbe')).toHaveClass('absolute', 'right-0');
+  expect(screen.getByText('Date du test : 15 octobre 2026')).toBeInTheDocument();
+  expect(screen.queryByText(/Résultats de/)).toBeNull();
 });

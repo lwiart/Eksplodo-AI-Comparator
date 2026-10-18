@@ -11,8 +11,8 @@ vi.mock('../../api/client', async (importOriginal) => ({
   apiFetch,
 }));
 
-const model = (id: string, displayName: string, available = true) => ({ id, displayName, available });
-const MODELS = [model('m1', 'Claude Opus'), model('m2', 'GPT Test'), model('m3', 'Sans clé', false)];
+const model = (id: string, displayName: string, providerName: string, available = true) => ({ id, displayName, providerName, available });
+const MODELS = [model('m1', 'Claude Opus', 'Anthropic'), model('m2', 'GPT Test', 'OpenRouter'), model('m3', 'Sans clé', 'Mistral', false)];
 
 let current: string | null = 'm1';
 let putError: ApiError | null = null;
@@ -45,7 +45,9 @@ test('Admin : le juge actuel est affiché, on le change et on l’enregistre', a
   renderCard();
   const select = (await screen.findByLabelText('Modèle juge')) as HTMLSelectElement;
   await waitFor(() => expect(select.value).toBe('m1'));
-  expect(screen.queryByRole('option', { name: 'Sans clé' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('option', { name: /Sans clé/ })).not.toBeInTheDocument();
+  // Le fournisseur suit le nom du modèle, entre parenthèses.
+  expect(screen.getAllByRole('option').map((o) => o.textContent)).toEqual(['Aucun', 'Claude Opus (Anthropic)', 'GPT Test (OpenRouter)']);
   expect(screen.getByRole('button', { name: 'Enregistrer' })).toBeDisabled();
   await user.selectOptions(select, 'm2');
   await user.click(screen.getByRole('button', { name: 'Enregistrer' }));
