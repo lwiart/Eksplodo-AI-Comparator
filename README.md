@@ -1,140 +1,128 @@
 # Eksplodo · Comparateur IA
 
-Application web qui permet de comparer les réponses de plusieurs modèles d'IA. Ce dépôt contient les fondations (plan 1) : serveur Fastify 5 + Drizzle + MariaDB, interface React 19 + Vite + Tailwind v4, comptes (invitation, connexion, rôles `admin` / `user`), file de tâches, journal des erreurs et déploiement Hostinger.
+**Comparez les modèles d'IA sur vos propres cas d'usage, pas sur des benchmarks génériques.**
 
-## Prérequis
+Soumettez les mêmes tests (prompts, documents, images) à plusieurs modèles, faites-les noter automatiquement ou à l'aveugle, puis comparez qualité, vitesse, coût et fiabilité. Partagez ensuite le résultat dans une page publique soignée.
 
-- Node.js 24 (`.nvmrc`)
-- Une base MariaDB 11.8 : le serveur de test écoute sur `127.0.0.1:3307` (`root` / `test`). Le plus simple : `docker compose up -d db` ; tout MariaDB local équivalent convient (collation `utf8mb4_unicode_ci`).
+![Node.js 24](https://img.shields.io/badge/Node.js-24-339933?logo=node.js&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TypeScript-7-3178C6?logo=typescript&logoColor=white)
+![React 19](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)
+![Fastify 5](https://img.shields.io/badge/Fastify-5-000000?logo=fastify&logoColor=white)
+![MariaDB](https://img.shields.io/badge/MariaDB-11-003545?logo=mariadb&logoColor=white)
 
-## Démarrage
+![Résultats d'une série : constellation des modèles, podium et pondération](docs/screenshots/resultats-podium.png)
 
-```
-cp .env.example .env     # puis ajuster les valeurs (voir docs/deploiement.md pour leur signification)
+> Les captures de ce README ont été réalisées avec des **données de démonstration** : fournisseur fictif, modèles aux noms inventés, notes imposées pour l'exemple.
+
+## Pourquoi ce comparateur ?
+
+Les classements publics disent quel modèle est le meilleur « en général ». Une entreprise veut savoir lequel répond le mieux **à ses questions**, sur **ses documents**, à **quel prix** et en **combien de temps**. Le comparateur fait passer le même banc d'essai à tous les modèles choisis, chez tous vos fournisseurs, et met les résultats côte à côte.
+
+## Fonctionnalités
+
+### Des tests à votre image
+
+- Un **test** réunit un prompt, une consigne système facultative, des pièces jointes (images, PDF) et une méthode de notation.
+- Les tests se regroupent en **suites** (par exemple « Batterie complète ») et se rangent par catégorie et étiquettes.
+- Trois façons de noter :
+  - **réponse attendue** : réponse exacte, éléments à trouver ou expression régulière ;
+  - **juge IA** : un modèle juge note chaque réponse selon vos critères, avec sa justification ;
+  - **notation manuelle à l'aveugle** : chacun note les réponses désignées par des lettres, sans connaître le modèle.
+
+### Des séries suivies en direct
+
+Une **série** croise des tests, des modèles et un nombre de répétitions. L'estimation du coût s'affiche avant le lancement, puis la progression se suit en temps réel. On peut mettre en pause, ajouter un modèle en cours de route ou relancer les erreurs. Une série reprend seule après un redémarrage du serveur.
+
+![Suivi en direct d'une série : avancement, appels en cours, fil d'activité et progression par test](docs/screenshots/serie-en-direct.png)
+
+### Des résultats lisibles
+
+- **Podium** et **score global** sur 100, recalculés instantanément selon votre pondération : qualité, vitesse, coût et fiabilité.
+- **Constellation 3D** : la taille de chaque astre suit la qualité du modèle, sa distance au centre suit son débit.
+- **Qualité et vitesse** : un nuage de points qui fait ressortir les modèles à la fois bons et rapides.
+- **Qualité par catégorie** : une matrice colorée. Un clic sur une note filtre les réponses de ce modèle dans cette catégorie.
+- **Réponses côte à côte**, filtrables par catégorie, test et modèle, avec la note et la justification du juge.
+- **Export Excel** et métriques par modèle : premier token, débit, coût par réponse, tarifs.
+
+![Matrice de qualité par catégorie et réponses côte à côte filtrables](docs/screenshots/resultats-matrice.png)
+
+Le nom de chaque test ouvre son détail : prompts envoyés, paramètres et résultat attendu.
+
+![Détail d'un test : prompt, paramètres et résultat attendu](docs/screenshots/detail-du-test.png)
+
+### Une page publique à partager
+
+Depuis une série, un lien de partage crée une page publique en lecture seule, sans compte. Elle présente des verdicts (« Meilleur compromis », « Meilleure qualité », « Le moins cher ») recalculés à chaque affichage, le podium avec sa pondération, les graphes et, si vous le choisissez, les coûts et les réponses. La page a aussi une **version imprimable** (PDF).
+
+![Page publique : titre, informations sur la série et verdicts](docs/screenshots/page-partagee.png)
+
+![Page publique : podium et pondération du score global](docs/screenshots/page-partagee-podium.png)
+
+### Un catalogue de modèles toujours à jour
+
+- **Fournisseurs** préconfigurés : OpenRouter, OpenAI, Anthropic, Google, Mistral, DeepSeek, Requesty et Eden AI. Tout service compatible OpenAI, Anthropic ou Google peut s'ajouter.
+- **Vérifier les capacités** : trois tout petits appels suffisent pour savoir si un modèle accepte vraiment les images et les PDF.
+- **Mettre à jour les tarifs** d'après la liste de modèles de chaque fournisseur. Les nouveautés d'OpenRouter sont signalées chaque jour.
+
+![Catalogue des modèles : tarifs, capacités et disponibilité](docs/screenshots/modeles.png)
+
+### Un tableau de bord
+
+Séries lancées, dépense du mois (dont la part du juge), réponses qui attendent votre note, évolution de la qualité d'une série à l'autre et nouveaux modèles à tester.
+
+![Tableau de bord : chiffres clés, évolution de la qualité et nouveaux modèles](docs/screenshots/tableau-de-bord.png)
+
+### Sécurité
+
+- Les **clés API** des fournisseurs se saisissent dans l'interface. Elles sont chiffrées en base (AES-256-GCM) et liées à leur fournisseur.
+- Comptes sur invitation, rôles **Admin** et **Utilisateur**, protection CSRF, limitation de débit.
+- Les pages publiques sont construites **champ par champ** : aucun identifiant interne ni note individuelle d'évaluateur n'y figure.
+
+## Essayer en local
+
+Prérequis : Node.js 24 et une base MariaDB 11 (le plus simple : Docker).
+
+```bash
+git clone https://github.com/lwiart/Eksplodo-AI-Comparator.git
+cd Eksplodo-AI-Comparator
+cp .env.example .env
 docker compose up -d db
 npm install
-npm run dev              # API sur :3000 + Vite sur :5173 (proxy /api, /internal, /health vers l'API)
+npm run dev
 ```
 
-Dans `.env`, renseigner `APP_ENCRYPTION_KEY` (clé maîtresse qui chiffre les clés des fournisseurs ; obligatoire, sans elle l'application ne démarre pas) :
+Dans `.env`, renseignez au minimum `APP_ENCRYPTION_KEY` et le premier compte Admin (`BOOTSTRAP_ADMIN_EMAIL`, `BOOTSTRAP_ADMIN_PASSWORD`). Ajoutez `AIC_FAKE_LLM=1` pour essayer sans aucun appel payant : un faux fournisseur répond à la place des vrais. L'interface s'ouvre sur http://localhost:5173.
 
-```
-node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
-```
+Le détail (variables, tests automatisés, règles de calcul, directives du faux fournisseur) est dans le [guide technique](docs/developpement.md).
 
-Ajouter aussi `AIC_FAKE_LLM=1` pour travailler sans appel réel : un faux fournisseur répond à la place des fournisseurs (ignoré en production).
+## Mettre en ligne
 
-Les clés API des fournisseurs ne se mettent pas dans `.env` : elles se saisissent dans l'écran **Fournisseurs** (Admin) et sont enregistrées chiffrées en base.
+Le [guide de déploiement](docs/deploiement.md) décrit la mise en production : variables d'environnement, base de données, tâche planifiée, vérifications et dépannage. Il prend l'exemple d'un hébergement Hostinger, mais tout hébergeur Node.js 24 + MariaDB convient.
 
-Le développement lit `.env`. Pour l'aperçu dans Claude Code, `.claude/launch.json` définit deux configurations séparées : `comparateur-api` (API, port 3000) et `comparateur-web` (Vite, port 5173).
+## Sous le capot
 
-## Tests, suites et séries (plan 3)
-
-- **Test** : un prompt (avec pièces jointes éventuelles : images, PDF, 10 Mo par fichier, dix au plus) que l'on veut soumettre à plusieurs modèles.
-- **Suite** : un regroupement de tests, pour les lancer ensemble.
-- **Essai rapide** : un test envoyé à quelques modèles, sans créer de série. Il passe par la voie rapide de la file (un second worker dédié aux tâches `quick_try`), donc il n'attend pas les longues tâches d'une série.
-- **Série** : le lancement de tests (ou d'une suite) × modèles × répétitions. Un assistant la prépare avec une estimation de coût ; la vue en direct suit les appels, permet pause et reprise, l'ajout d'un modèle et la relance des erreurs. Une série reprend seule après un redémarrage du serveur.
-
-### Essai en local sans appel réel
-
-Avec `AIC_FAKE_LLM=1` dans `.env`, un faux fournisseur répond à la place des vrais (ignoré en production). Des directives écrites dans un prompt déclenchent un comportement précis :
-
-| Directive | Effet |
+| Côté | Technologies |
 |---|---|
-| `[[fake:429]]` | Erreur 429 (limite de débit) |
-| `[[fake:500]]` | Erreur 500 (serveur) |
-| `[[fake:timeout]]` | L'appel ne répond jamais (jusqu'à l'expiration) |
-| `[[fake:refusal]]` | Réponse de refus |
-| `[[fake:cut]]` | Flux coupé en cours de réponse, sans fin ni usage |
-| `[[fake:reasoning]]` | Ajoute des jetons de raisonnement |
-| `[[fake:length]]` | Réponse coupée à `max_tokens` (fin de génération `length`) |
-
-Parcours rapide : `npm run dev`, créer un test dont le prompt contient par exemple `[[fake:500]]`, le lancer en essai rapide ou en série, puis utiliser « Relancer les erreurs » pour constater la reprise.
-
-## Notation et résultats (plan 4)
-
-Chaque test se note selon l'une de ses trois méthodes. Toutes les notes vont de 0 à 100 (affichées en entiers ; les moyennes gardent deux décimales en base) ; la note finale d'un résultat est la note imposée par un Admin s'il y en a une, sinon la note de sa méthode.
-
-- **Réponse attendue** (`server/src/modules/scoring/expected.ts`) : `exact` (espaces de début et de fin retirés, espaces multiples réduits, options de casse et d'accents) vaut 10 ou 0 ; `contains` vaut 10 × éléments trouvés ÷ total, arrondi au dixième ; `regex` vaut 10 ou 0, testée sur les 50 000 premiers caractères de la réponse, en moins d'une seconde (au-delà : 0, « Expression trop lente »).
-- **Juge** (`judge-prompt.ts`, `judge-parse.ts`, `judge-items.ts`) : le modèle juge reçoit le prompt du test, les critères, la référence éventuelle, les pièces jointes qu'il sait lire et la réponse évaluée entre balises `<reponse_a_evaluer>`, sans le nom du modèle évalué (température 0, 800 tokens au plus). Il répond en JSON `{ "score", "rationale" }`, validé strictement ; une réponse illisible déclenche un seul nouvel appel, puis la note échoue. Ses appels sont des éléments de la série : ils partagent la concurrence, le plafond par fournisseur et le plafond de dépense, et sont comptés avec l'origine `judge`. Leur coût est suivi à part et n'est jamais imputé au modèle évalué. La série ne passe `completed` qu'une fois les notes du juge rendues.
-- **Manuelle à l'aveugle** (`manual.service.ts`) : chaque compte (Utilisateur ou Admin) note les réponses d'une question, désignées par des lettres A, B, C… sans nom de modèle ni métrique, avec une note entière de 0 à 100 (curseur par pas de 5, ou saisie au clavier de n'importe quel entier) et un commentaire facultatif. L'ordre des lettres est propre à chaque compte : il est calculé par HMAC-SHA256 avec une clé secrète dérivée de `APP_ENCRYPTION_KEY`, donc un compte ne peut pas le recalculer. Une question n'est proposée (et ne peut être notée) qu'une fois toutes ses réponses arrivées. Tant qu'un Utilisateur n'a pas noté toute la question, ni les réponses ni les métriques ni les notes de ce test ne lui sont envoyées (résultats détaillés, réponses côte à côte, export CSV) ; dans le classement, le podium et la fiche modèle, ce test compte comme non noté pour lui (moyenne des évaluateurs et note imposée retirées), seuls les agrégats de vitesse, de coût et de fiabilité par modèle incluent ses réponses. Les modèles sont révélés une fois la question notée. La note d'un résultat est la moyenne des évaluateurs ; l'écart-type n'est visible que de l'Admin (onglet « Écarts entre évaluateurs »). Sans aucune note, le résultat reste en attente et n'entre pas dans la qualité.
-
-L'Admin peut **imposer une note** à un résultat terminé (entier de 0 à 100 ; elle remplace la note de la méthode, l'action est journalisée) et **relancer le juge** sur un résultat, un test ou toute la série, éventuellement avec un autre juge. Le **juge par défaut** se règle dans Admin → Fournisseurs (réglage `scoring.default_judge_model_id`) et est proposé par l'assistant de lancement.
-
-### Page de résultats
-
-Podium, curseurs de pondération, graphes (qualité contre vitesse, qualité par catégorie), classement, constellation 3D (repli sans WebGL) et réponses côte à côte pour un test choisi. Le **score global** (`server/src/modules/scoring/aggregate.ts`) est la moyenne pondérée de quatre notes avec la pondération de la série (défaut : qualité 50, vitesse 20, coût 20, fiabilité 10) :
-
-- qualité : moyenne, sur les tests notés, de la moyenne des répétitions notées ;
-- vitesse : moyenne de deux notes logarithmiques (médiane du premier token, plus bas = mieux ; médiane du débit, plus haut = mieux) ;
-- coût : note logarithmique du coût moyen par réponse réussie (plus bas = mieux) ;
-- fiabilité : réussis ÷ (réussis + erreurs + délais dépassés) × 10, les `unsupported` exclus.
-
-Une note logarithmique va de 20 à 100 selon la position de la valeur entre le plus petit et le plus grand des modèles de la série (100 si toutes les valeurs sont égales ou s'il n'y a qu'un modèle ; valeur nulle ou négative ignorée). Un critère sans note est retiré et les poids restants sont renormalisés ; un modèle sans aucun test noté n'a pas de rang et reste hors du podium.
-
-**Export CSV** (`csv.ts`) : une ligne par résultat, UTF-8 avec BOM, séparateur `;`, virgule décimale. Toute cellule qui commence par `=`, `+`, `-`, `@`, une tabulation ou un retour chariot est préfixée par `'` (protection contre l'injection de formules).
-
-**Fiche modèle** : chiffres clés (qualité moyenne, fiabilité, premier token et débit médians avec leur rang), radar par catégorie contre la moyenne des modèles et historique des séries.
-
-### Directive du faux fournisseur pour le juge
-
-Avec `AIC_FAKE_LLM=1`, la directive `[[fake:judge=<texte>]]` placée n'importe où dans un prompt (`server/src/modules/providers/fake.ts`) fait répondre le faux fournisseur par `<texte>` tel quel, jusqu'au premier `]]`, sans panne tirée au sort ni autre directive. Pour imposer une note de juge, le texte est le JSON attendu :
-
-```
-[[fake:judge={"score": 7.5, "rationale": "Réponse correcte mais incomplète."}]]
-```
-
-Le prompt d'un test étant transmis au juge, la directive écrite dans un test noté par le juge fixe sa note ; un texte qui n'est pas du JSON valide sert à tester le nouvel appel puis l'échec de la note.
-
-## Partage et tableau de bord (plan 5)
-
-### Liens de partage (Admin)
-
-Depuis une série, le bouton « Partager » (`web/src/components/sharing/ShareDialog.tsx`) crée un lien vers une page publique en lecture seule. Le formulaire demande :
-
-- un titre et une introduction facultative ;
-- jusqu'à six **verdicts** (titre, modèle éventuel de la série, phrase). Trois sont proposés d'après le classement à la pondération de la série : « Meilleur compromis » (meilleur score global), « Meilleure qualité » et « Le moins cher » (absent si aucun modèle n'a de coût) ;
-- deux options, désactivées par défaut : **Afficher les coûts** et **Afficher les réponses**.
-
-Le jeton fait 24 octets aléatoires en base64url, soit **32 caractères** (`server/src/modules/sharing/token.ts`). Il n'est affiché qu'**une seule fois**, à la création ou à la régénération ; seule son empreinte SHA-256 (hex) est stockée en base, donc un lien perdu ne peut pas être retrouvé, seulement régénéré.
-
-Admin → Liens de partage (`/admin/partages`) liste les liens avec leur **compteur de vues** et permet de les modifier, de les **désactiver** ou réactiver, de **régénérer** le jeton (l'ancien lien renvoie alors 404), et de les **supprimer** (l'application ne supprime pas de série ; la base supprimerait de toute façon les liens d'une série en cascade). Le réglage **URL « Audit gratuit »** (`sharing.audit_url`, défaut `https://eksplodo.fr`, `https://` obligatoire, 300 caractères au plus) est sur la même page ; il alimente le bouton de la page publique. Création, modification, régénération, suppression et changement d'URL sont journalisés (`share_link_created`, `share_link_updated`, `share_link_regenerated`, `share_link_deleted`, `audit_url_changed`).
-
-### Page publique `/p/<jeton>`
-
-- **Sans compte** : la page n'a ni menu ni lien vers l'application. Elle n'appelle que `GET /share/:token` (hors `/api`, sans session) ; aucun appel à `/api/*`.
-- **Liste blanche** (`public-share.ts`) : la réponse est construite champ par champ. Aucun identifiant interne (utilisateur, modèle, série, résultat : les modèles sont désignés par des clés opaques `m1`, `m2`…), aucune configuration de fournisseur, aucune note individuelle d'évaluateur. Les agrégats couvrent tous les évaluateurs, sans masquage de l'aveugle : c'est la publication de l'Admin. Avec « Afficher les réponses », la page montre le texte des réponses terminées, leur note finale et l'appréciation du juge. Attention : chaque réponse y est associée à son modèle, ce qui lève l'aveugle de qui n'a pas encore noté une question manuelle ; le dialogue de partage l'indique quand la série en contient.
-- **Accès** : un lien inconnu, désactivé ou régénéré renvoie le même 404 (« Lien introuvable ou désactivé »). La route est limitée à **60 consultations par minute et par IP**, n'est jamais mise en cache (`no-store`) et porte `x-robots-tag: noindex` ; la page `/p/*` a aussi un `noindex`. Chaque consultation réussie incrémente le compteur de vues.
-- **Coûts masqués** : aucun montant (coût moyen, coût total) ni note de coût n'est publié. En revanche, le rang et le score global restent ceux de la pondération de la série, coût compris. Un lecteur attentif peut donc en déduire la **position relative des coûts** entre modèles, mais pas les montants.
-
-### Version imprimable
-
-Le bouton « Version imprimable » ouvre la boîte d'impression du navigateur ; choisir « Enregistrer au format PDF ». Une feuille `@media print` (`web/src/theme/theme.css`, limitée à la page publique) masque la 3D, les boutons et le sélecteur, remplace le podium animé par un podium statique et passe le fond en blanc.
-
-### Tableau de bord
-
-`/` (`server/src/modules/dashboard/`, `web/src/pages/DashboardPage.tsx`) :
-
-- **chiffres clés** : séries lancées (total et mois en cours), modèles suivis, réponses à noter ;
-- **dépense du mois** (dont la part du juge) et **nouveaux modèles** : pour l'Admin seulement ; un Utilisateur voit la même page sans ces deux éléments ;
-- **évolution de la qualité par suite** : qualité de chaque modèle sur les 6 dernières séries terminées de la suite choisie, en ordre chronologique, avec le juge de chaque série ;
-- **dernières séries** (5) avec le vainqueur (rang 1 à la pondération de la série), marqué « provisoire » tant que la série n'est pas terminée.
-
-Pour un Utilisateur, toute qualité affichée (vainqueur, évolution) respecte le masquage de l'aveugle : les questions qu'il n'a pas encore notées comptent comme non notées.
-
-## Commandes
-
-| Commande | Rôle |
-|---|---|
-| `npm run dev` | API + Vite en mode développement |
-| `npm test` | Tests (Vitest) ; nécessite la base de test sur le port 3307 |
-| `npm run typecheck` | Vérification TypeScript (serveur, web, outils) |
-| `npm run build` | Construit `dist/web` et `dist/server` |
-| `npm start` | Lance `dist/server/index.js` |
+| Serveur | Fastify 5, TypeScript, Drizzle ORM, MariaDB 11, file de tâches en base |
+| Interface | React 19, Vite 8, Tailwind CSS 4, TanStack Query, Recharts, Three.js |
+| Qualité | Vitest et Testing Library : plus de 1 100 tests, serveur et interface |
 
 ## Documentation
 
-- Spécification : [`docs/superpowers/specs/2026-10-16-comparateur-ia-design.md`](docs/superpowers/specs/2026-10-16-comparateur-ia-design.md)
-- Plan 1 (fondations) : [`docs/superpowers/plans/2026-10-16-plan-1-fondations.md`](docs/superpowers/plans/2026-10-16-plan-1-fondations.md)
-- Maquettes : [`maquettes/`](maquettes/)
-- Déploiement Hostinger : [`docs/deploiement.md`](docs/deploiement.md)
+- [Guide technique](docs/developpement.md) : installation, commandes, notation, calcul du score, partage.
+- [Guide de déploiement](docs/deploiement.md) : mise en production et exploitation.
+- [Spécification](docs/superpowers/specs/2026-10-16-comparateur-ia-design.md) et [plans de réalisation](docs/superpowers/plans/).
+
+---
+
+## À propos de l'auteur
+
+**Laurent Wiart** est formateur IA et consultant en automatisation. Il a fondé [**Eksplodo**](https://eksplodo.fr) en 2021, à Labenne (Landes). Il accompagne les TPE et PME pour qu'elles récupèrent le temps que leurs processus manuels leur prennent : IA générative, agents IA et automatisation avec Make, n8n, Airtable et Notion.
+
+- Plus de 26 ans d'expérience dans le digital, dont neuf ans à concevoir des dispositifs médicaux logiciels en environnement réglementé (ISO 13485, IEC 62304, FDA) et des programmes d'innovation autour de l'IA.
+- Plus de 1 000 apprenants formés et 150 entreprises accompagnées, en présentiel dans le Sud-Ouest et à distance partout en France.
+- Make Expert Level 5, n8n Level 2, Airtable AI Builder et 12 certifications Anthropic Claude.
+
+Ce comparateur est né d'un besoin de terrain : aider chaque entreprise à choisir le bon modèle pour **ses** usages.
+
+[Site Eksplodo](https://eksplodo.fr) · [À propos](https://eksplodo.fr/a-propos/) · [LinkedIn](https://www.linkedin.com/in/laurentwiart/) · [YouTube](https://www.youtube.com/channel/UCXZxPKi3-oAsGrhL7HGgtJA) · [Audit gratuit](https://eksplodo.fr/#audit-gratuit)

@@ -1,12 +1,12 @@
 # Déploiement - Eksplodo · Comparateur IA
 
-Application Node.js hébergée chez Hostinger (compte `u355159080`), site **https://ia.eksplodo.fr**.
+Ce guide décrit la mise en ligne sur un hébergement Hostinger (offre avec Node.js), telle qu'elle est faite pour **https://ia.eksplodo.fr**. Tout hébergeur qui fournit Node.js 24 et MariaDB 11 convient : adaptez les chemins et les écrans cités. Dans les exemples, `<utilisateur>` est l'identifiant de votre compte d'hébergement.
 
 ## Vue d'ensemble
 
 - Hostinger compile l'application sur le serveur (`npm install` puis `npm run build`) et lance `dist/server/index.js` derrière LiteSpeed.
 - Base MariaDB 11.8 sur le même serveur : connexion `127.0.0.1:3306` sur Hostinger (jamais `localhost`, qui peut résoudre en IPv6), `127.0.0.1:3307` en local.
-- Les fichiers persistants vivent hors du dossier de l'application : `DATA_DIR=/home/u355159080/data/eksplodo-ia` (le dossier de l'application est remplacé à chaque déploiement).
+- Les fichiers persistants vivent hors du dossier de l'application : `DATA_DIR=/home/<utilisateur>/data/eksplodo-ia` (le dossier de l'application est remplacé à chaque déploiement).
 - Au démarrage : verrou nommé MariaDB, migrations, création du premier Admin (si `BOOTSTRAP_ADMIN_EMAIL`), écoute HTTP, puis worker de tâches.
 
 ## Variables d'environnement (hPanel → Sites web → ia.eksplodo.fr → Variables d'environnement)
@@ -16,7 +16,7 @@ Application Node.js hébergée chez Hostinger (compte `u355159080`), site **http
 | `NODE_ENV` | `production` (obligatoire : cookies sécurisés, HSTS, journaux sans secrets) |
 | `PORT` | Facultative, numérique (3000 par défaut), utilisée en local ; LiteSpeed gère lui-même le socket sur Hostinger |
 | `APP_BASE_URL` | `https://ia.eksplodo.fr` |
-| `DATA_DIR` | `/home/u355159080/data/eksplodo-ia` |
+| `DATA_DIR` | `/home/<utilisateur>/data/eksplodo-ia` |
 | `CRON_SECRET` | ≥ 32 caractères, utilisé par la tâche cron. Génération : `node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"` |
 | `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` / `SMTP_FROM` | Tous ou aucun. Boîte proposée : `ia@eksplodo.fr`, serveur `smtp.hostinger.com`, port `465`. Sans SMTP, les e-mails sont seulement journalisés, sans le lien ni le texte : l'Admin copie alors le lien d'invitation ou de réinitialisation depuis l'écran « Utilisateurs » (boîte de dialogue du lien affichée à la création, ou après « Régénérer le lien » / « Lien de réinitialisation »). |
 | `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DATABASE_URL` | Créées automatiquement par Hostinger avec la base. Ne pas modifier. |
