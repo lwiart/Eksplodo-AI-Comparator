@@ -9,6 +9,7 @@ Soumettez les mêmes tests (prompts, documents, images) à plusieurs modèles, f
 ![React 19](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)
 ![Fastify 5](https://img.shields.io/badge/Fastify-5-000000?logo=fastify&logoColor=white)
 ![MariaDB](https://img.shields.io/badge/MariaDB-11-003545?logo=mariadb&logoColor=white)
+![Licence MIT](https://img.shields.io/badge/licence-MIT-F0631F)
 
 ![Résultats d'une série : constellation des modèles, podium et pondération](docs/screenshots/resultats-podium.png)
 
@@ -112,6 +113,10 @@ Le [guide de déploiement](docs/deploiement.md) décrit la mise en production : 
 - [Guide technique](docs/developpement.md) : installation, commandes, notation, calcul du score, partage.
 - [Guide de déploiement](docs/deploiement.md) : mise en production et exploitation.
 - [Spécification](docs/superpowers/specs/2026-10-16-comparateur-ia-design.md) et [plans de réalisation](docs/superpowers/plans/).
+
+## Licence
+
+Code publié sous [licence MIT](LICENSE) : vous pouvez l'utiliser, le modifier et le redistribuer, y compris à des fins commerciales, en conservant la mention de copyright.
 
 ---
 
