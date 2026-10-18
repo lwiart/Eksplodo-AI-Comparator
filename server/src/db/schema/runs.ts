@@ -24,7 +24,8 @@ const now = () => sql`CURRENT_TIMESTAMP(3)`;
 const createdAt = () => datetime('created_at', { mode: 'date', fsp: 3 }).notNull().default(now());
 /** Montants en $, lus et écrits en nombres. */
 const money = (name: string) => decimal(name, { precision: 12, scale: 6, mode: 'number' });
-const score = (name: string) => decimal(name, { precision: 4, scale: 2, mode: 'number' });
+/** Notes sur 100 (deux décimales : moyennes et notes calculées gardent leur précision). */
+const score = (name: string) => decimal(name, { precision: 5, scale: 2, mode: 'number' });
 const date = (name: string) => datetime(name, { mode: 'date', fsp: 3 });
 
 export interface RunWeights {
@@ -131,7 +132,7 @@ export const results = mysqlTable(
   ],
 );
 
-/** Note manuelle (entière, 0 à 10) d'un compte sur un résultat ; la note du résultat est la moyenne des évaluateurs. */
+/** Note manuelle (entière, 0 à 100) d'un compte sur un résultat ; la note du résultat est la moyenne des évaluateurs. */
 export const manualScores = mysqlTable(
   'manual_scores',
   {

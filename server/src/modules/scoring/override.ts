@@ -20,11 +20,10 @@ export function finalScore(r: {
   return r.method === 'manual' ? r.manualAvg : r.autoScore;
 }
 
-/** 0 à 10, une décimale au plus. */
+/** Entier de 0 à 100. */
 function assertValidScore(score: number): void {
-  const tenths = score * 10;
-  if (!Number.isFinite(score) || score < 0 || score > 10 || Math.abs(tenths - Math.round(tenths)) > 1e-6) {
-    throw new ValidationError('invalid_score', 'La note doit être comprise entre 0 et 10, avec une décimale au plus');
+  if (!Number.isInteger(score) || score < 0 || score > 100) {
+    throw new ValidationError('invalid_score', 'La note doit être un nombre entier compris entre 0 et 100');
   }
 }
 

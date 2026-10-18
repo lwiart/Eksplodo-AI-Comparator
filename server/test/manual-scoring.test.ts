@@ -216,7 +216,7 @@ test('question anonymisée : ni identifiant de résultat ni nom de modèle tant 
 test('enregistrer toutes les notes révèle les modèles ; moyenne des évaluateurs ; scoreStatus done', async () => {
   const s = await setup();
   const textOf = new Map(s.manualResults.map((r, i) => [r.id, `Texte numéro ${i}`]));
-  const scoreOfText = (text: string) => Number(text.slice(-1)) * 2; // 0, 2, 4, 6
+  const scoreOfText = (text: string) => Number(text.slice(-1)) * 20; // 0, 20, 40, 60
   const res = await scoreAll(s, s.user, scoreOfText, '  Bien  ');
   expect(res.statusCode).toBe(200);
   const q = res.json();
@@ -242,32 +242,32 @@ test('enregistrer toutes les notes révèle les modèles ; moyenne des évaluate
   expect(scores).toHaveLength(4);
   expect(scores.every((m) => m.userId === s.userRow.id && m.score === scoreOfText(textOf.get(m.resultId)!))).toBe(true);
 
-  // Second évaluateur (Admin) : 10 partout ; nouvel enregistrement de l'Utilisateur par upsert (aucune ligne en plus).
-  expect((await scoreAll(s, s.admin, () => 10)).statusCode).toBe(200);
+  // Second évaluateur (Admin) : 100 partout ; nouvel enregistrement de l'Utilisateur par upsert (aucune ligne en plus).
+  expect((await scoreAll(s, s.admin, () => 100)).statusCode).toBe(200);
   expect((await scoreAll(s, s.user, scoreOfText)).statusCode).toBe(200);
   const all = await s.db.select().from(manualScores);
   expect(all).toHaveLength(8);
   expect(all.filter((m) => m.userId === s.userRow.id).every((m) => m.comment === null)).toBe(true);
 
-  // Moyenne des évaluateurs : (note Utilisateur + 10) ÷ 2.
+  // Moyenne des évaluateurs : (note Utilisateur + 100) ÷ 2.
   const spread = (await s.get(`/api/scoring/runs/${s.runId}/spread`)).json().items as { resultId: string; mean: number; raters: number }[];
   for (const item of spread) {
     expect(item.raters).toBe(2);
-    expect(item.mean).toBe((scoreOfText(textOf.get(item.resultId)!) + 10) / 2);
+    expect(item.mean).toBe((scoreOfText(textOf.get(item.resultId)!) + 100) / 2);
   }
 });
 
-test('note 11 ou 7,5 refusée ; lettre inconnue → 400 ; question partielle → 400', async () => {
+test('note 101 ou 7,5 refusée ; lettre inconnue → 400 ; question partielle → 400', async () => {
   const s = await setup();
   const url = `/api/scoring/questions/${s.rt}/manual`;
   const full = (over: Partial<{ letter: string; score: unknown }> = {}) =>
-    ['A', 'B', 'C', 'D'].map((letter, i) => (i === 0 ? { letter, score: 5, ...over } : { letter, score: 5 }));
-  for (const score of [11, 7.5, -1, '5']) {
+    ['A', 'B', 'C', 'D'].map((letter, i) => (i === 0 ? { letter, score: 50, ...over } : { letter, score: 50 }));
+  for (const score of [101, 7.5, -1, '50']) {
     const res = await s.put(url, { scores: full({ score }) }, s.user);
     expect(res.statusCode, String(score)).toBe(400);
     expect(res.json().error.code).toBe('validation');
   }
-  let res = await s.put(url, { scores: [...full().slice(1), { letter: 'E', score: 5 }] }, s.user);
+  let res = await s.put(url, { scores: [...full().slice(1), { letter: 'E', score: 50 }] }, s.user);
   expect(res.statusCode).toBe(400);
   expect(res.json().error.code).toBe('validation');
 
@@ -275,7 +275,7 @@ test('note 11 ou 7,5 refusée ; lettre inconnue → 400 ; question partielle →
   expect(res.statusCode).toBe(400);
   expect(res.json().error).toEqual({ code: 'validation', message: 'Notez toutes les réponses de la question' });
 
-  res = await s.put(url, { scores: [...full(), { letter: 'A', score: 3 }] }, s.user);
+  res = await s.put(url, { scores: [...full(), { letter: 'A', score: 30 }] }, s.user);
   expect(res.statusCode).toBe(400);
 
   res = await s.put(url, { scores: full().map((x) => ({ ...x, comment: 'x'.repeat(2001) })) }, s.user);
@@ -286,7 +286,7 @@ test('note 11 ou 7,5 refusée ; lettre inconnue → 400 ; question partielle →
   expect(rows.every((r) => r.scoreStatus === 'awaiting_manual')).toBe(true);
 
   // Bornes acceptées.
-  res = await s.put(url, { scores: ['A', 'B', 'C', 'D'].map((letter, i) => ({ letter, score: i % 2 === 0 ? 0 : 10 })) }, s.user);
+  res = await s.put(url, { scores: ['A', 'B', 'C', 'D'].map((letter, i) => ({ letter, score: i % 2 === 0 ? 0 : 100 })) }, s.user);
   expect(res.statusCode).toBe(200);
 });
 
@@ -298,10 +298,10 @@ test('À noter : compte et liste par compte, question complète retirée', async
   expect(await todo(s.admin)).toEqual({ items: [expected], count: 1 });
 
   // Une réponse notée par l'Utilisateur (directement en base) : avancement par compte.
-  await s.db.insert(manualScores).values({ id: '99999999-0000-4000-8000-000000000000', resultId: s.manualResults[0]!.id, userId: s.userRow.id, score: 4 });
+  await s.db.insert(manualScores).values({ id: '99999999-0000-4000-8000-000000000000', resultId: s.manualResults[0]!.id, userId: s.userRow.id, score: 40 });
   expect(await todo(s.user)).toEqual({ items: [{ ...expected, scoredByMe: 1 }], count: 1 });
 
-  expect((await scoreAll(s, s.user, () => 7)).statusCode).toBe(200);
+  expect((await scoreAll(s, s.user, () => 70)).statusCode).toBe(200);
   expect(await todo(s.user)).toEqual({ items: [], count: 0 });
   expect(await todo(s.admin)).toEqual({ items: [expected], count: 1 });
   expect(await todo(s.other)).toEqual({ items: [expected], count: 1 });
@@ -314,7 +314,7 @@ test('À noter : compte et liste par compte, question complète retirée', async
 test('question dont une réponse est en attente ou en cours : ni proposée, ni affichée, ni enregistrable (409)', async () => {
   const s = await setup();
   const todo = () => s.get('/api/scoring/todo', s.user).then((r) => r.json());
-  const scores = ['A', 'B', 'C'].map((letter) => ({ letter, score: 5 }));
+  const scores = ['A', 'B', 'C'].map((letter) => ({ letter, score: 50 }));
   const last = s.manualResults[3]!.id;
   for (const status of ['pending', 'running'] as const) {
     await s.db.update(results).set({ status, responseText: null }).where(eq(results.id, last));
@@ -331,7 +331,7 @@ test('question dont une réponse est en attente ou en cours : ni proposée, ni a
   // Toutes les réponses arrivées : la question est proposée et se note normalement.
   await s.db.update(results).set({ status: 'done', responseText: 'Texte numéro 3' }).where(eq(results.id, last));
   expect((await todo()).count).toBe(1);
-  expect((await scoreAll(s, s.user, () => 6)).statusCode).toBe(200);
+  expect((await scoreAll(s, s.user, () => 60)).statusCode).toBe(200);
 });
 
 test('résultats d’une série : réponses d’un test manuel masquées à l’Utilisateur qui n’a pas noté, visibles après', async () => {
@@ -370,7 +370,7 @@ test('résultats d’une série : réponses d’un test manuel masquées à l’
     expect(r.responseText).not.toBeNull();
   }
 
-  expect((await scoreAll(s, s.user, () => 6)).statusCode).toBe(200);
+  expect((await scoreAll(s, s.user, () => 60)).statusCode).toBe(200);
   rows = await rowsFor(s.user);
   for (const r of rows.filter((x) => x.runTestId === s.rt)) expect(r.ttftMs).not.toBeNull();
   for (const r of rows) {
@@ -391,9 +391,9 @@ test('écarts entre évaluateurs : réservé à l’Admin (403), écart-type exa
   expect(items).toHaveLength(4);
   expect(items.every((i) => i.raters === 0 && i.mean === null && i.stdDev === null)).toBe(true);
 
-  // Scores 4 et 8 → moyenne 6, écart-type 2 ; 3, 4 et 8 → moyenne 5, écart-type √(14/3) ≈ 2,16.
-  expect((await scoreAll(s, s.user, () => 4, 'Moyen')).statusCode).toBe(200);
-  expect((await scoreAll(s, s.admin, () => 8)).statusCode).toBe(200);
+  // Scores 40 et 80 → moyenne 60, écart-type 20 ; 30, 40 et 80 → moyenne 50, écart-type √(1400/3) ≈ 21,6.
+  expect((await scoreAll(s, s.user, () => 40, 'Moyen')).statusCode).toBe(200);
+  expect((await scoreAll(s, s.admin, () => 80)).statusCode).toBe(200);
   items = (await s.get(url)).json().items;
   const target = s.manualResults[0]!;
   const item = items.find((i) => i.resultId === target.id)!;
@@ -403,16 +403,16 @@ test('écarts entre évaluateurs : réservé à l’Admin (403), écart-type exa
     testName: 'Rédaction',
     modelName: s.modelNameOf.get(target.modelId),
     raters: 2,
-    mean: 6,
-    stdDev: 2,
+    mean: 60,
+    stdDev: 20,
     scores: expect.arrayContaining([
-      { userName: 'Ulysse Util', score: 4, comment: 'Moyen' },
-      { userName: 'Alice Admin', score: 8, comment: null },
+      { userName: 'Ulysse Util', score: 40, comment: 'Moyen' },
+      { userName: 'Alice Admin', score: 80, comment: null },
     ]),
   });
-  expect((await scoreAll(s, s.other, () => 3)).statusCode).toBe(200);
+  expect((await scoreAll(s, s.other, () => 30)).statusCode).toBe(200);
   items = (await s.get(url)).json().items;
-  expect(items.find((i) => i.resultId === target.id)).toMatchObject({ raters: 3, mean: 5, stdDev: 2.16 });
+  expect(items.find((i) => i.resultId === target.id)).toMatchObject({ raters: 3, mean: 50, stdDev: 21.6 });
 
   expect((await s.get('/api/scoring/runs/00000000-0000-4000-8000-000000000000/spread')).statusCode).toBe(404);
 });
@@ -457,7 +457,7 @@ test('fil d’activité : durée et coût masqués à l’Utilisateur sur une qu
     expect(i.totalMs).not.toBeNull();
     expect(i.costUsd).not.toBeNull();
   }
-  expect((await scoreAll(s, s.user, () => 5)).statusCode).toBe(200);
+  expect((await scoreAll(s, s.user, () => 50)).statusCode).toBe(200);
   items = await activity(s.user);
   for (const i of items.filter(isManual)) {
     expect(i.hiddenUntilScored).toBe(false);

@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, expect, test, vi } from 'vitest';
@@ -46,9 +46,10 @@ const REVEAL = [
   { letter: 'B', modelName: 'Claude Sonnet', color: '#09f' },
 ];
 
-const rate = async (letter: string, n: number) => {
-  const group = screen.getByRole('radiogroup', { name: `Note de la réponse ${letter}` });
-  await userEvent.click(within(group).getByRole('radio', { name: String(n) }));
+const slider = (letter: string) => screen.getByRole('slider', { name: `Note de la réponse ${letter}` });
+const field = (letter: string) => screen.getByRole('textbox', { name: `Note de la réponse ${letter}, saisie au clavier` });
+const rate = (letter: string, n: number) => {
+  fireEvent.change(slider(letter), { target: { value: String(n) } });
 };
 
 beforeEach(() => {
@@ -56,7 +57,7 @@ beforeEach(() => {
   apiFetch.mockResolvedValue(question());
 });
 
-test('question : prompt, pièces jointes, réponses A, B sans nom de modèle ; note 0 à 10 et commentaire', async () => {
+test('question : prompt, pièces jointes, réponses A, B sans nom de modèle ; note 0 à 100 et commentaire', async () => {
   renderPage();
   expect(await screen.findByText(/Rédige une réponse empathique/)).toBeInTheDocument();
   // Vignette affichée en inline ; le nom reste un lien de téléchargement.
@@ -65,10 +66,12 @@ test('question : prompt, pièces jointes, réponses A, B sans nom de modèle ; n
   expect(screen.getByRole('link', { name: 'courrier.png' })).toHaveAttribute('href', '/api/scoring/questions/q1/attachments/0');
   expect(screen.getByRole('article', { name: 'Réponse A' })).toHaveTextContent('Réponse un');
   expect(screen.getByRole('article', { name: 'Réponse B' })).toBeInTheDocument();
-  const group = screen.getByRole('radiogroup', { name: 'Note de la réponse A' });
-  expect(within(group).getAllByRole('radio').map((r) => r.textContent)).toEqual(
-    Array.from({ length: 11 }, (_, i) => String(i)),
-  );
+  const range = slider('A');
+  expect(range).toHaveAttribute('min', '0');
+  expect(range).toHaveAttribute('max', '100');
+  expect(range).toHaveAttribute('step', '5');
+  expect(range).toHaveAttribute('aria-valuetext', 'non notée');
+  expect(field('A')).toHaveValue('');
   expect(screen.getByLabelText('Commentaire sur la réponse A')).toBeInTheDocument();
 });
 
@@ -86,8 +89,8 @@ test('question déjà complète : modèles révélés d’emblée et notes prér
     question({
       complete: true,
       answers: [
-        { letter: 'A', responseText: 'Réponse un', myScore: 7, myComment: null },
-        { letter: 'B', responseText: 'Réponse deux', myScore: 3, myComment: null },
+        { letter: 'A', responseText: 'Réponse un', myScore: 70, myComment: null },
+        { letter: 'B', responseText: 'Réponse deux', myScore: 30, myComment: null },
       ],
       reveal: REVEAL,
     }),
@@ -95,8 +98,10 @@ test('question déjà complète : modèles révélés d’emblée et notes prér
   renderPage();
   expect(await screen.findByText('Mistral Large')).toBeInTheDocument();
   expect(screen.getByText('Claude Sonnet')).toBeInTheDocument();
-  const group = screen.getByRole('radiogroup', { name: 'Note de la réponse A' });
-  expect(within(group).getByRole('radio', { name: '7' })).toHaveAttribute('aria-checked', 'true');
+  expect(slider('A')).toHaveValue('70');
+  expect(slider('A')).toHaveAttribute('aria-valuetext', '70 sur 100');
+  expect(field('A')).toHaveValue('70');
+  expect(field('B')).toHaveValue('30');
 });
 
 test('aucune réponse : « Enregistrer » reste désactivé', async () => {
@@ -105,19 +110,23 @@ test('aucune réponse : « Enregistrer » reste désactivé', async () => {
   expect(await screen.findByRole('button', { name: 'Enregistrer et révéler' })).toBeDisabled();
 });
 
-test('flèches : changent la note, un seul arrêt de tabulation par réponse', async () => {
+test('curseur et champ : la note suit dans les deux sens, curseur par pas de 5', async () => {
   renderPage();
   await screen.findByText(/Rédige une réponse empathique/);
-  const group = screen.getByRole('radiogroup', { name: 'Note de la réponse A' });
-  const radios = within(group).getAllByRole('radio');
-  expect(radios.filter((r) => r.tabIndex === 0)).toHaveLength(1);
-  await userEvent.click(radios[4]!);
-  await userEvent.keyboard('{ArrowRight}');
-  expect(within(group).getByRole('radio', { name: '5' })).toHaveAttribute('aria-checked', 'true');
-  expect(within(group).getByRole('radio', { name: '5' })).toHaveFocus();
-  await userEvent.keyboard('{ArrowLeft}{ArrowLeft}');
-  expect(within(group).getByRole('radio', { name: '3' })).toHaveAttribute('aria-checked', 'true');
-  expect(radios.filter((r) => r.tabIndex === 0)).toHaveLength(1);
+  expect(slider('A').tabIndex).toBe(0);
+  expect(slider('A')).toHaveAttribute('step', '5');
+  // Curseur : le champ et la valeur lue suivent.
+  rate('A', 45);
+  expect(slider('A')).toHaveAttribute('aria-valuetext', '45 sur 100');
+  expect(field('A')).toHaveValue('45');
+  rate('A', 40);
+  expect(field('A')).toHaveValue('40');
+  // Champ : tout entier de 0 à 100, le curseur suit.
+  await userEvent.clear(field('A'));
+  await userEvent.type(field('A'), '73');
+  expect(slider('A')).toHaveAttribute('aria-valuetext', '73 sur 100');
+  // La réponse B reste non notée.
+  expect(slider('B')).toHaveAttribute('aria-valuetext', 'non notée');
 });
 
 test('« Enregistrer » désactivé tant que tout n’est pas noté ; après enregistrement, modèles révélés et compteur invalidé', async () => {
@@ -125,9 +134,9 @@ test('« Enregistrer » désactivé tant que tout n’est pas noté ; après enr
   const invalidate = vi.spyOn(client, 'invalidateQueries');
   const save = await screen.findByRole('button', { name: 'Enregistrer et révéler' });
   expect(save).toBeDisabled();
-  await rate('A', 7);
+  rate('A', 70);
   expect(save).toBeDisabled();
-  await rate('B', 3);
+  rate('B', 30);
   await userEvent.type(screen.getByLabelText('Commentaire sur la réponse B'), ' trop court ');
   expect(save).toBeEnabled();
 
@@ -135,8 +144,8 @@ test('« Enregistrer » désactivé tant que tout n’est pas noté ; après enr
     question({
       complete: true,
       answers: [
-        { letter: 'A', responseText: 'Réponse **un**', myScore: 7, myComment: null },
-        { letter: 'B', responseText: 'Réponse deux', myScore: 3, myComment: 'trop court' },
+        { letter: 'A', responseText: 'Réponse **un**', myScore: 70, myComment: null },
+        { letter: 'B', responseText: 'Réponse deux', myScore: 30, myComment: 'trop court' },
       ],
       reveal: REVEAL,
     }),
@@ -150,8 +159,8 @@ test('« Enregistrer » désactivé tant que tout n’est pas noté ; après enr
   expect(put?.[0]).toBe('/api/scoring/questions/q1/manual');
   expect(put?.[1].body).toEqual({
     scores: [
-      { letter: 'A', score: 7 },
-      { letter: 'B', score: 3, comment: 'trop court' },
+      { letter: 'A', score: 70 },
+      { letter: 'B', score: 30, comment: 'trop court' },
     ],
   });
 });
@@ -159,8 +168,8 @@ test('« Enregistrer » désactivé tant que tout n’est pas noté ; après enr
 test('échec de l’enregistrement : message en français', async () => {
   renderPage();
   const save = await screen.findByRole('button', { name: 'Enregistrer et révéler' });
-  await rate('A', 5);
-  await rate('B', 5);
+  rate('A', 55);
+  rate('B', 55);
   apiFetch.mockRejectedValueOnce(new ApiError('network', 0, 'x'));
   await userEvent.click(save);
   expect(await screen.findByRole('alert')).toHaveTextContent('Le serveur ne répond pas');
@@ -169,8 +178,8 @@ test('échec de l’enregistrement : message en français', async () => {
 test('échec de l’enregistrement (réponse arrivée entre-temps) : question relue, nouvelles réponses affichées, message conservé', async () => {
   renderPage();
   const save = await screen.findByRole('button', { name: 'Enregistrer et révéler' });
-  await rate('A', 5);
-  await rate('B', 5);
+  rate('A', 55);
+  rate('B', 55);
   apiFetch.mockRejectedValueOnce(new ApiError('validation', 400, 'Notez toutes les réponses de la question'));
   apiFetch.mockResolvedValueOnce(
     question({
@@ -185,8 +194,8 @@ test('échec de l’enregistrement (réponse arrivée entre-temps) : question re
   expect(await screen.findByRole('article', { name: 'Réponse C' })).toBeInTheDocument();
   expect(screen.getByRole('alert')).toHaveTextContent('Notez toutes les réponses de la question');
   // Formulaire reparti de zéro : les lettres désignent d'autres réponses.
-  const group = screen.getByRole('radiogroup', { name: 'Note de la réponse A' });
-  expect(within(group).getByRole('radio', { name: '5' })).toHaveAttribute('aria-checked', 'false');
+  expect(slider('A')).toHaveAttribute('aria-valuetext', 'non notée');
+  expect(field('A')).toHaveValue('');
   expect(apiFetch.mock.calls.filter(([url, init]) => url === '/api/scoring/questions/q1' && init?.method !== 'PUT')).toHaveLength(2);
 });
 

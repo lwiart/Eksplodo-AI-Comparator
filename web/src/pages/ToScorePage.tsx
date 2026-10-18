@@ -23,7 +23,7 @@ export function ToScorePage() {
       <header className="mb-5">
         <h1 className="m-0 font-display text-[30px] leading-[1.1] font-extrabold tracking-[-0.01em] text-white">À noter</h1>
         <p className="mt-2 mb-0 max-w-prose text-sm text-mute">
-          Notez chaque réponse de 0 à 10 sans savoir quel modèle l’a écrite. Les noms apparaissent une fois vos notes enregistrées.
+          Notez chaque réponse de 0 à 100 sans savoir quel modèle l’a écrite. Les noms apparaissent une fois vos notes enregistrées.
         </p>
       </header>
 

@@ -2,14 +2,14 @@ import type { BufferAttribute, Material, Mesh, Object3D } from 'three';
 import { createInteractionGate } from './interaction-gate';
 import type { SceneFactory } from './useThreeScene';
 
-/** Données de la constellation : un astre par modèle. `quality` est la note sur 10 (nulle : modèle non noté), `tokensPerS` le débit médian. */
+/** Données de la constellation : un astre par modèle. `quality` est la note sur 100 (nulle : modèle non noté), `tokensPerS` le débit médian. */
 export type ConstellationData = {
   models: { id: string; color: string; quality: number | null; tokensPerS: number | null }[];
 };
 
 // ---------- géométrie pure (testée) ----------
 
-/** Rayon d'un astre noté : de 0,18 (note 0) à 0,5 (note 10). Un modèle non noté est plus petit que tous les autres. */
+/** Rayon d'un astre noté : de 0,18 (note 0) à 0,5 (note 100). Un modèle non noté est plus petit que tous les autres. */
 export const MIN_RADIUS = 0.18;
 export const MAX_RADIUS = 0.5;
 export const UNRATED_RADIUS = 0.14;
@@ -26,8 +26,8 @@ const STARS = 1200;
 
 export function astreRadius(quality: number | null): number {
   if (quality === null || !Number.isFinite(quality)) return UNRATED_RADIUS;
-  const q = Math.min(10, Math.max(0, quality));
-  return MIN_RADIUS + (q / 10) * (MAX_RADIUS - MIN_RADIUS);
+  const q = Math.min(100, Math.max(0, quality));
+  return MIN_RADIUS + (q / 100) * (MAX_RADIUS - MIN_RADIUS);
 }
 
 export function astreColor(color: string, quality: number | null): string {

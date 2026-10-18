@@ -216,7 +216,7 @@ Toutes les tables utilisent des identifiants UUID v4 en `CHAR(36)` (comme l'app 
   - `auto_score` (note de la réponse attendue ou du juge), `judge_rationale`, `judge_cost_usd` ;
   - `override_score`, `override_by` ;
   - `completed_at`.
-- `manual_scores` (unique sur résultat + utilisateur) : note entière de 0 à 10, commentaire, date.
+- `manual_scores` (unique sur résultat + utilisateur) : note entière de 0 à 100, commentaire, date.
 
 ### 5.5 Partage, consommation, interne
 
@@ -317,7 +317,7 @@ Les erreurs sont levées sous forme de `ProviderError` normalisée (§12.1).
 
 ### 8.3 Notation
 
-La note finale d'un résultat vaut `override_score` si l'Admin en a imposé une, sinon la note de la méthode. Toutes les notes vont de 0 à 10.
+La note finale d'un résultat vaut `override_score` si l'Admin en a imposé une, sinon la note de la méthode. Toutes les notes vont de 0 à 100 (passage de 10 à 100 le 2026-10-18, migration 0007 : valeurs existantes ×10, anciennes valeurs sauvegardées dans `score_backup_results_0007` et `score_backup_manual_0007`).
 
 **Réponse attendue** (`scoring_config`) :
 - `exact` : `{ mode: 'exact', expected: string, ignoreCase: true, ignoreAccents: false }`. La réponse et l'attendu sont normalisés (espaces en début et fin supprimés, espaces multiples réduits) ; la note vaut 10 ou 0.
@@ -342,14 +342,14 @@ La note finale d'un résultat vaut `override_score` si l'Admin en a imposé une,
 
 Pour chaque modèle d'une série :
 
-| Critère | Mesure | Note sur 10 |
+| Critère | Mesure | Note sur 100 |
 |---|---|---|
 | **Qualité** | moyenne, sur les tests notés, de la moyenne des répétitions | la valeur elle-même |
 | **Vitesse** | médiane de `ttft_ms` et médiane de `tokens_per_s` sur les appels réussis | moyenne de deux notes logarithmiques : TTFT (plus bas = mieux) et débit (plus haut = mieux) |
 | **Coût** | coût moyen par réponse réussie | note logarithmique (plus bas = mieux) |
-| **Fiabilité** | réussis ÷ (réussis + erreurs + timeouts) ; les `unsupported` sont exclus | ratio × 10 |
+| **Fiabilité** | réussis ÷ (réussis + erreurs + timeouts) ; les `unsupported` sont exclus | ratio × 100 |
 
-- **Note logarithmique** de 2 à 10, entre la plus petite valeur (`lo`) et la plus grande (`hi`) de la série : `2 + 8 × ln(x / lo) / ln(hi / lo)` quand une valeur haute est meilleure, et `2 + 8 × (1 − ln(x / lo) / ln(hi / lo))` sinon. Si tous les modèles sont égaux, ou s'il n'y en a qu'un, la note vaut 10. Un écart du simple au double pèse ainsi autant à 0,10 $ qu'à 1 $. Ce choix a été fait après la maquette, où l'échelle au prorata écrasait les modèles chers.
+- **Note logarithmique** de 20 à 100, entre la plus petite valeur (`lo`) et la plus grande (`hi`) de la série : `20 + 80 × ln(x / lo) / ln(hi / lo)` quand une valeur haute est meilleure, et `20 + 80 × (1 − ln(x / lo) / ln(hi / lo))` sinon. Si tous les modèles sont égaux, ou s'il n'y en a qu'un, la note vaut 100. Un écart du simple au double pèse ainsi autant à 0,10 $ qu'à 1 $. Ce choix a été fait après la maquette, où l'échelle au prorata écrasait les modèles chers.
 - **Score global** = moyenne pondérée des quatre notes. Pondération par défaut : qualité 50 %, vitesse 20 %, coût 20 %, fiabilité 10 %. Les curseurs de la page de résultats recalculent instantanément côté client ; l'Admin peut enregistrer la pondération comme défaut de la série, ce qui l'applique aussi à la page de partage.
 - **Par catégorie** : qualité moyenne par catégorie de test.
 - Un modèle dont aucun test n'est noté affiche « — » en qualité et n'apparaît pas sur le podium.

@@ -57,7 +57,7 @@ function scoreRegex(pattern: string, flags: string, response: string): ExpectedS
   try {
     const found = runInNewContext('re.test(s)', { re, s }, { timeout: REGEX_TIMEOUT_MS }) as boolean;
     return found
-      ? { score: 10, rationale: 'Expression trouvée dans la réponse.' }
+      ? { score: 100, rationale: 'Expression trouvée dans la réponse.' }
       : { score: 0, rationale: 'Expression absente de la réponse.' };
   } catch {
     // Seul le dépassement du délai peut survenir ici.
@@ -65,14 +65,14 @@ function scoreRegex(pattern: string, flags: string, response: string): ExpectedS
   }
 }
 
-/** Note de 0 à 10 d'une réponse par rapport à l'attente configurée, avec une justification française courte. */
+/** Note de 0 à 100 d'une réponse par rapport à l'attente configurée, avec une justification française courte. */
 export function scoreExpected(config: ExpectedConfig, response: string): ExpectedScore {
   if (config.mode === 'exact') {
     const same =
       normalize(response, config.ignoreCase, config.ignoreAccents) ===
       normalize(config.expected, config.ignoreCase, config.ignoreAccents);
     return same
-      ? { score: 10, rationale: 'Réponse identique à la réponse attendue.' }
+      ? { score: 100, rationale: 'Réponse identique à la réponse attendue.' }
       : { score: 0, rationale: 'Réponse différente de la réponse attendue.' };
   }
   if (config.mode === 'contains') {
@@ -80,7 +80,7 @@ export function scoreExpected(config: ExpectedConfig, response: string): Expecte
     const found: string[] = [];
     const missing: string[] = [];
     for (const item of config.items) (haystack.includes(normalize(item, config.ignoreCase, false)) ? found : missing).push(item);
-    const score = Math.round((10 * found.length * 10) / config.items.length) / 10;
+    const score = Math.round((100 * found.length) / config.items.length);
     const noun = found.length > 1 ? 'éléments trouvés' : 'élément trouvé';
     // Éléments manquants listés aussi : c'est eux qui expliquent une note incomplète.
     const foundPart = found.length > 0 ? ` : ${found.join(', ')}` : '';

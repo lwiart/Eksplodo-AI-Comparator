@@ -36,7 +36,7 @@ export default function ModelRadar({ radar, color, modelName }: { radar: ModelSt
         <RadarChart data={radar} outerRadius="72%">
           <PolarGrid stroke={GRID_STROKE} />
           <PolarAngleAxis dataKey="category" tick={{ ...AXIS_TICK, fill: '#D8ECF5' }} />
-          <PolarRadiusAxis domain={[0, 10]} tickCount={6} tick={AXIS_TICK} stroke={GRID_STROKE} angle={90} />
+          <PolarRadiusAxis domain={[0, 100]} tickCount={6} tick={AXIS_TICK} stroke={GRID_STROKE} angle={90} />
           <Radar name="Moyenne des modèles" dataKey="average" stroke="#7CC4EF" strokeDasharray="4 3" fill="#7CC4EF" fillOpacity={0.08} isAnimationActive={false} />
           <Radar name={modelName} dataKey="model" stroke={color} strokeWidth={2} fill={color} fillOpacity={0.28} isAnimationActive={false} />
           <Tooltip {...TOOLTIP_STYLE} formatter={(v) => (typeof v === 'number' ? score(v) : DASH)} />

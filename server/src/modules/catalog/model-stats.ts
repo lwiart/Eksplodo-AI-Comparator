@@ -163,7 +163,7 @@ export async function computeModelStats(db: Db, modelId: string, actor: Actor): 
     ttftRank: rankOf(ttftMedians, modelId, true),
     medianTokensPerS: mySpeed === null ? null : round2(mySpeed),
     tpsRank: rankOf(speedMedians, modelId, false),
-    reliability: finished === 0 ? null : round2((mine!.done / finished) * 10),
+    reliability: finished === 0 ? null : round2((mine!.done / finished) * 100),
     radar,
     history,
   };

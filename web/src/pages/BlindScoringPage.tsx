@@ -4,12 +4,11 @@ import { Link, useParams } from 'react-router-dom';
 import { messageForScoreError } from '../api/messages';
 import { TODO_KEY, attachmentUrl, attachmentViewUrl, getQuestion, questionKey, saveQuestionScores, type BlindQuestion } from '../api/scoring';
 import { Markdown } from '../components/results/Markdown';
+import { ScoreInput } from '../components/scoring/ScoreInput';
 import { AttachmentGallery } from '../components/ui/AttachmentGallery';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { Chip } from '../components/ui/Chip';
-
-const SCORES = Array.from({ length: 11 }, (_, i) => i);
 
 /** Notation à l'aveugle d'une question : réponses A, B, C… puis, après enregistrement, révélation des modèles. */
 export function BlindScoringPage() {
@@ -169,38 +168,7 @@ function QuestionForm({
               <div className="min-h-24 flex-1">
                 <Markdown text={a.responseText} />
               </div>
-              <div role="radiogroup" aria-label={`Note de la réponse ${a.letter}`} className="mt-3 flex gap-[3px]">
-                {SCORES.map((n) => {
-                  const current = scores[a.letter];
-                  const on = current === n;
-                  // Tabindex itinérant : un seul arrêt de tabulation par réponse (la note choisie, sinon 0).
-                  const tabStop = current == null ? n === 0 : on;
-                  return (
-                    <button
-                      key={n}
-                      type="button"
-                      role="radio"
-                      aria-checked={on}
-                      aria-label={`${n}`}
-                      tabIndex={tabStop ? 0 : -1}
-                      onClick={() => setScores((s) => ({ ...s, [a.letter]: n }))}
-                      onKeyDown={(e) => {
-                        const step = e.key === 'ArrowRight' || e.key === 'ArrowUp' ? 1 : e.key === 'ArrowLeft' || e.key === 'ArrowDown' ? -1 : 0;
-                        if (step === 0) return;
-                        e.preventDefault();
-                        const next = Math.min(10, Math.max(0, n + step));
-                        setScores((s) => ({ ...s, [a.letter]: next }));
-                        (e.currentTarget.parentElement?.children[next] as HTMLElement | undefined)?.focus();
-                      }}
-                      className={`flex-1 cursor-pointer rounded-lg border py-[7px] text-center font-mono text-xs font-bold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky ${
-                        on ? 'border-orange bg-orange text-white' : 'border-line bg-transparent text-mute hover:text-white'
-                      }`}
-                    >
-                      {n}
-                    </button>
-                  );
-                })}
-              </div>
+              <ScoreInput label={`réponse ${a.letter}`} value={scores[a.letter] ?? null} onChange={(n) => setScores((s) => ({ ...s, [a.letter]: n }))} />
               <textarea
                 aria-label={`Commentaire sur la réponse ${a.letter}`}
                 placeholder="Commentaire (facultatif)"

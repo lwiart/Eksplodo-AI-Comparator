@@ -29,19 +29,19 @@ vi.mock('recharts', async (importOriginal) => ({
 
 const EMPTY_STATS = { quality: null, medianTtftMs: null, ttftRank: null, medianTokensPerS: null, tpsRank: null, reliability: null, radar: [], history: [] };
 const STATS = {
-  quality: 8.1,
+  quality: 81,
   medianTtftMs: 420,
   ttftRank: { rank: 2, of: 6 },
   medianTokensPerS: 131.5,
   tpsRank: { rank: 1, of: 6 },
-  reliability: 9.5,
+  reliability: 95,
   radar: [
-    { category: 'Rédaction', model: 8, average: 6.5 },
-    { category: 'Logique', model: 7, average: 7 },
+    { category: 'Rédaction', model: 80, average: 65 },
+    { category: 'Logique', model: 70, average: 70 },
     { category: 'Code', model: null, average: 5 },
   ],
   history: [
-    { runId: 'r12', runName: 'Rédaction et logique', completedAt: '2026-10-10T10:00:00.000Z', rank: 1, of: 6, quality: 8.1, global: 8.3 },
+    { runId: 'r12', runName: 'Rédaction et logique', completedAt: '2026-10-10T10:00:00.000Z', rank: 1, of: 6, quality: 81, global: 83 },
     { runId: 'r10', runName: 'Réponses clients', completedAt: '2026-09-10T10:00:00.000Z', rank: null, of: 8, quality: null, global: null },
   ],
 };
@@ -108,7 +108,7 @@ test('fiche : chiffres clés avec rangs à la française, radar et historique', 
   stats = () => Promise.resolve({ stats: STATS });
   renderPage('user');
   const figures = within(await screen.findByRole('heading', { name: 'Chiffres clés' }).then((h) => h.closest('div')!));
-  expect(await figures.findByText('8,1 / 10')).toBeInTheDocument();
+  expect(await figures.findByText('81 / 100')).toBeInTheDocument();
   expect(figures.getByText('420 ms')).toBeInTheDocument();
   expect(figures.getByText('2ᵉ sur 6')).toBeInTheDocument();
   expect(figures.getByText('131,5 tokens/s')).toBeInTheDocument();
@@ -122,7 +122,7 @@ test('fiche : chiffres clés avec rangs à la française, radar et historique', 
   expect(link).toHaveAttribute('href', '/series/r12');
   const row = link.closest('tr')!;
   expect(within(row).getByText('1 / 6')).toBeInTheDocument();
-  expect(within(row).getByText('8,3')).toBeInTheDocument();
+  expect(within(row).getByText('83')).toBeInTheDocument();
   expect(within(screen.getByRole('link', { name: 'Réponses clients' }).closest('tr')!).getByText('—', { selector: 'td:nth-child(3)' })).toBeInTheDocument();
 });
 

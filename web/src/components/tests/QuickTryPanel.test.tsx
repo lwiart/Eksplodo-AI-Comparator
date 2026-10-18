@@ -163,19 +163,19 @@ test('essai rapide : note du juge, justification échappée et nom du juge', asy
   polls = [
     {
       status: 'done',
-      outcome: { ...OUTCOME, score: { method: 'judge', score: 8, rationale: 'Clair <b>et</b> complet', judgeModelName: 'Juge 0', judgeCostUsd: 0.0004 } },
+      outcome: { ...OUTCOME, score: { method: 'judge', score: 80, rationale: 'Clair <b>et</b> complet', judgeModelName: 'Juge 0', judgeCostUsd: 0.0004 } },
     },
   ];
   await tryOnce();
-  expect(await screen.findByText('Note : 8/10')).toBeInTheDocument();
+  expect(await screen.findByText('Note : 80/100')).toBeInTheDocument();
   expect(screen.getByText('Clair <b>et</b> complet')).toBeInTheDocument();
   expect(screen.getByText(/Juge 0/)).toBeInTheDocument();
 });
 
 test('essai rapide : note par réponse attendue sans nom de juge ; note absente → justification seule', async () => {
-  polls = [{ status: 'done', outcome: { ...OUTCOME, score: { method: 'expected', score: 6.7, rationale: '2 éléments trouvés sur 3' } } }];
+  polls = [{ status: 'done', outcome: { ...OUTCOME, score: { method: 'expected', score: 67, rationale: '2 éléments trouvés sur 3' } } }];
   await tryOnce();
-  expect(await screen.findByText('Note : 6,7/10')).toBeInTheDocument();
+  expect(await screen.findByText('Note : 67/100')).toBeInTheDocument();
   expect(screen.getByText('2 éléments trouvés sur 3')).toBeInTheDocument();
   expect(screen.queryByText(/Juge/)).toBeNull();
 });

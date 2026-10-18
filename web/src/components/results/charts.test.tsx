@@ -13,9 +13,9 @@ vi.mock('recharts', async (importOriginal) => ({
 
 test('nuage : un point par modèle ayant qualité et vitesse', () => {
   expect(scatterPoints(MODELS).map((p) => [p.name, p.speed, p.quality])).toEqual([
-    ['Alpha', 2, 9],
-    ['Bravo', 6, 7],
-    ['Charlie', 10, 3],
+    ['Alpha', 20, 90],
+    ['Bravo', 60, 70],
+    ['Charlie', 100, 30],
   ]);
   render(<QualitySpeedChart models={MODELS} />);
   const chart = screen.getByTestId('quality-speed-chart');
@@ -28,8 +28,8 @@ test('nuage : un point par modèle ayant qualité et vitesse', () => {
 
 test('catégories : une barre par modèle noté et par catégorie, absente sans note', () => {
   expect(categoryRows(MODELS, RANKING.categories)).toEqual([
-    { category: 'Rédaction', a: 8, b: 8, c: 3 },
-    { category: 'Logique', a: 7, b: 7 },
+    { category: 'Rédaction', a: 80, b: 80, c: 30 },
+    { category: 'Logique', a: 70, b: 70 },
   ]);
   render(<CategoryChart models={MODELS} categories={RANKING.categories} />);
   const chart = screen.getByTestId('category-chart');

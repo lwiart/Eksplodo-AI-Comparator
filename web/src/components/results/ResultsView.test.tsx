@@ -47,7 +47,7 @@ test('tableau : « — » pour les valeurs nulles, modèle non noté en fin sans
   renderView(false);
   const cells = (name: RegExp) => table().getByRole('rowheader', { name }).closest('tr')!.querySelectorAll('td');
   expect([...cells(/Delta/)].map((c) => c.textContent)).toEqual(['—', '—', '—', '—', '—', '—', '100 %']);
-  expect([...cells(/Alpha/)].map((c) => c.textContent)).toEqual(['1', '7,1', '9,0', '500 ms', '60 tokens/s', '0,003 $', '100 %']);
+  expect([...cells(/Alpha/)].map((c) => c.textContent)).toEqual(['1', '71', '90', '500 ms', '60 tokens/s', '0,003 $', '100 %']);
 });
 
 test('Admin : enregistrer la pondération envoie PATCH weights', async () => {

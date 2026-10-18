@@ -71,8 +71,8 @@ test('deux séries : qualité moyenne, rangs, radar et historique (série non te
   const { admin, call, mA, mB, makeTest, makeRun } = await setup();
   const culture = await makeTest('Capitale', 'Culture');
   const maths = await makeTest('Calcul', 'Maths');
-  const older = await makeRun('Série de mars', culture, [[mA, 10, 100, 50], [mB, 0, 200, 100]], { completedAt: new Date('2026-03-01T10:00:00.000Z') });
-  const newer = await makeRun('Série d’avril', maths, [[mA, 6, 300, 60], [mB, 8, 100, 40]], {
+  const older = await makeRun('Série de mars', culture, [[mA, 100, 100, 50], [mB, 0, 200, 100]], { completedAt: new Date('2026-03-01T10:00:00.000Z') });
+  const newer = await makeRun('Série d’avril', maths, [[mA, 60, 300, 60], [mB, 80, 100, 40]], {
     completedAt: new Date('2026-04-01T10:00:00.000Z'),
     weights: { quality: 100, speed: 0, cost: 0, reliability: 0 },
   });
@@ -81,19 +81,19 @@ test('deux séries : qualité moyenne, rangs, radar et historique (série non te
   const res = await call('GET', `/api/models/${mA.id}/stats`, admin);
   expect(res.statusCode).toBe(200);
   expect(res.json().stats).toEqual({
-    quality: 8,
+    quality: 80,
     medianTtftMs: 200,
     ttftRank: { rank: 2, of: 2 },
     medianTokensPerS: 55,
     tpsRank: { rank: 2, of: 2 },
-    reliability: 10,
+    reliability: 100,
     radar: [
-      { category: 'Maths', model: 6, average: 7 },
-      { category: 'Culture', model: 10, average: 5 },
+      { category: 'Maths', model: 60, average: 70 },
+      { category: 'Culture', model: 100, average: 50 },
     ],
     history: [
-      { runId: newer, runName: 'Série d’avril', completedAt: '2026-04-01T10:00:00.000Z', rank: 2, of: 2, quality: 6, global: 6 },
-      { runId: older, runName: 'Série de mars', completedAt: '2026-03-01T10:00:00.000Z', rank: 1, of: 2, quality: 10, global: 9 },
+      { runId: newer, runName: 'Série d’avril', completedAt: '2026-04-01T10:00:00.000Z', rank: 2, of: 2, quality: 60, global: 60 },
+      { runId: older, runName: 'Série de mars', completedAt: '2026-03-01T10:00:00.000Z', rank: 1, of: 2, quality: 100, global: 90 },
     ],
   });
 
@@ -123,29 +123,29 @@ test('Utilisateur : notes des questions manuelles qu’il n’a pas notées reti
     const [r] = await t.db.select({ id: results.id }).from(results).where(and(eq(results.runId, runId), eq(results.modelId, modelId)));
     await t.db.insert(manualScores).values({ id: randomUUID(), resultId: r!.id, userId: raterId, score });
   };
-  // L'Admin a noté les deux séries (A 8, B 2) ; l'Utilisateur seulement celle de mai (A 4, B 4).
+  // L'Admin a noté les deux séries (A 80, B 20) ; l'Utilisateur seulement celle de mai (A 40, B 40).
   for (const runId of [may, june]) {
-    await rate(runId, mA.id, adminId, 8);
-    await rate(runId, mB.id, adminId, 2);
+    await rate(runId, mA.id, adminId, 80);
+    await rate(runId, mB.id, adminId, 20);
   }
-  await rate(may, mA.id, userId, 4);
-  await rate(may, mB.id, userId, 4);
+  await rate(may, mA.id, userId, 40);
+  await rate(may, mB.id, userId, 40);
 
-  // Admin : toutes les notes (mai : (8 + 4) / 2 = 6 ; juin : 8).
+  // Admin : toutes les notes (mai : (80 + 40) / 2 = 60 ; juin : 80).
   const asAdmin = (await call('GET', `/api/models/${mA.id}/stats`, admin)).json().stats;
-  expect(asAdmin.quality).toBe(7);
-  expect(asAdmin.radar).toEqual([{ category: 'Écriture', model: 7, average: 4.75 }]);
+  expect(asAdmin.quality).toBe(70);
+  expect(asAdmin.radar).toEqual([{ category: 'Écriture', model: 70, average: 47.5 }]);
   expect(asAdmin.history).toEqual([
-    expect.objectContaining({ runId: june, quality: 8 }),
-    expect.objectContaining({ runId: may, quality: 6 }),
+    expect.objectContaining({ runId: june, quality: 80 }),
+    expect.objectContaining({ runId: may, quality: 60 }),
   ]);
 
-  // Juin : question non notée par l'Utilisateur, aucune note ; mai : moyenne des deux évaluateurs ((8 + 4) / 2 = 6).
+  // Juin : question non notée par l'Utilisateur, aucune note ; mai : moyenne des deux évaluateurs ((80 + 40) / 2 = 60).
   const asUser = (await call('GET', `/api/models/${mA.id}/stats`, user)).json().stats;
-  expect(asUser.quality).toBe(6);
-  expect(asUser.radar).toEqual([{ category: 'Écriture', model: 6, average: 4.5 }]);
+  expect(asUser.quality).toBe(60);
+  expect(asUser.radar).toEqual([{ category: 'Écriture', model: 60, average: 45 }]);
   expect(asUser.history).toEqual([
     expect.objectContaining({ runId: june, quality: null }),
-    expect.objectContaining({ runId: may, quality: 6 }),
+    expect.objectContaining({ runId: may, quality: 60 }),
   ]);
 });

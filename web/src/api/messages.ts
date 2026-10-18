@@ -36,7 +36,7 @@ const MESSAGES: Record<string, string> = {
   test_not_found: 'Un des tests choisis n’existe plus. Rechargez la page.',
   model_not_found: 'Ce modèle est introuvable ou désactivé : choisissez-en un autre.',
   not_rescorable: 'Ce test n’est pas noté par le juge : sa note ne peut pas être relancée.',
-  invalid_score: 'La note doit être comprise entre 0 et 10, avec une décimale au plus.',
+  invalid_score: 'La note doit être un nombre entier compris entre 0 et 100.',
   result_not_scorable: 'Seul un résultat terminé peut recevoir une note imposée.',
   question_not_ready: 'Toutes les réponses de cette question ne sont pas encore arrivées. Réessayez plus tard.',
   verdict_model_not_in_run: 'Le modèle d’un verdict ne fait pas partie de cette série.',

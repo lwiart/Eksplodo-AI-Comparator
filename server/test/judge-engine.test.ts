@@ -26,7 +26,7 @@ afterEach(destroyJudgeRuns, 60_000);
 
 test('série avec tests notés par le juge : chaque réponse est notée, coût du juge à part, ai_usage judge', async () => {
   const t = await setup();
-  const runId = await t.createRun(['Capitale de la France ?', 'Deux plus deux ?'], judgeDirective(8), { repetitions: 2 });
+  const runId = await t.createRun(['Capitale de la France ?', 'Deux plus deux ?'], judgeDirective(80), { repetitions: 2 });
   const judgeRequests: GenerateRequest[] = [];
   const registry = registryOf((inner) => ({
     ...inner,
@@ -40,7 +40,7 @@ test('série avec tests notés par le juge : chaque réponse est notée, coût d
   const rows = await t.resultRows(runId);
   expect(rows).toHaveLength(8);
   for (const r of rows) {
-    expect(r).toMatchObject({ status: 'done', scoreStatus: 'done', autoScore: 8, judgeRationale: 'Réponse correcte' });
+    expect(r).toMatchObject({ status: 'done', scoreStatus: 'done', autoScore: 80, judgeRationale: 'Réponse correcte' });
     expect(r.judgeCostUsd).toBeGreaterThan(0);
   }
   const run = await t.runRow(runId);
@@ -76,16 +76,16 @@ test('JSON invalide puis valide → note ; deux fois invalide → judge_failed, 
     generate: (req, signal) => (isJudgeCall(req) ? reply(script.shift() ?? 'aucune réponse prévue', 800) : inner.generate(req, signal)),
   }));
 
-  script.push('Voici ma note : 6/10', '{"score": 6, "rationale": "Correct mais incomplet"}');
+  script.push('Voici ma note : 60/100', '{"score": 60, "rationale": "Correct mais incomplet"}');
   const first = await t.createRun(['Un'], 'Exactitude');
   await t.drain(t.engineDeps(registry));
   const [ok] = await t.resultRows(first);
-  expect(ok).toMatchObject({ scoreStatus: 'done', autoScore: 6, judgeRationale: 'Correct mais incomplet' });
+  expect(ok).toMatchObject({ scoreStatus: 'done', autoScore: 60, judgeRationale: 'Correct mais incomplet' });
   expect(ok!.judgeCostUsd).toBeCloseTo(0.016, 6);
   expect(await t.judgeUsage(first)).toHaveLength(2);
   expect(await t.runRow(first)).toMatchObject({ status: 'completed', judgeCostUsd: 0.016 });
 
-  script.push('pas de JSON', '{"score": 42, "rationale": "hors bornes"}');
+  script.push('pas de JSON', '{"score": 142, "rationale": "hors bornes"}');
   const second = await t.createRun(['Deux'], 'Exactitude');
   await t.drain(t.engineDeps(registry));
   const [ko] = await t.resultRows(second);
@@ -106,7 +106,7 @@ test('erreur du juge : réessayable (2 s puis 8 s) puis note ; définitive → j
     ...inner,
     generate: (req, signal) => {
       if (!isJudgeCall(req)) return inner.generate(req, signal);
-      return ++judgeCalls <= 2 ? failing(httpError(503, 'Indisponible', {}, [])) : reply('{"score": 7, "rationale": "Bien"}', 100);
+      return ++judgeCalls <= 2 ? failing(httpError(503, 'Indisponible', {}, [])) : reply('{"score": 70, "rationale": "Bien"}', 100);
     },
   }));
   const first = await t.createRun(['Un'], 'Exactitude');
@@ -114,7 +114,7 @@ test('erreur du juge : réessayable (2 s puis 8 s) puis note ; définitive → j
   expect(judgeCalls).toBe(3);
   expect(sleeps).toEqual([2000, 8000]);
   const [ok] = await t.resultRows(first);
-  expect(ok).toMatchObject({ scoreStatus: 'done', autoScore: 7 });
+  expect(ok).toMatchObject({ scoreStatus: 'done', autoScore: 70 });
   expect(await t.judgeUsage(first)).toHaveLength(1); // seul l'appel réussi est facturé
 
   const refused = registryOf((inner) => ({
@@ -134,7 +134,7 @@ test('erreur du juge : réessayable (2 s puis 8 s) puis note ; définitive → j
 
 test('juge désactivé pendant la série : notes judge_failed avec une justification claire, série terminée', async () => {
   const t = await setup({ models: 1 });
-  const runId = await t.createRun(['Un', 'Deux'], judgeDirective(5));
+  const runId = await t.createRun(['Un', 'Deux'], judgeDirective(50));
   await t.db.update(models).set({ enabled: false }).where(eq(models.id, t.judges[0]!));
   await t.drain();
   const rows = await t.resultRows(runId);
@@ -165,7 +165,7 @@ test('le juge partage la concurrence : jamais plus de runs.concurrency appels si
         // Appels assez longs pour se chevaucher même quand la base répond lentement (suite complète en parallèle) ; les
         // générations du dernier test, plus longues, sont encore en vol quand les premiers appels du juge partent.
         await new Promise((r) => setTimeout(r, !judge && req.prompt === 'Trois' ? 300 : 40));
-        yield* reply(judge ? '{"score": 9, "rationale": "Très bien"}' : 'Paris', 10);
+        yield* reply(judge ? '{"score": 90, "rationale": "Très bien"}' : 'Paris', 10);
       } finally {
         active--;
         if (judge) judgeActive--;
@@ -177,7 +177,7 @@ test('le juge partage la concurrence : jamais plus de runs.concurrency appels si
   const runId = await t.createRun(['Un', 'Deux', 'Trois'], 'Exactitude', { concurrency: 3 });
   await t.drain(t.engineDeps(registry));
   const rows = await t.resultRows(runId);
-  expect(rows.every((r) => r.status === 'done' && r.scoreStatus === 'done' && r.autoScore === 9)).toBe(true);
+  expect(rows.every((r) => r.status === 'done' && r.scoreStatus === 'done' && r.autoScore === 90)).toBe(true);
   // Bornes de sécurité seulement (le nombre exact d'appels simultanés dépend de la vitesse de la base) ; les générations
   // du dernier test durent 300 ms : au moins un appel du juge part pendant qu'elles sont en vol.
   expect(maxActive).toBeLessThanOrEqual(3);
@@ -191,7 +191,7 @@ test('plafond atteint pendant la notation : pause budget, aucun dépassement, re
   const budget = 0.03;
   const runId = await t.createRun(['Un'], 'Exactitude', { budgetUsd: budget });
   const registry = registryOf(() => ({
-    generate: (req) => (isJudgeCall(req) ? reply('{"score": 8, "rationale": "Bien"}', 800) : reply('Réponse', 1000)),
+    generate: (req) => (isJudgeCall(req) ? reply('{"score": 80, "rationale": "Bien"}', 800) : reply('Réponse', 1000)),
     listModels: async () => [],
   }));
   await t.drain(t.engineDeps(registry));
@@ -222,7 +222,7 @@ test('plafond atteint pendant la notation : pause budget, aucun dépassement, re
   const done = await t.runRow(runId);
   expect(done).toMatchObject({ status: 'completed', pauseReason: null });
   expect(done.judgeCostUsd).toBeCloseTo(0.016, 6);
-  expect((await t.resultRows(runId)).every((r) => r.scoreStatus === 'done' && r.autoScore === 8)).toBe(true);
+  expect((await t.resultRows(runId)).every((r) => r.scoreStatus === 'done' && r.autoScore === 80)).toBe(true);
   expect((await t.get(`/api/runs/${runId}/progress`)).json().progress.judgePending).toBe(0);
 });
 
@@ -237,7 +237,7 @@ test('la série ne passe completed qu’une fois toutes les notes du juge rendue
       yield* inner.generate(req, signal);
     },
   }));
-  const runId = await t.createRun(['Un'], judgeDirective(8), { concurrency: 1 });
+  const runId = await t.createRun(['Un'], judgeDirective(80), { concurrency: 1 });
   const deps = t.engineDeps(registry, { sliceMs: 50 });
   const firstJobId = (await t.runRow(runId)).activeJobId!;
   expect(await t.runOnce(deps)).toBe(true);
@@ -254,7 +254,7 @@ test('la série ne passe completed qu’une fois toutes les notes du juge rendue
   expect(progress.judgePending).toBe(2);
 
   await t.drain(deps);
-  expect((await t.resultRows(runId)).every((r) => r.scoreStatus === 'done' && r.autoScore === 8)).toBe(true);
+  expect((await t.resultRows(runId)).every((r) => r.scoreStatus === 'done' && r.autoScore === 80)).toBe(true);
   expect(await t.runRow(runId)).toMatchObject({ status: 'completed', activeJobId: null });
 });
 
@@ -269,7 +269,7 @@ test('prise exclusive : pendant l’appel du juge, une autre tâche ne peut pas 
       if (!isJudgeCall(req)) return yield* inner.generate(req, signal);
       judgeCalls++;
       await gate;
-      yield* reply('{"score": 3, "rationale": "Moyen"}', 10);
+      yield* reply('{"score": 30, "rationale": "Moyen"}', 10);
     },
   }));
   const runId = await t.createRun(['Un'], 'Exactitude');
@@ -288,7 +288,7 @@ test('prise exclusive : pendant l’appel du juge, une autre tâche ne peut pas 
   expect(await worker).toBe(true);
   expect(judgeCalls).toBe(1);
   const [scored] = await t.resultRows(runId);
-  expect(scored).toMatchObject({ scoreStatus: 'done', autoScore: 3, judgeClaimedBy: null });
+  expect(scored).toMatchObject({ scoreStatus: 'done', autoScore: 30, judgeClaimedBy: null });
   expect(await t.judgeUsage(runId)).toHaveLength(1);
   expect(await t.runRow(runId)).toMatchObject({ status: 'completed' });
 });
@@ -305,7 +305,7 @@ test('juge changé par un recalcul pendant la tranche (ancien juge désactivé) 
     async *generate(req, signal) {
       if (isJudgeCall(req)) {
         judgeModels.push(req.model);
-        return yield* reply('{"score": 6, "rationale": "Nouveau juge"}', 10);
+        return yield* reply('{"score": 60, "rationale": "Nouveau juge"}', 10);
       }
       if (!switched) {
         switched = true;
@@ -318,7 +318,7 @@ test('juge changé par un recalcul pendant la tranche (ancien juge désactivé) 
   expect(await t.runOnce(t.engineDeps(registry))).toBe(true);
   const rows = await t.resultRows(runId);
   expect(rows).toHaveLength(2);
-  for (const r of rows) expect(r).toMatchObject({ status: 'done', scoreStatus: 'done', autoScore: 6, judgeRationale: 'Nouveau juge' });
+  for (const r of rows) expect(r).toMatchObject({ status: 'done', scoreStatus: 'done', autoScore: 60, judgeRationale: 'Nouveau juge' });
   expect(judgeModels).toEqual(['fake-juge-2', 'fake-juge-2']);
   expect(await t.runRow(runId)).toMatchObject({ status: 'completed', judgeModelId: t.judges[1] });
 });
@@ -337,7 +337,7 @@ test('réponse illisible puis prise retirée par un recalcul : aucun second appe
         expect((await t.post(`/api/runs/${runId}/rescore`, { scope: 'result', resultId: r!.id })).json()).toEqual({ queued: 1 });
         return yield* reply('pas de JSON', 100);
       }
-      yield* reply('{"score": 7, "rationale": "Bien"}', 100);
+      yield* reply('{"score": 70, "rationale": "Bien"}', 100);
     },
   }));
   expect(await t.runOnce(t.engineDeps(registry))).toBe(true);
@@ -347,7 +347,7 @@ test('réponse illisible puis prise retirée par un recalcul : aucun second appe
   expect(r!.judgeCostUsd).toBeCloseTo(0.001, 6); // l'appel illisible reste compté
   expect((await t.runRow(runId)).status).toBe('running'); // note en attente : tranche suivante
   await t.drain(t.engineDeps(registry));
-  expect((await t.resultRows(runId))[0]).toMatchObject({ scoreStatus: 'done', autoScore: 7 });
+  expect((await t.resultRows(runId))[0]).toMatchObject({ scoreStatus: 'done', autoScore: 70 });
   expect(judgeCalls).toBe(2);
 });
 
@@ -364,7 +364,7 @@ test('erreur réessayable puis prise retirée par un recalcul : pas de nouvelle 
     ...inner,
     generate: (req, signal) => {
       if (!isJudgeCall(req)) return inner.generate(req, signal);
-      return ++judgeCalls === 1 ? failing(httpError(503, 'Indisponible', {}, [])) : reply('{"score": 5, "rationale": "Bien"}', 100);
+      return ++judgeCalls === 1 ? failing(httpError(503, 'Indisponible', {}, [])) : reply('{"score": 50, "rationale": "Bien"}', 100);
     },
   }));
   expect(await t.runOnce(t.engineDeps(registry, { sleep }))).toBe(true);
@@ -385,7 +385,7 @@ test('recalcul avec un autre juge pendant un appel du juge : verdict en vol éca
         const res = await t.post(`/api/runs/${runId}/rescore`, { scope: 'run', judgeModelId: t.judges[1] });
         expect(res.json()).toEqual({ queued: 1 });
       }
-      const score = req.model === 'fake-juge-1' ? 8 : 4;
+      const score = req.model === 'fake-juge-1' ? 80 : 40;
       yield* reply(`{"score": ${score}, "rationale": "Note de ${req.model}"}`, 100);
     },
   }));
@@ -401,14 +401,14 @@ test('recalcul avec un autre juge pendant un appel du juge : verdict en vol éca
   await t.drain(t.engineDeps(registry));
   expect(calls).toEqual(['fake-juge-1', 'fake-juge-2']);
   const [scored] = await t.resultRows(runId);
-  expect(scored).toMatchObject({ scoreStatus: 'done', autoScore: 4, judgeRationale: 'Note de fake-juge-2' });
+  expect(scored).toMatchObject({ scoreStatus: 'done', autoScore: 40, judgeRationale: 'Note de fake-juge-2' });
   expect(scored!.judgeCostUsd).toBeCloseTo(0.002, 6);
   expect(await t.runRow(runId)).toMatchObject({ status: 'completed', judgeModelId: t.judges[1] });
 });
 
 test('prise orpheline (tâche interrompue) : libérée au début de la tranche suivante, note rendue une fois', async () => {
   const t = await setup({ models: 1 });
-  const runId = await t.createRun(['Un'], judgeDirective(4));
+  const runId = await t.createRun(['Un'], judgeDirective(40));
   await t.drain();
   // Note remise en attente et prise par une tâche disparue.
   await t.db
@@ -419,7 +419,7 @@ test('prise orpheline (tâche interrompue) : libérée au début de la tranche s
   expect(await recoverRuns(t.db, START)).toEqual({ enqueued: 1, interrupted: 0 });
   await t.drain();
   const [r] = await t.resultRows(runId);
-  expect(r).toMatchObject({ scoreStatus: 'done', autoScore: 4, judgeClaimedBy: null });
+  expect(r).toMatchObject({ scoreStatus: 'done', autoScore: 40, judgeClaimedBy: null });
   expect(await t.judgeUsage(runId)).toHaveLength(2);
   expect(await t.runRow(runId)).toMatchObject({ status: 'completed' });
 });

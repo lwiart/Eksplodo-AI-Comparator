@@ -28,7 +28,7 @@ function Metric({ label, children, title }: { label: string; children: string; t
 function ScoreBlock({ score }: { score: QuickTryScore }) {
   return (
     <div className="rounded-xl border border-line bg-night-0/60 p-3">
-      {score.score !== null ? <p className="m-0 font-display text-base font-bold text-white">{`Note : ${formatNumber(score.score)}/10`}</p> : null}
+      {score.score !== null ? <p className="m-0 font-display text-base font-bold text-white">{`Note : ${formatNumber(Math.round(score.score))}/100`}</p> : null}
       {/* Texte brut : React échappe la justification. */}
       <p className="m-0 mt-1 text-sm break-words whitespace-pre-wrap text-ink">{score.rationale}</p>
       {score.judgeModelName ? <p className="m-0 mt-1 text-xs text-mute">{`Noté par ${score.judgeModelName}`}</p> : null}

@@ -9,8 +9,8 @@ const DEFAULTS = { quality: 50, speed: 20, cost: 20, reliability: 10 };
 test('podium : trois premiers au rang et au score, modèle non noté absent', () => {
   render(<Podium rows={rankedRows(MODELS, DEFAULTS)} />);
   const items = within(screen.getByRole('list', { name: 'Podium' })).getAllByRole('listitem');
-  // Alpha : (50 × 9 + 20 × 2 + 20 × 6 + 10 × 10) / 100 = 7,1 ; Bravo : 6,9 ; Charlie : 6,5. Affichage : 2e, 1er, 3e.
-  expect(items.map((li) => li.textContent)).toEqual(['2BravoOpenAI6,9', '1AlphaAnthropic7,1', '3CharlieMistral6,5']);
+  // Alpha : (50 × 90 + 20 × 20 + 20 × 60 + 10 × 100) / 100 = 71 ; Bravo : 69 ; Charlie : 65. Affichage : 2e, 1er, 3e.
+  expect(items.map((li) => li.textContent)).toEqual(['2BravoOpenAI69', '1AlphaAnthropic71', '3CharlieMistral65']);
   expect(screen.queryByText('Delta')).toBeNull();
 });
 

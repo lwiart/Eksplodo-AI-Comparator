@@ -19,7 +19,7 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 // Rang et score global du serveur (volontairement différents d'un recalcul) : la page doit les afficher tels quels.
-const SERVER: [number | null, number | null][] = [[1, 8.43], [2, 7.11], [3, 5.5], [null, null]];
+const SERVER: [number | null, number | null][] = [[1, 84.3], [2, 71.1], [3, 55], [null, null]];
 const models: PublicModel[] = MODELS.map((m, i) => ({ ...m, modelId: `m${i + 1}`, rank: SERVER[i]![0], global: SERVER[i]![1] }));
 
 const SHARE: PublicShare = {
@@ -69,8 +69,8 @@ test('page publique : titre, verdicts, podium, graphes et classement ; seule GET
   expect(screen.getByTestId('category-chart')).toBeInTheDocument();
   // Rang et score global du serveur, pas un recalcul.
   const table = within(screen.getByRole('table', { name: 'Classement détaillé' }));
-  expect(table.getByText('8,43')).toBeInTheDocument();
-  expect(table.getByText('7,11')).toBeInTheDocument();
+  expect(table.getByText('84')).toBeInTheDocument();
+  expect(table.getByText('71')).toBeInTheDocument();
 
   expect(fetchSpy).toHaveBeenCalledTimes(1);
   expect(fetchSpy.mock.calls[0]![0]).toBe('/share/jeton123');

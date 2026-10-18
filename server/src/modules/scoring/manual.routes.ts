@@ -14,7 +14,7 @@ const scoresBody = z
         z
           .object({
             letter: z.string().regex(/^[A-Z]{1,4}$/, 'Lettre invalide'),
-            score: z.number().int().min(0).max(10),
+            score: z.number().int().min(0).max(100),
             comment: z.string().trim().max(2000).optional(),
           })
           .strict(),

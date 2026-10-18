@@ -21,8 +21,8 @@ const answer = (over: Record<string, unknown>) => ({
   status: 'done',
   responseText: 'Voici **le résumé**.',
   hiddenUntilScored: false,
-  finalScore: 9.5,
-  autoScore: 9.5,
+  finalScore: 95,
+  autoScore: 95,
   manualAvg: null,
   overrideScore: null,
   judgeRationale: 'Complet et structuré.',
@@ -48,7 +48,7 @@ beforeEach(() => {
     test: TEST_INFO,
     answers: [
       answer({}),
-      answer({ resultId: 'a2', modelName: 'GPT Test', color: '#3FA2E0', finalScore: 8.8, autoScore: 8.8, judgeRationale: null, ttftMs: 600, tokensPerS: 96, costUsd: 0.014 }),
+      answer({ resultId: 'a2', modelName: 'GPT Test', color: '#3FA2E0', finalScore: 88, autoScore: 88, judgeRationale: null, ttftMs: 600, tokensPerS: 96, costUsd: 0.014 }),
     ],
   };
   apiFetch.mockImplementation((path: string, init?: { method?: string }) => {
@@ -63,11 +63,11 @@ beforeEach(() => {
             testName: 'Résumer un CCTP',
             modelName: 'Claude Opus',
             raters: 2,
-            mean: 7.5,
-            stdDev: 2.5,
+            mean: 75,
+            stdDev: 25,
             scores: [
-              { userName: 'Laurent', score: 5, comment: 'Trop long' },
-              { userName: 'Camille', score: 10, comment: null },
+              { userName: 'Laurent', score: 50, comment: 'Trop long' },
+              { userName: 'Camille', score: 100, comment: null },
             ],
           },
         ],
@@ -91,8 +91,8 @@ test('réponses côte à côte avec justification du juge et métriques', async 
   renderBlock(false);
   const card = await screen.findByRole('article', { name: 'Claude Opus, répétition 1' });
   expect(within(card).getByText('le résumé').tagName).toBe('STRONG');
-  expect(within(card).getByLabelText('Note finale')).toHaveTextContent('9,5');
-  expect(within(card).getByText('auto 9,5')).toBeInTheDocument();
+  expect(within(card).getByLabelText('Note finale')).toHaveTextContent('95');
+  expect(within(card).getByText('auto 95')).toBeInTheDocument();
   expect(within(card).getByText('Juge : Complet et structuré.')).toBeInTheDocument();
   expect(within(card).getByText('900 ms')).toBeInTheDocument();
   expect(within(card).getByText('74 tokens/s')).toBeInTheDocument();
@@ -133,14 +133,14 @@ test('réponses masquées : même si le serveur renvoie texte, note ou modèle, 
   answersBody = {
     test: TEST_INFO,
     answers: [
-      answer({ hiddenUntilScored: true, responseText: 'TEXTE SECRET', finalScore: 6.3, autoScore: 6.3, judgeRationale: 'RAISON SECRETE' }),
-      answer({ resultId: 'a2', modelName: 'GPT Secret', hiddenUntilScored: true, responseText: 'AUTRE SECRET', finalScore: 4.1 }),
+      answer({ hiddenUntilScored: true, responseText: 'TEXTE SECRET', finalScore: 63, autoScore: 63, judgeRationale: 'RAISON SECRETE' }),
+      answer({ resultId: 'a2', modelName: 'GPT Secret', hiddenUntilScored: true, responseText: 'AUTRE SECRET', finalScore: 41 }),
     ],
   };
   renderBlock(false);
   expect(await screen.findByText(/2 masquées/)).toBeInTheDocument();
   const html = document.body.textContent ?? '';
-  for (const secret of ['TEXTE SECRET', 'AUTRE SECRET', 'RAISON SECRETE', 'GPT Secret', 'Claude Opus', '6,3', '4,1']) expect(html).not.toContain(secret);
+  for (const secret of ['TEXTE SECRET', 'AUTRE SECRET', 'RAISON SECRETE', 'GPT Secret', 'Claude Opus', '63', '41']) expect(html).not.toContain(secret);
 });
 
 test('changer de test efface le message de relance', async () => {
@@ -153,28 +153,31 @@ test('changer de test efface le message de relance', async () => {
   expect(screen.queryByText('2 notation(s) relancée(s).')).toBeNull();
 });
 
-test('Admin : imposer une note 7,5 puis la retirer ; relancer le juge sur un test avec un autre juge', async () => {
+test('Admin : imposer une note 75 puis la retirer ; relancer le juge sur un test avec un autre juge', async () => {
   const user = userEvent.setup();
   renderBlock(true);
   const card = await screen.findByRole('article', { name: 'Claude Opus, répétition 1' });
 
   await user.click(within(card).getByRole('button', { name: 'Imposer une note' }));
-  const input = within(card).getByLabelText('Note imposée (0 à 10)');
-  await user.type(input, '10,5');
-  expect(within(card).getByText('Entre 0 et 10, une décimale au plus (ex. 7,5).')).toBeInTheDocument();
+  const input = within(card).getByLabelText('Note imposée (0 à 100)');
+  await user.type(input, '101');
+  expect(within(card).getByText('Nombre entier entre 0 et 100 (ex. 75).')).toBeInTheDocument();
   expect(within(card).getByRole('button', { name: 'Enregistrer' })).toBeDisabled();
   await user.clear(input);
   await user.type(input, '7,5');
+  expect(within(card).getByText('Nombre entier entre 0 et 100 (ex. 75).')).toBeInTheDocument();
+  await user.clear(input);
+  await user.type(input, '75');
   // Le serveur renverra la note imposée au rechargement des réponses.
-  answersBody = { test: TEST_INFO, answers: [answer({ overrideScore: 7.5, finalScore: 7.5 })] };
+  answersBody = { test: TEST_INFO, answers: [answer({ overrideScore: 75, finalScore: 75 })] };
   await user.click(within(card).getByRole('button', { name: 'Enregistrer' }));
-  await waitFor(() => expect(apiFetch).toHaveBeenCalledWith('/api/scoring/results/a1/override', { method: 'PUT', body: { score: 7.5 } }));
+  await waitFor(() => expect(apiFetch).toHaveBeenCalledWith('/api/scoring/results/a1/override', { method: 'PUT', body: { score: 75 } }));
   // La saisie se referme et les réponses sont rechargées.
-  await waitFor(() => expect(within(card).queryByLabelText('Note imposée (0 à 10)')).toBeNull());
+  await waitFor(() => expect(within(card).queryByLabelText('Note imposée (0 à 100)')).toBeNull());
   await waitFor(() => expect(apiFetch.mock.calls.filter((c) => c[0] === '/api/runs/r1/answers/rt1').length).toBeGreaterThan(1));
 
   // Avec une note imposée, le retrait est proposé.
-  expect(await screen.findByText(/imposée 7,5/)).toBeInTheDocument();
+  expect(await screen.findByText(/imposée 75/)).toBeInTheDocument();
   await user.click(await screen.findByRole('button', { name: 'Retirer la note imposée' }));
   await waitFor(() => expect(apiFetch).toHaveBeenCalledWith('/api/scoring/results/a1/override', { method: 'PUT', body: { score: null } }));
 
@@ -226,7 +229,7 @@ test('Admin, test à réponse attendue : « Correction automatique », aucune re
 });
 
 test('Admin, test manuel : aucune relance du juge', async () => {
-  answersBody = { test: { ...TEST_INFO, scoringMethod: 'manual' }, answers: [answer({ judgeRationale: null, autoScore: null, manualAvg: 7, finalScore: 7 })] };
+  answersBody = { test: { ...TEST_INFO, scoringMethod: 'manual' }, answers: [answer({ judgeRationale: null, autoScore: null, manualAvg: 70, finalScore: 70 })] };
   renderBlock(true);
   await screen.findByRole('article', { name: 'Claude Opus, répétition 1' });
   expect(screen.queryByRole('button', { name: /Relancer le juge/ })).toBeNull();
@@ -237,8 +240,8 @@ test('Admin : la touche Entrée enregistre la note imposée', async () => {
   renderBlock(true);
   const card = await screen.findByRole('article', { name: 'Claude Opus, répétition 1' });
   await user.click(within(card).getByRole('button', { name: 'Imposer une note' }));
-  await user.type(within(card).getByLabelText('Note imposée (0 à 10)'), '6{Enter}');
-  await waitFor(() => expect(apiFetch).toHaveBeenCalledWith('/api/scoring/results/a1/override', { method: 'PUT', body: { score: 6 } }));
+  await user.type(within(card).getByLabelText('Note imposée (0 à 100)'), '60{Enter}');
+  await waitFor(() => expect(apiFetch).toHaveBeenCalledWith('/api/scoring/results/a1/override', { method: 'PUT', body: { score: 60 } }));
 });
 
 test('Admin : la touche Entrée sur une note invalide n’envoie rien', async () => {
@@ -246,7 +249,7 @@ test('Admin : la touche Entrée sur une note invalide n’envoie rien', async ()
   renderBlock(true);
   const card = await screen.findByRole('article', { name: 'Claude Opus, répétition 1' });
   await user.click(within(card).getByRole('button', { name: 'Imposer une note' }));
-  await user.type(within(card).getByLabelText('Note imposée (0 à 10)'), '12{Enter}');
+  await user.type(within(card).getByLabelText('Note imposée (0 à 100)'), '120{Enter}');
   expect(apiFetch.mock.calls.some(([url]) => String(url).includes('/override'))).toBe(false);
 });
 
@@ -261,13 +264,14 @@ test('relance refusée (test non jugé) : message français dédié', async () =
 });
 
 test('analyse de la note imposée', () => {
-  expect(parseOverride('7,5')).toBe(7.5);
-  expect(parseOverride('10')).toBe(10);
+  expect(parseOverride('75')).toBe(75);
+  expect(parseOverride('100')).toBe(100);
   expect(parseOverride('0')).toBe(0);
-  expect(parseOverride(',5')).toBe(0.5);
-  expect(parseOverride('.5')).toBe(0.5);
+  expect(parseOverride('7,5')).toBeUndefined();
+  expect(parseOverride(',5')).toBeUndefined();
+  expect(parseOverride('.5')).toBeUndefined();
+  expect(parseOverride('101')).toBeUndefined();
   expect(parseOverride('10,5')).toBeUndefined();
-  expect(parseOverride('7,55')).toBeUndefined();
   expect(parseOverride('-1')).toBeUndefined();
   expect(parseOverride('')).toBeUndefined();
 });

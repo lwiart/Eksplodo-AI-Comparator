@@ -282,10 +282,10 @@ test('essai rapide d’un test judge : appel du juge par défaut, coût ai_usage
   const body = await tryTest(t, {
     scoringMethod: 'judge',
     scoringConfig: { criteria: 'Clarté' },
-    userPrompt: 'Explique [[fake:judge={"score": 8, "rationale": "Clair et complet"}]]',
+    userPrompt: 'Explique [[fake:judge={"score": 80, "rationale": "Clair et complet"}]]',
   });
   expect(body.status).toBe('done');
-  expect(body.outcome.score).toMatchObject({ method: 'judge', score: 8, rationale: 'Clair et complet', judgeModelName: 'Juge 0' });
+  expect(body.outcome.score).toMatchObject({ method: 'judge', score: 80, rationale: 'Clair et complet', judgeModelName: 'Juge 0' });
   expect(body.outcome.score.judgeCostUsd).toBeGreaterThan(0);
   const usage = await t.db.select().from(aiUsage);
   expect(usage.map((u) => u.origin).sort()).toEqual(['judge', 'quick_try']);
@@ -319,10 +319,10 @@ test('juge : écriture de ai_usage impossible, note gardée et erreur journalis�
   const body = await tryTest(t, {
     scoringMethod: 'judge',
     scoringConfig: { criteria: 'Clarté' },
-    userPrompt: 'Explique [[fake:judge={"score": 6, "rationale": "Moyen"}]]',
+    userPrompt: 'Explique [[fake:judge={"score": 60, "rationale": "Moyen"}]]',
   });
   expect(body.status).toBe('done');
-  expect(body.outcome.score).toMatchObject({ method: 'judge', score: 6 });
+  expect(body.outcome.score).toMatchObject({ method: 'judge', score: 60 });
   expect((await t.db.select().from(errorEvents)).length).toBeGreaterThanOrEqual(1);
 });
 

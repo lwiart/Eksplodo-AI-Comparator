@@ -57,13 +57,13 @@ function median(xs: number[]): number | null {
 const present = (xs: (number | null)[]): number[] => xs.filter((x): x is number => x !== null);
 
 /**
- * Note logarithmique de 2 à 10 entre `lo` et `hi` : du simple au double pèse autant quelle que soit l'échelle.
- * Valeurs toutes égales (ou un seul modèle) : 10.
+ * Note logarithmique de 20 à 100 entre `lo` et `hi` : du simple au double pèse autant quelle que soit l'échelle.
+ * Valeurs toutes égales (ou un seul modèle) : 100.
  */
 export function logScore(x: number, lo: number, hi: number, higherIsBetter: boolean): number {
-  if (hi <= lo) return 10;
+  if (hi <= lo) return 100;
   const ratio = Math.log(x / lo) / Math.log(hi / lo);
-  return 2 + 8 * (higherIsBetter ? ratio : 1 - ratio);
+  return 20 + 80 * (higherIsBetter ? ratio : 1 - ratio);
 }
 
 /**
@@ -95,7 +95,7 @@ type ModelAcc = {
 /**
  * Agrégats par modèle (ordre de première apparition dans `rows`). Qualité sur les résultats `done` ayant une note finale
  * (note imposée, sinon note de la méthode) ; vitesse et coût sur les résultats `done` ; fiabilité = réussis ÷ (réussis +
- * erreurs + délais dépassés) × 10, les `unsupported` exclus ; notes arrondies au centième.
+ * erreurs + délais dépassés) × 100, les `unsupported` exclus ; notes sur 100 arrondies au centième.
  */
 export function aggregateRun(rows: AggregateInputRow[]): ModelAggregate[] {
   const categories: string[] = [];
@@ -140,7 +140,7 @@ export function aggregateRun(rows: AggregateInputRow[]): ModelAggregate[] {
       quality: qualityOf(acc.scores),
       speed: speed === null ? null : round2(speed),
       cost: cost === null ? null : round2(cost),
-      reliability: finished === 0 ? null : round2((acc.done.length / finished) * 10),
+      reliability: finished === 0 ? null : round2((acc.done.length / finished) * 100),
       raw: {
         medianTtftMs,
         medianTokensPerS: medianTokensPerS === null ? null : round2(medianTokensPerS),

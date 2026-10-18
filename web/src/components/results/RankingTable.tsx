@@ -49,7 +49,7 @@ export function RankingTable({ rows, judgeName, hideCosts = false }: { rows: Ran
                 <td className="px-4 py-3">
                   <span className="flex items-center gap-2.5">
                     <span aria-hidden="true" className="block h-2 w-[90px] overflow-hidden rounded-full bg-white/10">
-                      <span className="block h-full rounded-full bg-gradient-to-r from-orange to-peach transition-[width] duration-500" style={{ width: `${(global ?? 0) * 10}%` }} />
+                      <span className="block h-full rounded-full bg-gradient-to-r from-orange to-peach transition-[width] duration-500" style={{ width: `${Math.min(100, global ?? 0)}%` }} />
                     </span>
                     <b className="font-mono text-xs text-white">{score(global)}</b>
                   </span>

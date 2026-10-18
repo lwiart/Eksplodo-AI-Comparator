@@ -77,7 +77,7 @@ async function setup(opts: { dataDir?: string } = {}) {
   const done = { status: 'done' as const, attempts: 1, finishReason: 'stop', inputTokens: 10, completedAt: new Date('2026-01-15T10:00:00.000Z') };
   await t.db
     .update(results)
-    .set({ ...done, responseText: 'Paris', ttftMs: 100, totalMs: 900, tokensPerS: 50, outputTokens: 20, reasoningTokens: 4, costUsd: 0.002, scoreStatus: 'done', autoScore: 10, judgeRationale: 'Réponse exacte', judgeCostUsd: 0.5 })
+    .set({ ...done, responseText: 'Paris', ttftMs: 100, totalMs: 900, tokensPerS: 50, outputTokens: 20, reasoningTokens: 4, costUsd: 0.002, scoreStatus: 'done', autoScore: 100, judgeRationale: 'Réponse exacte', judgeCostUsd: 0.5 })
     .where(eq(results.id, ids.expA));
   await t.db
     .update(results)
@@ -93,8 +93,8 @@ async function setup(opts: { dataDir?: string } = {}) {
     .where(eq(results.id, ids.manB));
   const rate = (resultId: string, userId: string, score: number) =>
     t.db.insert(manualScores).values({ id: randomUUID(), resultId, userId, score });
-  await rate(ids.manA, adminRow.id, 8);
-  await rate(ids.manB, adminRow.id, 6);
+  await rate(ids.manA, adminRow.id, 80);
+  await rate(ids.manB, adminRow.id, 60);
 
   /** Seconde série sur les mêmes tests et modèles : tous ses résultats restent en attente. */
   const createOtherRun = async () => {
@@ -124,21 +124,21 @@ test('API ranking et answers ; Utilisateur : réponses manuelles masquées tant 
   expect(body.categories).toEqual(['Culture', 'Écriture']);
   expect(body.judge).toEqual({ modelName: 'Juge' });
   expect(body.models).toHaveLength(2);
-  // A : qualité (10 + 8) / 2 = 9 ; premier token 100 ms et débit 50 (médianes) ; coût moyen 0,0015 $ (le juge exclu).
+  // A : qualité (100 + 80) / 2 = 90 ; premier token 100 ms et débit 50 (médianes) ; coût moyen 0,0015 $ (le juge exclu).
   expect(body.models[0]).toEqual({
     modelId: mA.id,
     name: 'Modèle A',
     color: '#aa0001',
     providerName: 'Fournisseur Alpha',
-    quality: 9,
-    speed: 6,
-    cost: 10,
-    reliability: 10,
+    quality: 90,
+    speed: 60,
+    cost: 100,
+    reliability: 100,
     raw: { medianTtftMs: 100, medianTokensPerS: 50, meanCostUsd: 0.0015, done: 2, failed: 0, unsupported: 0, scoredTests: 2 },
-    byCategory: { Culture: 10, Écriture: 8 },
+    byCategory: { Culture: 100, Écriture: 80 },
   });
-  // B : qualité (0 + 6) / 2 = 3 ; coût moyen 0,003 $ (le double de A) → 2.
-  expect(body.models[1]).toMatchObject({ modelId: mB.id, name: 'Modèle B', quality: 3, speed: 6, cost: 2, reliability: 10, byCategory: { Culture: 0, Écriture: 6 } });
+  // B : qualité (0 + 60) / 2 = 30 ; coût moyen 0,003 $ (le double de A) → 20.
+  expect(body.models[1]).toMatchObject({ modelId: mB.id, name: 'Modèle B', quality: 30, speed: 60, cost: 20, reliability: 100, byCategory: { Culture: 0, Écriture: 60 } });
 
   // Réponses côte à côte d'un test à réponse attendue : visibles, avec notes et justification du juge.
   const expected = await get(`/api/runs/${runId}/answers/${rtExpected}`, user);
@@ -153,8 +153,8 @@ test('API ranking et answers ; Utilisateur : réponses manuelles masquées tant 
       status: 'done',
       responseText: 'Paris',
       hiddenUntilScored: false,
-      finalScore: 10,
-      autoScore: 10,
+      finalScore: 100,
+      autoScore: 100,
       manualAvg: null,
       overrideScore: null,
       judgeRationale: 'Réponse exacte',
@@ -195,17 +195,17 @@ test('API ranking et answers ; Utilisateur : réponses manuelles masquées tant 
     hiddenUntilScored: false,
     ttftMs: 100,
     costUsd: 0.001,
-    manualAvg: 8,
-    finalScore: 8,
+    manualAvg: 80,
+    finalScore: 80,
   });
 
   // Une fois la question notée par l'Utilisateur : réponses visibles, moyenne des deux évaluateurs.
-  await rate(ids.manA, userRow.id, 4);
-  await rate(ids.manB, userRow.id, 7);
+  await rate(ids.manA, userRow.id, 40);
+  await rate(ids.manB, userRow.id, 70);
   const visible = await get(`/api/runs/${runId}/answers/${rtManual}`, user);
   expect(visible.json().answers).toEqual([
-    expect.objectContaining({ responseText: 'Haïku de A\nsur deux lignes', hiddenUntilScored: false, manualAvg: 6, finalScore: 6, autoScore: null }),
-    expect.objectContaining({ responseText: 'Haïku de B', hiddenUntilScored: false, manualAvg: 6.5, finalScore: 6.5 }),
+    expect.objectContaining({ responseText: 'Haïku de A\nsur deux lignes', hiddenUntilScored: false, manualAvg: 60, finalScore: 60, autoScore: null }),
+    expect.objectContaining({ responseText: 'Haïku de B', hiddenUntilScored: false, manualAvg: 65, finalScore: 65 }),
   ]);
   // Son classement compte alors la question manuelle, comme celui de l'Admin.
   expect((await get(`/api/runs/${runId}/ranking`, user)).json()).toEqual((await get(`/api/runs/${runId}/ranking`, admin)).json());
@@ -226,23 +226,23 @@ test('API ranking et answers ; Utilisateur : réponses manuelles masquées tant 
 test('classement : notes d’une question manuelle non notée retirées pour l’Utilisateur (moyenne et note imposée), visibles après notation', async () => {
   const { t, admin, user, get, runId, ids, mA, mB, userRow, rate } = await setup();
   // Note imposée sur une réponse manuelle : elle aussi orienterait la notation à l'aveugle.
-  await t.db.update(results).set({ overrideScore: 1 }).where(eq(results.id, ids.manB));
+  await t.db.update(results).set({ overrideScore: 10 }).where(eq(results.id, ids.manB));
   const asAdmin = (await get(`/api/runs/${runId}/ranking`, admin)).json();
-  expect(asAdmin.models.find((m: { modelId: string }) => m.modelId === mB.id)).toMatchObject({ byCategory: { Culture: 0, Écriture: 1 } });
+  expect(asAdmin.models.find((m: { modelId: string }) => m.modelId === mB.id)).toMatchObject({ byCategory: { Culture: 0, Écriture: 10 } });
 
   // Utilisateur qui n'a pas noté la question : test manuel non noté pour lui (qualité sur le seul test à réponse attendue).
   const before = (await get(`/api/runs/${runId}/ranking`, user)).json();
   expect(before.models).toEqual([
-    expect.objectContaining({ modelId: mA.id, quality: 10, byCategory: { Culture: 10, Écriture: null }, raw: expect.objectContaining({ scoredTests: 1 }) }),
+    expect.objectContaining({ modelId: mA.id, quality: 100, byCategory: { Culture: 100, Écriture: null }, raw: expect.objectContaining({ scoredTests: 1 }) }),
     expect.objectContaining({ modelId: mB.id, quality: 0, byCategory: { Culture: 0, Écriture: null }, raw: expect.objectContaining({ scoredTests: 1 }) }),
   ]);
 
-  // Après sa notation : moyenne des deux évaluateurs pour A ((8 + 4) / 2 = 6), note imposée pour B.
-  await rate(ids.manA, userRow.id, 4);
-  await rate(ids.manB, userRow.id, 7);
+  // Après sa notation : moyenne des deux évaluateurs pour A ((80 + 40) / 2 = 60), note imposée pour B.
+  await rate(ids.manA, userRow.id, 40);
+  await rate(ids.manB, userRow.id, 70);
   const after = (await get(`/api/runs/${runId}/ranking`, user)).json();
-  expect(after.models.find((m: { modelId: string }) => m.modelId === mA.id)).toMatchObject({ quality: 8, byCategory: { Culture: 10, Écriture: 6 } });
-  expect(after.models.find((m: { modelId: string }) => m.modelId === mB.id)).toMatchObject({ byCategory: { Culture: 0, Écriture: 1 } });
+  expect(after.models.find((m: { modelId: string }) => m.modelId === mA.id)).toMatchObject({ quality: 80, byCategory: { Culture: 100, Écriture: 60 } });
+  expect(after.models.find((m: { modelId: string }) => m.modelId === mB.id)).toMatchObject({ byCategory: { Culture: 0, Écriture: 10 } });
   expect(after).toEqual((await get(`/api/runs/${runId}/ranking`, admin)).json());
 });
 
@@ -276,15 +276,15 @@ test('série sans résultat terminé : classement sans note, modèles dans l’o
 
 test('note imposée prioritaire, modèle sans test noté classé hors podium', async () => {
   const { t, get, runId, ids, mA, mB } = await setup();
-  // B : plus aucune note (résultats en échec) → qualité nulle ; A : note imposée 2 sur le test à réponse attendue.
+  // B : plus aucune note (résultats en échec) → qualité nulle ; A : note imposée 20 sur le test à réponse attendue.
   await t.db.update(results).set({ status: 'error', scoreStatus: 'pending', autoScore: null, errorMessage: 'Délai' }).where(eq(results.id, ids.expB));
   await t.db.delete(manualScores).where(eq(manualScores.resultId, ids.manB));
   await t.db.update(results).set({ scoreStatus: 'awaiting_manual' }).where(eq(results.id, ids.manB));
-  await t.db.update(results).set({ overrideScore: 2 }).where(eq(results.id, ids.expA));
+  await t.db.update(results).set({ overrideScore: 20 }).where(eq(results.id, ids.expA));
   const body = (await get(`/api/runs/${runId}/ranking`)).json();
   expect(body.models.map((m: { modelId: string }) => m.modelId)).toEqual([mA.id, mB.id]);
-  expect(body.models[0]).toMatchObject({ quality: 5, raw: { scoredTests: 2 } });
-  expect(body.models[1]).toMatchObject({ quality: null, reliability: 5, raw: { done: 1, failed: 1, scoredTests: 0 }, byCategory: { Culture: null, Écriture: null } });
+  expect(body.models[0]).toMatchObject({ quality: 50, raw: { scoredTests: 2 } });
+  expect(body.models[1]).toMatchObject({ quality: null, reliability: 50, raw: { done: 1, failed: 1, scoredTests: 0 }, byCategory: { Culture: null, Écriture: null } });
 });
 
 test('export CSV : en-têtes, une ligne par résultat, réponses masquées pour l’Utilisateur, formules neutralisées', async () => {
@@ -305,7 +305,7 @@ test('export CSV : en-têtes, une ligne par résultat, réponses masquées pour 
   );
   const manual = 'Polyvalence d’octobre;Rédaction;Écriture';
   expect(lines.slice(1)).toEqual([
-    'Polyvalence d’octobre;Capitale;Culture;Modèle A;1;réussi;10;10;;;100;900;50;10;20;4;0,002;0,5;;Paris',
+    'Polyvalence d’octobre;Capitale;Culture;Modèle A;1;réussi;100;100;;;100;900;50;10;20;4;0,002;0,5;;Paris',
     "Polyvalence d’octobre;Capitale;Culture;Modèle B;1;réussi;0;0;;;200;1200;100;10;30;;0,004;;;'=SOMME(A1:A2)",
     // Question manuelle non notée par l'Utilisateur : ni note, ni métrique, ni texte (13 cellules vides, puis la mention).
     `${manual};Modèle A;1;réussi${';'.repeat(14)}(masquée jusqu'à notation)`,
@@ -315,14 +315,14 @@ test('export CSV : en-têtes, une ligne par résultat, réponses masquées pour 
 
   // L'Admin reçoit notes, texte et métriques, retour à la ligne entre guillemets.
   const adminCsv = (await get(`/api/runs/${runId}/export.csv`, admin)).body;
-  expect(adminCsv).toContain(`${manual};Modèle A;1;réussi;8;;8;;100;800;50;10;40;;0,001;;;"Haïku de A\nsur deux lignes"\r\n`);
+  expect(adminCsv).toContain(`${manual};Modèle A;1;réussi;80;;80;;100;800;50;10;40;;0,001;;;"Haïku de A\nsur deux lignes"\r\n`);
 
   // Une fois la question notée par l'Utilisateur : notes (moyenne des deux évaluateurs), métriques et texte.
-  await rate(ids.manA, userRow.id, 4);
-  await rate(ids.manB, userRow.id, 7);
+  await rate(ids.manA, userRow.id, 40);
+  await rate(ids.manB, userRow.id, 70);
   const scored = (await get(`/api/runs/${runId}/export.csv`, user)).body;
-  expect(scored).toContain(`${manual};Modèle A;1;réussi;6;;6;;100;800;50;10;40;;0,001;;;"Haïku de A\nsur deux lignes"\r\n`);
-  expect(scored).toContain(`${manual};Modèle B;1;réussi;6,5;;6,5;;200;1500;100;10;45;;0,002;;;Haïku de B\r\n`);
+  expect(scored).toContain(`${manual};Modèle A;1;réussi;60;;60;;100;800;50;10;40;;0,001;;;"Haïku de A\nsur deux lignes"\r\n`);
+  expect(scored).toContain(`${manual};Modèle B;1;réussi;65;;65;;200;1500;100;10;45;;0,002;;;Haïku de B\r\n`);
 });
 
 const dirs: string[] = [];

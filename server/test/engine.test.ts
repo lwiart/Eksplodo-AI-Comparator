@@ -528,7 +528,7 @@ test('note par réponse attendue restée en attente sur un résultat done : repr
   await t.db.update(results).set({ status: 'done', attempts: 1, responseText: 'Paris', scoreStatus: 'pending' }).where(eq(results.id, stuck!.id));
   await drain(engineDeps({ onResultFinished: createOnResultFinished({ db: t.db }) }));
   const [row] = await t.db.select().from(results).where(eq(results.id, stuck!.id));
-  expect(row).toMatchObject({ scoreStatus: 'done', autoScore: 10, judgeRationale: 'Réponse identique à la réponse attendue.' });
+  expect(row).toMatchObject({ scoreStatus: 'done', autoScore: 100, judgeRationale: 'Réponse identique à la réponse attendue.' });
   expect((await resultRows(runId)).every((r) => r.scoreStatus === 'done')).toBe(true);
 });
 
@@ -620,7 +620,7 @@ test('notation : un résultat done d’un test expected est noté dans la foulé
   const rows = await resultRows(runId);
   expect(rows).toHaveLength(2);
   for (const r of rows) {
-    expect(r).toMatchObject({ status: 'done', scoreStatus: 'done', autoScore: 10, judgeRationale: 'Expression trouvée dans la réponse.' });
+    expect(r).toMatchObject({ status: 'done', scoreStatus: 'done', autoScore: 100, judgeRationale: 'Expression trouvée dans la réponse.' });
   }
 });
 
@@ -634,9 +634,9 @@ test('notation : un test expected sans correspondance reçoit 0 ; une note impos
   const rows = await resultRows(runId);
   expect(rows.every((r) => r.scoreStatus === 'done' && r.autoScore === 0)).toBe(true);
   // Rejeu : la note existe déjà (scoreStatus ≠ pending), rien ne change.
-  await t.db.update(results).set({ autoScore: 7 }).where(eq(results.runId, runId));
+  await t.db.update(results).set({ autoScore: 70 }).where(eq(results.runId, runId));
   await createOnResultFinished({ db: t.db })(rows[0]!.id);
-  expect((await resultRows(runId)).every((r) => r.autoScore === 7)).toBe(true);
+  expect((await resultRows(runId)).every((r) => r.autoScore === 70)).toBe(true);
 });
 
 test('notation : un test manuel n’est pas touché par le crochet', async () => {

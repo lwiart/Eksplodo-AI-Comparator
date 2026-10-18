@@ -3,8 +3,8 @@ import type { RankingModel } from '../../api/results';
 import { AXIS_TICK, GRID_STROKE, TOOLTIP_STYLE } from './chart-theme';
 import { score } from './format';
 
-/** Seuil, sur 10, à partir duquel une note qualité ou vitesse entre dans la zone idéale. */
-const IDEAL_FROM = 7.5;
+/** Seuil, sur 100, à partir duquel une note qualité ou vitesse entre dans la zone idéale. */
+const IDEAL_FROM = 75;
 
 export type ScatterPoint = { modelId: string; name: string; color: string; speed: number; quality: number };
 
@@ -29,7 +29,7 @@ function PointTooltip({ active, payload }: { active?: boolean; payload?: { paylo
   );
 }
 
-/** Nuage qualité × vitesse (notes sur 10) ; en haut à droite, la zone idéale. */
+/** Nuage qualité × vitesse (notes sur 100) ; en haut à droite, la zone idéale. */
 export function QualitySpeedChart({ models }: { models: RankingModel[] }) {
   const points = scatterPoints(models);
   if (points.length === 0) return <p className="m-0 py-10 text-center text-sm text-mute">Pas encore de modèle avec une qualité et une vitesse.</p>;
@@ -40,9 +40,9 @@ export function QualitySpeedChart({ models }: { models: RankingModel[] }) {
           <CartesianGrid stroke={GRID_STROKE} />
           <ReferenceArea
             x1={IDEAL_FROM}
-            x2={10}
+            x2={100}
             y1={IDEAL_FROM}
-            y2={10}
+            y2={100}
             fill="#F0631F"
             fillOpacity={0.08}
             stroke="#F0631F"
@@ -53,13 +53,13 @@ export function QualitySpeedChart({ models }: { models: RankingModel[] }) {
             type="number"
             dataKey="speed"
             name="Vitesse"
-            domain={[0, 10]}
-            ticks={[0, 2, 4, 6, 8, 10]}
+            domain={[0, 100]}
+            ticks={[0, 20, 40, 60, 80, 100]}
             tick={AXIS_TICK}
             stroke={GRID_STROKE}
-            label={{ value: 'Vitesse (note sur 10)', position: 'insideBottom', offset: -12, fill: '#7FA3B5', fontSize: 11 }}
+            label={{ value: 'Vitesse (note sur 100)', position: 'insideBottom', offset: -12, fill: '#7FA3B5', fontSize: 11 }}
           />
-          <YAxis type="number" dataKey="quality" name="Qualité" domain={[0, 10]} ticks={[0, 2, 4, 6, 8, 10]} tick={AXIS_TICK} stroke={GRID_STROKE} width={36} />
+          <YAxis type="number" dataKey="quality" name="Qualité" domain={[0, 100]} ticks={[0, 20, 40, 60, 80, 100]} tick={AXIS_TICK} stroke={GRID_STROKE} width={36} />
           <ZAxis range={[110, 110]} />
           <Tooltip cursor={{ stroke: GRID_STROKE }} content={<PointTooltip />} />
           {/* Légende en haut : en bas, elle chevauchait le titre de l'axe des vitesses. */}

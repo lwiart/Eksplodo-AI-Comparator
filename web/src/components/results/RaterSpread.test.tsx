@@ -13,11 +13,11 @@ const item = (over: Record<string, unknown>) => ({
   testName: 'Résumer',
   modelName: 'Claude Opus',
   raters: 2,
-  mean: 7.5,
-  stdDev: 2.5,
+  mean: 75,
+  stdDev: 25,
   scores: [
-    { userName: 'Laurent', score: 5, comment: 'Trop long' },
-    { userName: 'Camille', score: 10, comment: null },
+    { userName: 'Laurent', score: 50, comment: 'Trop long' },
+    { userName: 'Camille', score: 100, comment: null },
   ],
   ...over,
 });
@@ -40,11 +40,11 @@ test('écarts entre évaluateurs : moyenne, écart-type et détail des notes, du
     item({
       resultId: 'b1',
       modelName: 'GPT Test',
-      mean: 6.5,
-      stdDev: 0.5,
+      mean: 65,
+      stdDev: 5,
       scores: [
-        { userName: 'Laurent', score: 6, comment: null },
-        { userName: 'Camille', score: 7, comment: null },
+        { userName: 'Laurent', score: 60, comment: null },
+        { userName: 'Camille', score: 70, comment: null },
       ],
     }),
     item({}),
@@ -54,9 +54,9 @@ test('écarts entre évaluateurs : moyenne, écart-type et détail des notes, du
   expect(table.getAllByRole('rowheader').map((h) => h.textContent)).toEqual(['Claude Opus', 'GPT Test']);
   const opus = table.getByRole('rowheader', { name: 'Claude Opus' }).closest('tr')!;
   const cells = [...opus.querySelectorAll('td')].map((c) => c.textContent ?? '');
-  expect(cells.slice(0, 3)).toEqual(['2', '7,5', '2,5']);
-  expect(cells[3]).toContain('Laurent 5 : Trop long');
-  expect(cells[3]).toContain('Camille 10');
+  expect(cells.slice(0, 3)).toEqual(['2', '75', '25']);
+  expect(cells[3]).toContain('Laurent 50 : Trop long');
+  expect(cells[3]).toContain('Camille 100');
   expect(apiFetch).toHaveBeenCalledWith('/api/scoring/runs/r1/spread');
 });
 

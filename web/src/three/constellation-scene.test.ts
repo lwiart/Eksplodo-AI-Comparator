@@ -24,12 +24,12 @@ import { constellationScene } from './constellation-scene';
 
 test('tailles proportionnelles à la qualité, astre gris pour un modèle non noté', () => {
   expect(astreRadius(0)).toBeCloseTo(MIN_RADIUS);
-  expect(astreRadius(10)).toBeCloseTo(MAX_RADIUS);
-  expect(astreRadius(5)).toBeCloseTo((MIN_RADIUS + MAX_RADIUS) / 2);
-  expect(astreRadius(8)).toBeGreaterThan(astreRadius(6));
+  expect(astreRadius(100)).toBeCloseTo(MAX_RADIUS);
+  expect(astreRadius(50)).toBeCloseTo((MIN_RADIUS + MAX_RADIUS) / 2);
+  expect(astreRadius(80)).toBeGreaterThan(astreRadius(60));
   // Bornée : une note hors échelle ne dépasse pas.
-  expect(astreRadius(42)).toBeCloseTo(MAX_RADIUS);
-  expect(astreRadius(-3)).toBeCloseTo(MIN_RADIUS);
+  expect(astreRadius(420)).toBeCloseTo(MAX_RADIUS);
+  expect(astreRadius(-30)).toBeCloseTo(MIN_RADIUS);
   // Non noté : le plus petit de tous, gris.
   expect(astreRadius(null)).toBe(UNRATED_RADIUS);
   expect(UNRATED_RADIUS).toBeLessThan(astreRadius(0));
@@ -61,7 +61,7 @@ test('orbites : régulières, plafonnées, positions sur le cercle ; particules 
 test('sans WebGL : repli SVG avec un astre par modèle', async () => {
   const data = {
     models: [
-      { id: 'a', color: '#F0631F', quality: 9, tokensPerS: 60 },
+      { id: 'a', color: '#F0631F', quality: 90, tokensPerS: 60 },
       { id: 'b', color: '#3FA2E0', quality: null, tokensPerS: null },
     ],
   };

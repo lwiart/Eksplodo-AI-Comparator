@@ -41,7 +41,7 @@ export function PublicResponses({ responses, models }: { responses: PublicRespon
                   <span aria-hidden="true" className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: m?.color ?? '#7FA3B5' }} />
                   {m?.name ?? a.modelKey}
                 </h3>
-                <span className="font-mono text-xs text-peach">{a.finalScore === null ? DASH : `${score(a.finalScore)} / 10`}</span>
+                <span className="font-mono text-xs text-peach">{a.finalScore === null ? DASH : `${score(a.finalScore)} / 100`}</span>
               </header>
               <div className="mt-2 text-sm break-words">{a.text ? <Markdown text={a.text} relativeLinksAsText /> : <p className="m-0 text-mute">Pas de texte.</p>}</div>
               {a.judgeRationale ? <p className="mt-3 mb-0 border-t border-line pt-2 text-xs text-mute">{a.judgeRationale}</p> : null}

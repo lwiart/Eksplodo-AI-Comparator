@@ -145,7 +145,7 @@ function ShareContent({ share }: { share: PublicShare }) {
           </Card>
           <Card className="min-w-0">
             <h2 className="m-0 mb-2 font-display text-sm font-bold text-white">
-              Par catégorie <span className="ml-1 font-mono text-[11px] font-medium text-mute">qualité moyenne sur 10</span>
+              Par catégorie <span className="ml-1 font-mono text-[11px] font-medium text-mute">qualité moyenne sur 100</span>
             </h2>
             <CategoryChart models={chartModels} categories={share.categories} />
           </Card>

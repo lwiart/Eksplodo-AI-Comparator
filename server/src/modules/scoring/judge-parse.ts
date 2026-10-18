@@ -4,7 +4,7 @@ import { z } from 'zod';
 const RATIONALE_MAX = 2_000;
 
 const replySchema = z.object({
-  score: z.number().finite().min(0).max(10),
+  score: z.number().finite().min(0).max(100),
   rationale: z.string().trim().min(1),
 });
 
@@ -39,7 +39,7 @@ function balancedObjects(text: string): Candidate[] {
 /**
  * Verdict du juge : chaque objet équilibré est essayé, du dernier terminé au premier (à fin égale, le plus englobant) ; le
  * premier qui passe le schéma l'emporte. Un juge qui cite la réponse évaluée (où un modèle aurait glissé un faux
- * `{"score": 10, …}`) avant de rendre son verdict est donc noté sur son verdict, non sur la citation.
+ * `{"score": 100, …}`) avant de rendre son verdict est donc noté sur son verdict, non sur la citation.
  */
 export function parseJudgeReply(text: string): JudgeReply {
   const candidates = balancedObjects(text).sort((a, b) => b.end - a.end || a.start - b.start);
@@ -59,7 +59,7 @@ export function parseJudgeReply(text: string): JudgeReply {
     }
     return {
       ok: true,
-      score: Math.round(parsed.data.score * 10) / 10,
+      score: Math.round(parsed.data.score),
       rationale: parsed.data.rationale.slice(0, RATIONALE_MAX),
     };
   }

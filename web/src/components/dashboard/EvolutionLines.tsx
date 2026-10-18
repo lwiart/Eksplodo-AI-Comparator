@@ -29,7 +29,7 @@ export default function EvolutionLines({ evolution }: { evolution: Evolution }) 
         <LineChart data={rows} margin={{ top: 8, right: 12, bottom: 0, left: -12 }}>
           <CartesianGrid stroke={GRID_STROKE} vertical={false} />
           <XAxis dataKey="name" tick={AXIS_TICK} tickLine={false} axisLine={{ stroke: GRID_STROKE }} interval={0} tickFormatter={(_, i) => `#${i + 1}`} />
-          <YAxis domain={[0, 10]} tickCount={6} tick={AXIS_TICK} tickLine={false} axisLine={false} />
+          <YAxis domain={[0, 100]} tickCount={6} tick={AXIS_TICK} tickLine={false} axisLine={false} />
           <Tooltip
             {...TOOLTIP_STYLE}
             labelFormatter={(_, payload) => {

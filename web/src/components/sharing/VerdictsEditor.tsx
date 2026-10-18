@@ -19,7 +19,7 @@ export const newKey = (): string => `v${++counter}`;
 export const toDraft = (v: ShareVerdict): DraftVerdict => ({ ...v, key: newKey() });
 export const fromDraft = ({ label, modelId, text }: DraftVerdict): ShareVerdict => ({ label: label.trim(), modelId, text });
 
-const score = (x: number) => x.toFixed(1).replace('.', ',');
+const score = (x: number) => String(Math.round(x));
 
 /**
  * Trois propositions calculées sur le classement à la pondération de la série : meilleur score global, meilleure qualité
@@ -33,7 +33,7 @@ export function proposeVerdicts(ranking: Ranking, withCost: boolean): ShareVerdi
     out.push({
       label: 'Meilleur compromis',
       modelId: top.model.modelId,
-      text: `${top.model.name} a le meilleur score global (${score(top.global!)} sur 10).`,
+      text: `${top.model.name} a le meilleur score global (${score(top.global!)} sur 100).`,
     });
   }
   const best = (pick: (m: RankingModel) => number | null, better: (a: number, b: number) => boolean) => {
@@ -54,7 +54,7 @@ export function proposeVerdicts(ranking: Ranking, withCost: boolean): ShareVerdi
     out.push({
       label: 'Meilleure qualité',
       modelId: quality.model.modelId,
-      text: `${quality.model.name} obtient la meilleure qualité (${score(quality.value)} sur 10).`,
+      text: `${quality.model.name} obtient la meilleure qualité (${score(quality.value)} sur 100).`,
     });
   }
   const cheap = best((m) => m.raw.meanCostUsd, (a, b) => a < b);

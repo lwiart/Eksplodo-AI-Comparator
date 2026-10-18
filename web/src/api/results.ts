@@ -4,7 +4,7 @@ import type { ResultStatus, Weights } from './runs';
 // Types miroirs de server/src/modules/scoring/results.service.ts et aggregate.ts.
 export type ModelAggregate = {
   modelId: string;
-  /** Notes de critère sur 10, nulles quand elles ne sont pas calculables (ou masquées pour un Utilisateur). */
+  /** Notes de critère sur 100, nulles quand elles ne sont pas calculables (ou masquées pour un Utilisateur). */
   quality: number | null;
   speed: number | null;
   cost: number | null;

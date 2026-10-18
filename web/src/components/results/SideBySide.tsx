@@ -29,12 +29,12 @@ type Tab = 'side' | 'blind' | 'spread';
 
 export type SideBySideTest = { runTestId: string; testName: string };
 
-/** Note imposée saisie (virgule ou point) : `undefined` quand elle n'est pas comprise entre 0 et 10 avec une décimale au plus. */
+/** Note imposée saisie : `undefined` quand ce n'est pas un nombre entier compris entre 0 et 100. */
 export function parseOverride(raw: string): number | undefined {
-  const text = raw.trim().replace(',', '.');
-  if (!/^(\d{1,2}(\.\d?)?|\.\d)$/.test(text)) return undefined;
+  const text = raw.trim();
+  if (!/^\d{1,3}$/.test(text)) return undefined;
   const n = Number(text);
-  return n >= 0 && n <= 10 ? n : undefined;
+  return n <= 100 ? n : undefined;
 }
 
 function Metric({ label, value }: { label: string; value: string }) {
@@ -79,12 +79,12 @@ function OverrideEditor({ answer, onSaved }: { answer: Answer; onSaved: () => Pr
           }}
         >
           <Field
-            label="Note imposée (0 à 10)"
-            inputMode="decimal"
+            label="Note imposée (0 à 100)"
+            inputMode="numeric"
             value={raw}
-            maxLength={4}
+            maxLength={3}
             className="w-28"
-            error={raw !== '' && value === undefined ? 'Entre 0 et 10, une décimale au plus (ex. 7,5).' : null}
+            error={raw !== '' && value === undefined ? 'Nombre entier entre 0 et 100 (ex. 75).' : null}
             onChange={(e) => setRaw(e.target.value)}
           />
           <Button type="submit" variant="primary" disabled={value === undefined || save.isPending}>
