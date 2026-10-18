@@ -130,11 +130,20 @@ test('évolution : une courbe par modèle, juge de chaque série dans l’infobu
   await waitFor(() => expect(chart.querySelectorAll('.recharts-line')).toHaveLength(2));
   expect(chart.textContent).not.toContain('Fantôme');
 
-  // L'infobulle porte la date et le juge de la série survolée.
-  const dots = chart.querySelectorAll('.recharts-line-dot');
-  fireEvent.mouseOver(dots[1]!);
+  // Sans point survolé, aucune infobulle ; sur un point, seulement ce modèle, avec la date et le juge de la série.
   fireEvent.mouseMove(chart.querySelector('.recharts-wrapper')!, { clientX: 400, clientY: 100 });
-  await waitFor(() => expect(document.body.textContent).toMatch(/Série B · 15\/10\/2026 · juge : GPT Juge/));
+  expect(screen.queryByTestId('evolution-tooltip')).toBeNull();
+  const bravo = chart.querySelectorAll('[data-evolution-dot="Bravo"]');
+  expect(bravo).toHaveLength(1);
+  fireEvent.mouseEnter(bravo[0]!);
+  fireEvent.mouseMove(chart.querySelector('.recharts-wrapper')!, { clientX: 400, clientY: 100 });
+  const tooltip = await screen.findByTestId('evolution-tooltip');
+  expect(tooltip).toHaveTextContent('Série B · 15/10/2026 · juge : GPT Juge');
+  expect(tooltip).toHaveTextContent('Bravo');
+  expect(tooltip).not.toHaveTextContent('Alpha');
+  // Au survol, recharts redessine le point (point actif) : on quitte les points présents à cet instant.
+  for (const dot of chart.querySelectorAll('[data-evolution-dot="Bravo"]')) fireEvent.mouseLeave(dot);
+  await waitFor(() => expect(screen.queryByTestId('evolution-tooltip')).toBeNull());
 
   fireEvent.change(screen.getByLabelText('Suite affichée'), { target: { value: 's2' } });
   await waitFor(() => expect(apiFetch).toHaveBeenCalledWith('/api/dashboard/evolution?suiteId=s2'));

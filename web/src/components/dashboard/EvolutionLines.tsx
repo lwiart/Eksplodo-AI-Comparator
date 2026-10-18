@@ -1,4 +1,6 @@
-import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { useState } from 'react';
+import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis, type TooltipContentProps } from 'recharts';
+import type { NameType, ValueType } from 'recharts/types/component/DefaultTooltipContent';
 import type { Evolution } from '../../api/dashboard';
 import { formatDate } from '../catalog/format';
 import { AXIS_TICK, GRID_STROKE, TOOLTIP_STYLE } from '../results/chart-theme';
@@ -18,10 +20,24 @@ export function evolutionRows(evolution: Evolution): Row[] {
   }));
 }
 
+/** Point d'une courbe, avec une zone de survol plus large que le point visible : elle désigne le modèle survolé. */
+function HoverDot({ cx, cy, color, name, onEnter, onLeave }: { cx?: number | null; cy?: number | null; color: string; name: string; onEnter(): void; onLeave(): void }) {
+  if (cx == null || cy == null || Number.isNaN(cx) || Number.isNaN(cy)) return null;
+  return (
+    <g data-evolution-dot={name} onMouseEnter={onEnter} onMouseLeave={onLeave} style={{ cursor: 'pointer' }}>
+      <circle cx={cx} cy={cy} r={10} fill="transparent" />
+      <circle cx={cx} cy={cy} r={3} fill={color} />
+    </g>
+  );
+}
+
 /** Courbes « Nuit » de la qualité par modèle ; chargé à la demande (Recharts). */
 export default function EvolutionLines({ evolution }: { evolution: Evolution }) {
   const series = plottedSeries(evolution.series);
   const rows = evolutionRows(evolution);
+  // Courbe dont un point est survolé : l'infobulle ne détaille que ce modèle (une infobulle de tous les modèles masquait le graphe).
+  const [hovered, setHovered] = useState<string | null>(null);
+  const hoveredSeries = series.find((_, k) => `m${k}` === hovered);
   return (
     <div>
       <div role="img" aria-label={`Évolution de la qualité sur la suite ${evolution.suite.name}`} data-testid="evolution-chart" className="h-[260px] w-full">
@@ -31,16 +47,40 @@ export default function EvolutionLines({ evolution }: { evolution: Evolution }) 
           <XAxis dataKey="name" tick={AXIS_TICK} tickLine={false} axisLine={{ stroke: GRID_STROKE }} interval={0} tickFormatter={(_, i) => `#${i + 1}`} />
           <YAxis domain={[0, 100]} tickCount={6} tick={AXIS_TICK} tickLine={false} axisLine={false} />
           <Tooltip
-            {...TOOLTIP_STYLE}
-            labelFormatter={(_, payload) => {
-              const row = payload?.[0]?.payload as Row | undefined;
-              return row ? `${row.name} · ${row.date} · juge : ${row.judge}` : '';
+            isAnimationActive={false}
+            cursor={false}
+            content={(props: TooltipContentProps<ValueType, NameType>) => {
+              const row = props.payload?.[0]?.payload as Row | undefined;
+              if (!props.active || !row || !hovered || !hoveredSeries) return null;
+              const value = row[hovered];
+              return (
+                <div data-testid="evolution-tooltip" style={TOOLTIP_STYLE.contentStyle} className="max-w-[280px] px-3 py-2 text-xs">
+                  <div className="mb-1 font-semibold text-white">{`${row.name} · ${row.date} · juge : ${row.judge}`}</div>
+                  <div className="flex items-center gap-1.5 text-ink">
+                    <span aria-hidden="true" className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: hoveredSeries.color }} />
+                    {`${hoveredSeries.name} : ${typeof value === 'number' ? score(value) : DASH}`}
+                  </div>
+                </div>
+              );
             }}
-            formatter={(v) => (typeof v === 'number' ? score(v) : DASH)}
           />
-          {series.map((s, k) => (
-            <Line key={s.modelId} type="monotone" dataKey={`m${k}`} name={s.name} stroke={s.color} strokeWidth={2} dot={{ r: 3, fill: s.color }} connectNulls isAnimationActive={false} />
-          ))}
+          {series.map((s, k) => {
+            const key = `m${k}`;
+            const dot = (props: { cx?: number | null; cy?: number | null; index?: number }) => (
+              <HoverDot
+                key={`${key}-${props.index}`}
+                cx={props.cx}
+                cy={props.cy}
+                color={s.color}
+                name={s.name}
+                onEnter={() => setHovered(key)}
+                onLeave={() => setHovered((h) => (h === key ? null : h))}
+              />
+            );
+            return (
+              <Line key={s.modelId} type="monotone" dataKey={key} name={s.name} stroke={s.color} strokeWidth={2} dot={dot} activeDot={dot} connectNulls isAnimationActive={false} />
+            );
+          })}
         </LineChart>
         </ResponsiveContainer>
       </div>
