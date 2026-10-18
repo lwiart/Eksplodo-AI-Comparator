@@ -5,6 +5,7 @@ import { messageForError } from '../../api/messages';
 import {
   SHARE_LINKS_KEY,
   deleteShareLink,
+  getShareLinkToken,
   listShareLinks,
   regenerateShareLink,
   shareUrl,
@@ -23,7 +24,8 @@ const dateFormat = new Intl.DateTimeFormat('fr-FR', { dateStyle: 'short', timeSt
 const ROW_BUTTON = 'px-3 py-1 text-xs';
 
 type Confirm = { kind: 'regenerate' | 'delete'; link: ShareLink };
-type Shown = { link: ShareLink; token: string };
+/** Lien affiché : `fresh` après une régénération (l'ancien ne marche plus), sinon simple recopie. */
+type Shown = { link: ShareLink; token: string; fresh: boolean };
 
 /** Gestion des liens de partage (Admin) : état, vues, désactivation, nouveau jeton, suppression et URL « Audit gratuit ». */
 export function ShareLinksPage() {
@@ -54,9 +56,17 @@ export function ShareLinksPage() {
     gcTime: 0,
     mutationFn: (l: ShareLink) => regenerateShareLink(l.id),
     onMutate: () => setActionError(null),
-    onSuccess: (issued) => setShown(issued),
+    onSuccess: (issued) => setShown({ ...issued, fresh: true }),
     onError: (err) => setActionError(messageForError(err)),
     onSettled: refresh,
+  });
+  // Recopie d'un lien existant : jeton déchiffré à la demande, jamais gardé en cache.
+  const reveal = useMutation({
+    gcTime: 0,
+    mutationFn: async (l: ShareLink) => ({ link: l, token: await getShareLinkToken(l.id), fresh: false }),
+    onMutate: () => setActionError(null),
+    onSuccess: (got) => setShown(got),
+    onError: (err) => setActionError(messageForError(err)),
   });
   const remove = useMutation({
     mutationFn: (l: ShareLink) => deleteShareLink(l.id),
@@ -64,12 +74,14 @@ export function ShareLinksPage() {
     onError: (err) => setActionError(messageForError(err)),
     onSettled: refresh,
   });
-  const busy = toggle.isPending || regenerate.isPending || remove.isPending;
+  const busy = toggle.isPending || regenerate.isPending || remove.isPending || reveal.isPending;
   const { reset: resetRegenerate } = regenerate;
+  const { reset: resetReveal } = reveal;
 
   const closeShown = () => {
     setShown(null);
     resetRegenerate();
+    resetReveal();
   };
   const confirmed = () => {
     if (!confirm) return;
@@ -134,6 +146,15 @@ export function ShareLinksPage() {
                   <td className="px-4 py-3 font-mono text-xs text-mute">{dateFormat.format(new Date(l.createdAt))}</td>
                   <td className="px-4 py-3">
                     <div className="flex flex-wrap gap-1.5">
+                      <Button
+                        variant="primary"
+                        className={ROW_BUTTON}
+                        disabled={busy || !l.tokenAvailable}
+                        title={l.tokenAvailable ? undefined : 'Lien créé avant que les liens puissent être recopiés : régénérez-le une fois.'}
+                        onClick={() => reveal.mutate(l)}
+                      >
+                        Copier le lien<span className="sr-only"> : {l.title}</span>
+                      </Button>
                       <Button className={ROW_BUTTON} disabled={busy} onClick={() => setEditing(l)}>
                         Modifier<span className="sr-only"> : {l.title}</span>
                       </Button>
@@ -169,7 +190,7 @@ export function ShareLinksPage() {
             <p className="m-0 text-sm text-ink">
               {confirm.kind === 'delete'
                 ? 'La page publique cessera de répondre et le lien ne pourra pas être rétabli.'
-                : 'L’ancien lien cessera aussitôt de fonctionner. Le nouveau ne sera affiché qu’une fois.'}
+                : 'L’ancien lien cessera aussitôt de fonctionner. Le nouveau pourra être recopié ensuite à tout moment.'}
             </p>
             <div className="flex justify-end gap-2">
               <Button variant="ghost" onClick={() => setConfirm(null)}>
@@ -185,15 +206,13 @@ export function ShareLinksPage() {
 
       <Dialog
         open={shown !== null}
-        // Le lien n'est affiché qu'une fois : Échap ou un clic à l'extérieur ne le ferment pas, seul « Fermer » le fait.
-        onOpenChange={() => {}}
-        title="Nouveau lien de partage"
-        description={shown ? `« ${shown.link.title} » : l’ancien lien ne fonctionne plus.` : undefined}
+        onOpenChange={(open) => !open && closeShown()}
+        title={shown?.fresh ? 'Nouveau lien de partage' : 'Lien de partage'}
+        description={shown ? (shown.fresh ? `« ${shown.link.title} » : l’ancien lien ne fonctionne plus.` : `« ${shown.link.title} », série ${shown.link.runName}.`) : undefined}
       >
         {shown ? (
           <div className="flex flex-col gap-3">
             <CopyLink url={shareUrl(shown.token)} label="Lien de la page publique" />
-            <p className="m-0 text-sm font-semibold text-peach">Ce lien ne sera plus affiché : copiez-le maintenant.</p>
             <div className="flex justify-end">
               <Button variant="primary" onClick={closeShown}>
                 Fermer

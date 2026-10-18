@@ -198,12 +198,14 @@ export const constellationScene: SceneFactory = ({ THREE, canvas, width, height,
     });
   };
 
-  // ---------- interaction : survol d'un astre (grand écran seulement), signalé à React par un événement ----------
+  // ---------- interaction : survol d'un astre (grand écran) ou appui (tous écrans), signalé à React par un événement ----------
   const ray = new THREE.Raycaster();
   const ndc = new THREE.Vector2();
   const projected = new THREE.Vector3();
   let pointer: { x: number; y: number } | null = null; // pointeur en coordonnées normalisées, nul hors du canevas
   let hovered: Astre | null = null;
+  /** Astre épinglé par un appui (ou un clic) : son étiquette reste affichée et le suit jusqu'au prochain appui. */
+  let pinned: Astre | null = null;
   let lastHover: ConstellationHover | null = null;
   let listeners: Array<() => void> = [];
   const on = <E extends keyof HTMLElementEventMap>(type: E, fn: (e: HTMLElementEventMap[E]) => void) => {
@@ -237,38 +239,63 @@ export const constellationScene: SceneFactory = ({ THREE, canvas, width, height,
     emitHover();
   }
 
-  /** Astre sous le pointeur ; les astres tournent, d'où un nouvel essai à chaque image tant que le pointeur reste sur le canevas. */
-  function pick() {
-    if (!pointer) return setHovered(null);
-    ndc.set(pointer.x, pointer.y);
+  /** Astre sous un point du canevas (coordonnées normalisées), ou aucun. */
+  function astreAt(x: number, y: number): Astre | null {
+    ndc.set(x, y);
     ray.setFromCamera(ndc, camera);
     const hit = ray.intersectObjects(
       astres.map((a) => a.halo),
       false,
     )[0];
-    setHovered(hit ? (astres.find((a) => a.halo === hit.object) ?? null) : null);
+    return hit ? (astres.find((a) => a.halo === hit.object) ?? null) : null;
   }
+
+  /** Astre sous le pointeur, sinon l'astre épinglé ; les astres tournent, d'où un nouvel essai à chaque image. */
+  function pick() {
+    if (!pointer) return setHovered(pinned);
+    setHovered(astreAt(pointer.x, pointer.y) ?? pinned);
+  }
+
+  /** Coordonnées normalisées d'un événement sur le canevas, ou `null` si le canevas n'a pas de taille. */
+  function normalized(e: MouseEvent): { x: number; y: number } | null {
+    const r = canvas.getBoundingClientRect();
+    if (r.width === 0 || r.height === 0) return null;
+    return { x: ((e.clientX - r.left) / r.width) * 2 - 1, y: -((e.clientY - r.top) / r.height) * 2 + 1 };
+  }
+
+  // Appui ou clic, sur tous les écrans (mobile compris) : épingle l'astre touché ; un nouvel appui sur lui ou à côté le libère.
+  const onTap = (e: MouseEvent) => {
+    const at = normalized(e);
+    if (!at) return;
+    const a = astreAt(at.x, at.y);
+    pinned = a && a !== pinned ? a : null;
+    pick();
+  };
+  canvas.addEventListener('click', onTap);
 
   function detachInteraction() {
     listeners.forEach((off) => off());
     listeners = [];
     pointer = null;
-    setHovered(null);
+    setHovered(pinned);
   }
   function attachInteraction() {
     on('pointermove', (e) => {
-      const r = canvas.getBoundingClientRect();
-      if (r.width === 0 || r.height === 0) return;
-      pointer = { x: ((e.clientX - r.left) / r.width) * 2 - 1, y: -((e.clientY - r.top) / r.height) * 2 + 1 };
+      // Le doigt ne « survole » pas : sur écran tactile, seul l'appui compte (voir onTap).
+      if (e.pointerType === 'touch') return;
+      const at = normalized(e);
+      if (!at) return;
+      pointer = at;
       pick();
     });
     on('pointerleave', () => {
       pointer = null;
-      setHovered(null);
+      setHovered(pinned);
     });
   }
 
   function build(models: ConstellationData['models']) {
+    pinned = null;
     setHovered(null);
     astres.forEach((a) => {
       for (const o of [a.mesh, a.halo, a.ring]) {
@@ -349,8 +376,9 @@ export const constellationScene: SceneFactory = ({ THREE, canvas, width, height,
     camera.position.set(Math.sin(time * 0.08) * 1.2 * fitScale, CAM.y * fitScale, CAM.z * fitScale);
     camera.lookAt(0, 0, 0);
     camera.updateMatrixWorld();
-    // Survol rejoué à chaque image : l'astre peut quitter le pointeur, l'étiquette suit sa position.
+    // Survol rejoué à chaque image : l'astre peut quitter le pointeur, l'étiquette suit sa position (astre épinglé compris).
     if (pointer) pick();
+    else if (hovered) emitHover();
   }
 
   return {
@@ -366,6 +394,7 @@ export const constellationScene: SceneFactory = ({ THREE, canvas, width, height,
     setData,
     dispose() {
       gate?.dispose();
+      canvas.removeEventListener('click', onTap);
       detachInteraction();
       disposeObject(scene);
       renderer.dispose();

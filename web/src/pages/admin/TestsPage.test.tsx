@@ -112,3 +112,18 @@ test('archivés : bouton « Restaurer »', async () => {
   await user.click(await screen.findByRole('button', { name: 'Restaurer Extraire les dates' }));
   await waitFor(() => expect(apiFetch).toHaveBeenCalledWith('/api/tests/t2/restore', { method: 'POST' }));
 });
+
+test('nombre de tests : « 2 tests » sans filtre, « N tests sur 2 » avec un filtre', async () => {
+  const user = userEvent.setup();
+  apiFetch.mockImplementation((path: string) => {
+    if (path === '/api/tests/meta') return Promise.resolve({ categories: ['Extraction', 'Rédaction'], tags: ['dates', 'marchés', 'pdf'] });
+    if (path.includes('category=')) return Promise.resolve({ tests: [TESTS[0]] });
+    if (path.startsWith('/api/tests')) return Promise.resolve({ tests: TESTS });
+    return Promise.reject(new Error(`appel inattendu ${path}`));
+  });
+  renderPage();
+  await screen.findByText('Résumer un CCTP');
+  expect(screen.getByRole('status')).toHaveTextContent('2 tests');
+  await user.selectOptions(await screen.findByRole('combobox', { name: 'Catégorie' }), 'Rédaction');
+  await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('1 test sur 2'));
+});

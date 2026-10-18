@@ -1,0 +1,1 @@
+ALTER TABLE `share_links` ADD `token_encrypted` text;

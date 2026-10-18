@@ -12,6 +12,7 @@ vi.mock('../../api/client', async (importOriginal) => ({
 }));
 
 const NEW_TOKEN = 'b'.repeat(32);
+const CURRENT_TOKEN = 'c'.repeat(32);
 const make = (over: Record<string, unknown>) => ({
   id: 'l1',
   runId: 'r1',
@@ -23,6 +24,7 @@ const make = (over: Record<string, unknown>) => ({
   showResponses: false,
   active: true,
   viewCount: 42,
+  tokenAvailable: true,
   createdAt: '2026-10-17T12:00:00.000Z',
   updatedAt: '2026-10-17T12:00:00.000Z',
   ...over,
@@ -30,7 +32,7 @@ const make = (over: Record<string, unknown>) => ({
 
 let links: ReturnType<typeof make>[];
 beforeEach(() => {
-  links = [make({}), make({ id: 'l2', title: 'Ancien lien', active: false, viewCount: 3 })];
+  links = [make({}), make({ id: 'l2', title: 'Ancien lien', active: false, viewCount: 3, tokenAvailable: false })];
   apiFetch.mockReset();
   apiFetch.mockImplementation((path: string, init?: { method?: string; body?: Record<string, unknown> }) => {
     if (path === '/api/settings/sharing') return Promise.resolve({ auditUrl: 'https://eksplodo.fr' });
@@ -40,6 +42,7 @@ beforeEach(() => {
       return Promise.resolve({ link: links[0] });
     }
     if (path === '/api/share-links/l1/regenerate') return Promise.resolve({ link: links[0], token: NEW_TOKEN });
+    if (path === '/api/share-links/l1/token') return Promise.resolve({ token: CURRENT_TOKEN });
     if (path === '/api/share-links/l2' && init?.method === 'DELETE') {
       links = links.filter((l) => l.id !== 'l2');
       return Promise.resolve(undefined);
@@ -88,9 +91,7 @@ test('liste : désactiver, régénérer (confirmation, nouveau lien), supprimer 
   const shown = within(await screen.findByRole('dialog', { name: 'Nouveau lien de partage' }));
   expect((shown.getByLabelText('Lien de la page publique') as HTMLInputElement).value).toBe(`${location.origin}/p/${NEW_TOKEN}`);
   expect(shown.getByRole('button', { name: 'Copier' })).toBeInTheDocument();
-  // Échap ne ferme pas la fenêtre du lien (affiché une seule fois) ; seul « Fermer » le fait.
-  await user.keyboard('{Escape}');
-  expect(screen.getByRole('dialog', { name: 'Nouveau lien de partage' })).toBeInTheDocument();
+  // Le lien reste récupérable ensuite : la fenêtre se ferme normalement.
   await user.click(shown.getByRole('button', { name: 'Fermer' }));
   await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
 
@@ -101,4 +102,19 @@ test('liste : désactiver, régénérer (confirmation, nouveau lien), supprimer 
   await user.click(ask.getByRole('button', { name: 'Supprimer le lien' }));
   await waitFor(() => expect(apiFetch).toHaveBeenCalledWith('/api/share-links/l2', { method: 'DELETE' }));
   await waitFor(() => expect(screen.queryByText('Ancien lien')).toBeNull());
+});
+
+test('« Copier le lien » : lien courant récupéré sans régénération ; désactivé pour un lien antérieur', async () => {
+  const user = userEvent.setup();
+  renderPage();
+  const row = await rowOf('Comparatif clients');
+  await user.click(row.getByRole('button', { name: /Copier le lien/ }));
+  const shown = within(await screen.findByRole('dialog', { name: 'Lien de partage' }));
+  expect((shown.getByLabelText('Lien de la page publique') as HTMLInputElement).value).toBe(`${location.origin}/p/${CURRENT_TOKEN}`);
+  expect(apiFetch.mock.calls.some((c) => String(c[0]).endsWith('/regenerate'))).toBe(false);
+  await user.keyboard('{Escape}');
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  const old = (await rowOf('Ancien lien')).getByRole('button', { name: /Copier le lien/ });
+  expect(old).toBeDisabled();
+  expect(old).toHaveAttribute('title', expect.stringMatching(/régénérez-le une fois/));
 });

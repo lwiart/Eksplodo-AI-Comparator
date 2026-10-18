@@ -52,7 +52,7 @@ async function setup() {
   return { ...t, admin, user, model, outsider, runId, body, call, create: (over: Record<string, unknown> = {}) => call('POST', '/api/share-links', admin, body(over)) };
 }
 
-test('Admin : création → jeton de 32 caractères base64url, seule l’empreinte SHA-256 est en base, audit share_link_created', async () => {
+test('Admin : création → jeton de 32 caractères base64url, empreinte SHA-256 et jeton chiffré en base (jamais en clair), audit share_link_created', async () => {
   const s = await setup();
   const res = await s.create();
   expect(res.statusCode).toBe(201);
@@ -62,6 +62,9 @@ test('Admin : création → jeton de 32 caractères base64url, seule l’emprein
   const [row] = await s.db.select().from(shareLinks).where(eq(shareLinks.id, link.id));
   expect(row?.tokenHash).toBe(hashShareToken(token));
   expect(row?.tokenHash).toMatch(/^[0-9a-f]{64}$/);
+  expect(row?.tokenEncrypted).toMatch(/^v2\./);
+  expect(row?.tokenEncrypted).not.toContain(token);
+  expect(link.tokenAvailable).toBe(true);
   const list = await s.call('GET', `/api/share-links?runId=${s.runId}`, s.admin);
   expect(list.json().links).toHaveLength(1);
   const actions = (await s.db.select({ action: auditLog.action }).from(auditLog)).map((r) => r.action);
@@ -76,6 +79,7 @@ test('Utilisateur : 403 sur toutes les routes /api/share-links et /api/settings/
     ['POST', '/api/share-links', s.body()],
     ['PATCH', `/api/share-links/${id}`, { ...s.body(), runId: undefined, active: true }],
     ['POST', `/api/share-links/${id}/regenerate`],
+    ['GET', `/api/share-links/${id}/token`],
     ['DELETE', `/api/share-links/${id}`],
     ['GET', '/api/settings/sharing'],
     ['PUT', '/api/settings/sharing', { auditUrl: 'https://exemple.fr' }],
@@ -190,10 +194,50 @@ test('aucune réponse ne contient token_hash ni l’empreinte', async () => {
   ];
   for (const r of responses) {
     expect(r.body).not.toMatch(/token_?hash/i);
+    expect(r.body).not.toMatch(/token_?encrypted/i);
+    expect(r.body).not.toContain(row2!.tokenEncrypted!);
     expect(r.body).not.toContain(hash);
     expect(r.body).not.toContain(row2!.tokenHash);
   }
-  // Le jeton en clair n'apparaît qu'à la création et à la régénération.
+  // Le jeton en clair n'apparaît qu'à la création, à la régénération et sur demande (route dédiée).
   expect(createRes.body).toContain(token);
   expect(responses[2]!.body).not.toContain(token);
+});
+
+test('recopier le lien : GET /token rend le jeton courant (no-store), qui ouvre la page publique ; suit la régénération', async () => {
+  const s = await setup();
+  const { link, token } = (await s.create()).json();
+  const got = await s.call('GET', `/api/share-links/${link.id}/token`, s.admin);
+  expect(got.statusCode).toBe(200);
+  expect(got.headers['cache-control']).toBe('no-store');
+  expect(got.json()).toEqual({ token });
+  expect((await s.app.inject({ method: 'GET', url: `/share/${got.json().token}` })).statusCode).toBe(200);
+  const regen = (await s.call('POST', `/api/share-links/${link.id}/regenerate`, s.admin)).json();
+  expect((await s.call('GET', `/api/share-links/${link.id}/token`, s.admin)).json()).toEqual({ token: regen.token });
+  expect((await s.call('GET', `/api/share-links/${randomUUID()}/token`, s.admin)).statusCode).toBe(404);
+});
+
+test('lien antérieur (jeton non gardé) : tokenAvailable faux, 409 token_not_stored, utilisable après une régénération', async () => {
+  const s = await setup();
+  const { link } = (await s.create()).json();
+  await s.db.update(shareLinks).set({ tokenEncrypted: null }).where(eq(shareLinks.id, link.id));
+  const listed = (await s.call('GET', '/api/share-links', s.admin)).json().links[0];
+  expect(listed.tokenAvailable).toBe(false);
+  const refused = await s.call('GET', `/api/share-links/${link.id}/token`, s.admin);
+  expect(refused.statusCode).toBe(409);
+  expect(refused.json().error.code).toBe('token_not_stored');
+  const regen = (await s.call('POST', `/api/share-links/${link.id}/regenerate`, s.admin)).json();
+  expect(regen.link.tokenAvailable).toBe(true);
+  expect((await s.call('GET', `/api/share-links/${link.id}/token`, s.admin)).json()).toEqual({ token: regen.token });
+});
+
+test('jeton chiffré recopié sur un autre lien : illisible (409 token_unreadable)', async () => {
+  const s = await setup();
+  const a = (await s.create()).json().link;
+  const b = (await s.create({ title: 'Autre' })).json().link;
+  const [rowA] = await s.db.select().from(shareLinks).where(eq(shareLinks.id, a.id));
+  await s.db.update(shareLinks).set({ tokenEncrypted: rowA!.tokenEncrypted }).where(eq(shareLinks.id, b.id));
+  const res = await s.call('GET', `/api/share-links/${b.id}/token`, s.admin);
+  expect(res.statusCode).toBe(409);
+  expect(res.json().error.code).toBe('token_unreadable');
 });

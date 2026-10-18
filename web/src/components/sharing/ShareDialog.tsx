@@ -51,7 +51,7 @@ export function ShareDialog({ runId, runName, open, onClose, link }: Props) {
       {token ? (
         <div className="flex flex-col gap-3">
           <CopyLink url={shareUrl(token)} label="Lien de la page publique" />
-          <p className="m-0 text-sm font-semibold text-peach">Ce lien ne pourra plus être réaffiché : copiez-le maintenant.</p>
+          <p className="m-0 text-sm text-mute">Vous pourrez le retrouver à tout moment dans Admin → Liens de partage (« Copier le lien »).</p>
           <p className="m-0 text-xs text-mute">Si vous le perdez, régénérez-le depuis « Liens de partage » : l’ancien cessera de fonctionner.</p>
           <div className="flex justify-end">
             <Button variant="primary" onClick={close}>

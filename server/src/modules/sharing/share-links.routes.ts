@@ -31,6 +31,13 @@ export function registerShareLinksRoutes(app: FastifyInstance, service: ShareLin
     return { link: await service.update(req.actor!, id, updateShareLinkBody.parse(req.body)) };
   });
 
+  // Jeton en clair d'un lien existant (Admin), pour recopier le lien sans le régénérer ; jamais mis en cache.
+  app.get('/api/share-links/:id/token', admin, async (req, reply) => {
+    const { id } = idParams.parse(req.params);
+    reply.header('cache-control', 'no-store');
+    return { token: await service.token(id) };
+  });
+
   app.post('/api/share-links/:id/regenerate', admin, async (req) => {
     const { id } = idParams.parse(req.params);
     return service.regenerate(req.actor!, id);

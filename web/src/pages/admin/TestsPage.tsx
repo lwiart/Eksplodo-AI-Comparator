@@ -80,6 +80,9 @@ export function TestsPage() {
   const filters = { archived, category: category || undefined, tag: tag || undefined, q: q || undefined };
   const tests = useQuery({ queryKey: [...TESTS_KEY, 'list', filters], queryFn: () => listTests(filters), placeholderData: keepPreviousData });
   const meta = useQuery({ queryKey: TESTS_META_KEY, queryFn: testsMeta });
+  // Total sans filtre (même état archivé / non archivé) : sert au « sur N » quand un filtre réduit la liste.
+  const narrowed = Boolean(category || tag || q);
+  const all = useQuery({ queryKey: [...TESTS_KEY, 'list', { archived }], queryFn: () => listTests({ archived }), enabled: narrowed, staleTime: 60_000 });
 
   const refresh = () => client.invalidateQueries({ queryKey: TESTS_KEY });
   const remove = useMutation({
@@ -146,6 +149,14 @@ export function TestsPage() {
           Afficher les archivés
         </label>
       </div>
+
+      {tests.data ? (
+        <p role="status" className="m-0 mb-2 text-sm text-ink">
+          <b className="font-semibold text-white">{tests.data.length}</b> {tests.data.length > 1 ? 'tests' : 'test'}
+          {archived ? (tests.data.length > 1 ? ' archivés' : ' archivé') : ''}
+          {narrowed && all.data ? <span className="text-mute"> sur {all.data.length}</span> : null}
+        </p>
+      ) : null}
 
       <div aria-live="polite" className="mb-3 min-h-5 text-sm">
         {notice ? <span className="text-good">{notice}</span> : null}

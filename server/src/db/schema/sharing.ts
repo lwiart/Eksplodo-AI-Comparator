@@ -16,7 +16,11 @@ export interface ShareVerdict {
   auto?: VerdictAuto;
 }
 
-/** Liens de partage public d'une série ; seule l'empreinte SHA-256 du jeton est stockée. */
+/**
+ * Liens de partage public d'une série. La page publique retrouve le lien par l'empreinte SHA-256 du jeton ; le jeton
+ * lui-même est aussi gardé chiffré (AES-256-GCM, lié à l'identifiant du lien) pour que l'Admin puisse le recopier.
+ * `tokenEncrypted` est nul pour les liens créés avant cette possibilité : les régénérer une fois.
+ */
 export const shareLinks = mysqlTable(
   'share_links',
   {
@@ -25,6 +29,7 @@ export const shareLinks = mysqlTable(
       .notNull()
       .references(() => runs.id, { onDelete: 'cascade' }),
     tokenHash: char('token_hash', { length: 64 }).notNull(),
+    tokenEncrypted: text('token_encrypted'),
     title: varchar('title', { length: 120 }).notNull(),
     intro: text('intro'),
     verdicts: json('verdicts').$type<ShareVerdict[]>().notNull(),

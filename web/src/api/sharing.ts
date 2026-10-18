@@ -16,6 +16,8 @@ export type ShareLink = {
   showResponses: boolean;
   active: boolean;
   viewCount: number;
+  /** Le lien peut être recopié ; faux pour un lien créé avant cette possibilité (le régénérer une fois). */
+  tokenAvailable: boolean;
   createdAt: string;
   updatedAt: string;
 };
@@ -53,6 +55,11 @@ export async function updateShareLink(id: string, patch: ShareLinkFields & { act
 
 export function regenerateShareLink(id: string): Promise<IssuedShareLink> {
   return apiFetch(`/api/share-links/${enc(id)}/regenerate`, { method: 'POST' });
+}
+
+/** Jeton en clair d'un lien existant, pour recopier le lien sans le régénérer. */
+export async function getShareLinkToken(id: string): Promise<string> {
+  return (await apiFetch<{ token: string }>(`/api/share-links/${enc(id)}/token`)).token;
 }
 
 export function deleteShareLink(id: string): Promise<void> {

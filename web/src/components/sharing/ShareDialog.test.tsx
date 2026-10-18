@@ -47,7 +47,7 @@ function renderDialog() {
   return onClose;
 }
 
-test('Partager : verdicts proposés à partir du classement, modifiables ; création → lien affiché une fois avec « Copier »', async () => {
+test('Partager : verdicts proposés à partir du classement, modifiables ; création → lien affiché avec « Copier », retrouvable ensuite', async () => {
   const user = userEvent.setup();
   renderDialog();
   const title = await screen.findByLabelText('Titre de la page');
@@ -91,7 +91,7 @@ test('Partager : verdicts proposés à partir du classement, modifiables ; créa
   const url = (await screen.findByLabelText('Lien de la page publique')) as HTMLInputElement;
   expect(url.value).toBe(`${location.origin}/p/${TOKEN}`);
   expect(screen.getByRole('button', { name: 'Copier' })).toBeInTheDocument();
-  expect(screen.getByText(/ne pourra plus être réaffiché/)).toBeInTheDocument();
+  expect(screen.getByText(/retrouver à tout moment dans Admin → Liens de partage/)).toBeInTheDocument();
 });
 
 test('verdicts proposés marqués « auto » (recalculés à l’affichage) ; changer la phrase les fige, changer le titre non', async () => {

@@ -4,7 +4,8 @@ import { z } from 'zod';
 import type { Db } from '../../db/client.js';
 import { runModels, runs } from '../../db/schema/runs.js';
 import { shareLinks, type ShareVerdict } from '../../db/schema/sharing.js';
-import { NotFoundError, ValidationError } from '../../errors.js';
+import { AppError, NotFoundError, ValidationError } from '../../errors.js';
+import { decryptSecret, encryptSecret } from '../../lib/crypto.js';
 import type { Actor } from '../auth/actor.js';
 import { audit } from '../audit/audit.js';
 import { readValue, writeValue } from '../settings/settings.repo.js';
@@ -81,14 +82,20 @@ export interface ShareLinkView {
   showResponses: boolean;
   active: boolean;
   viewCount: number;
+  /** Le lien peut être recopié (jeton gardé chiffré) ; faux pour un lien créé avant cette possibilité. */
+  tokenAvailable: boolean;
   createdAt: string;
   updatedAt: string;
 }
 
+/** Contexte de chiffrement du jeton : un chiffré recopié sur un autre lien ne se déchiffre pas. */
+const tokenContext = (id: string) => `share-link:${id}`;
+
 const notFound = () => new NotFoundError('Lien de partage introuvable');
 
-export function createShareLinksService(deps: { db: Db }) {
+export function createShareLinksService(deps: { db: Db; config: { encryptionKey: Buffer } }) {
   const { db } = deps;
+  const seal = (id: string, token: string) => encryptSecret(token, deps.config.encryptionKey, tokenContext(id));
 
   const select = () =>
     db.select({ link: shareLinks, runName: runs.name }).from(shareLinks).innerJoin(runs, eq(runs.id, shareLinks.runId));
@@ -104,6 +111,7 @@ export function createShareLinksService(deps: { db: Db }) {
     showResponses: row.link.showResponses,
     active: row.link.active,
     viewCount: row.link.viewCount,
+    tokenAvailable: row.link.tokenEncrypted !== null,
     createdAt: row.link.createdAt.toISOString(),
     updatedAt: row.link.updatedAt.toISOString(),
   });
@@ -145,6 +153,7 @@ export function createShareLinksService(deps: { db: Db }) {
           id,
           runId: input.runId,
           tokenHash: hash,
+          tokenEncrypted: seal(id, token),
           title: input.title,
           intro: input.intro ? input.intro : null,
           verdicts: input.verdicts,
@@ -197,10 +206,24 @@ export function createShareLinksService(deps: { db: Db }) {
       if (!existing) throw notFound();
       const { token, hash } = newShareToken();
       await db.transaction(async (tx) => {
-        await tx.update(shareLinks).set({ tokenHash: hash, updatedAt: new Date() }).where(eq(shareLinks.id, id));
+        await tx.update(shareLinks).set({ tokenHash: hash, tokenEncrypted: seal(id, token), updatedAt: new Date() }).where(eq(shareLinks.id, id));
         await audit(tx, { actorUserId: actor.userId, action: 'share_link_regenerated', targetType: 'share_link', targetId: id });
       });
       return { link: await view(id), token };
+    },
+
+    /** Jeton en clair d'un lien, pour le recopier ; un lien antérieur au chiffrement doit d'abord être régénéré. */
+    async token(id: string): Promise<string> {
+      const [row] = await db.select({ tokenEncrypted: shareLinks.tokenEncrypted }).from(shareLinks).where(eq(shareLinks.id, id));
+      if (!row) throw notFound();
+      if (row.tokenEncrypted === null) {
+        throw new AppError('token_not_stored', 409, 'Ce lien a été créé avant que les liens puissent être recopiés : régénérez-le une fois.');
+      }
+      try {
+        return decryptSecret(row.tokenEncrypted, deps.config.encryptionKey, tokenContext(id));
+      } catch {
+        throw new AppError('token_unreadable', 409, 'Lien illisible (clé de chiffrement modifiée) : régénérez-le.');
+      }
     },
 
     async remove(actor: Actor, id: string): Promise<void> {
