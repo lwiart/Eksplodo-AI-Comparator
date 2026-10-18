@@ -13,3 +13,6 @@ Thumbs.db
 .superpowers/
 docs/reference-ao/
 .playwright-mcp/
+
+# Archive de déploiement
+app.zip
