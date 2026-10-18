@@ -43,7 +43,7 @@ Fournisseurs préconfigurés à la première installation, sans clé : OpenRoute
 
 Le catalogue OpenRouter (modèles et prix) est resynchronisé chaque jour à 06:00 (heure de Paris) par la tâche planifiée `catalog_refresh`, déclenchée par le planificateur interne ou par le cron ci-dessous.
 
-« Clé illisible » sur un fournisseur : `APP_ENCRYPTION_KEY` a changé depuis l'enregistrement de la clé ; la ressaisir.
+« Clé illisible » sur un fournisseur : `APP_ENCRYPTION_KEY` a changé depuis l'enregistrement de la clé, ou le fournisseur a été modifié directement en base (identifiant ou hôte de son URL : chaque clé chiffrée y est liée, pour qu'elle ne puisse pas être détournée vers un autre serveur) ; la ressaisir. Les clés chiffrées à l'ancien format (`v1.`) sont converties au format lié au fournisseur (`v2.`) au démarrage, sans action manuelle.
 
 `AIC_FAKE_LLM=1` (faux fournisseur, sans appel réel) sert au développement local et n'a aucun effet en production.
 
