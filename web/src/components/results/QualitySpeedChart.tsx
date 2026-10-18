@@ -72,7 +72,8 @@ export function QualitySpeedChart({ models }: { models: RankingModel[] }) {
             label={{ value: 'Qualité (note sur 100)', angle: -90, position: 'insideLeft', offset: 10, fill: '#7FA3B5', fontSize: 11, style: { textAnchor: 'middle' } }}
           />
           <ZAxis range={[110, 110]} />
-          <Tooltip cursor={{ stroke: GRID_STROKE }} content={<PointTooltip />} />
+          {/* Infobulle affichée sur place, sans glissement d'un point à l'autre. */}
+          <Tooltip cursor={{ stroke: GRID_STROKE }} content={<PointTooltip />} isAnimationActive={false} />
           {/* Légende en haut : en bas, elle chevauchait le titre de l'axe des vitesses. */}
           <Legend
             verticalAlign="top"

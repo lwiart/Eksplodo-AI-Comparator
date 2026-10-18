@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { cloneElement, type ReactElement } from 'react';
 import { expect, test, vi } from 'vitest';
 import { CategoryChart, categoryRows, categorySeries } from './CategoryChart';
@@ -63,7 +63,15 @@ test('catégories : séries classées de la meilleure à la moins bonne qualité
 test('catégories : barres et légende du meilleur au moins bon, quel que soit l’ordre reçu', () => {
   render(<CategoryChart models={[...MODELS].reverse()} categories={RANKING.categories} />);
   const chart = screen.getByTestId('category-chart');
-  expect([...chart.querySelectorAll('.recharts-legend-item-text')].map((e) => e.textContent)).toEqual(['Alpha', 'Bravo', 'Charlie']);
+  // Légende sous le graphe, dans l'ordre des barres, chaque pastille à la couleur du modèle.
+  const legend = screen.getByRole('list', { name: 'Légende : modèles du mieux au moins bien noté' });
+  expect(within(legend).getAllByRole('listitem').map((li) => li.textContent)).toEqual(['Alpha', 'Bravo', 'Charlie']);
+  expect(within(legend).getAllByRole('listitem').map((li) => (li.firstElementChild as HTMLElement).style.backgroundColor)).toEqual([
+    'rgb(240, 99, 31)',
+    'rgb(63, 162, 224)',
+    'rgb(124, 196, 239)',
+  ]);
+  expect(chart.querySelector('.recharts-legend-wrapper')).toBeNull();
   // Premier groupe (Rédaction) : une barre par modèle, de gauche à droite dans le même ordre.
   const firstBars = [...chart.querySelectorAll('.recharts-bar')].map((bar) => bar.querySelector('path')!.getAttribute('fill'));
   expect(firstBars).toEqual(['#F0631F', '#3FA2E0', '#7CC4EF']);

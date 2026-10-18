@@ -210,10 +210,25 @@ test('bandeau : une information par ligne, et la gerbe dans une bande à droite'
   const facts = await screen.findByRole('list', { name: 'Informations sur la série' });
   const items = within(facts).getAllByRole('listitem').map((li) => li.textContent);
   expect(items).toHaveLength(3);
-  expect(items[0]).toMatch(/modèles? testés? sur \d+ cas/);
+  expect(items[0]).toBe('4 modèles testés sur 2 cas, 1 répétition');
   expect(items[1]).toMatch(/^notés par un juge IA/);
   expect(items[2]).toMatch(/^coût total de la série/);
-  expect(screen.getByTestId('share-gerbe')).toHaveClass('absolute', 'right-0');
+  expect(screen.getByTestId('share-gerbe')).toHaveClass('absolute', 'left-[calc(50%_+_60px)]');
   expect(screen.getByText('Date du test : 15 octobre 2026')).toBeInTheDocument();
   expect(screen.queryByText(/Résultats de/)).toBeNull();
+});
+
+test('constellation des modèles affichée à côté du podium, absente de la version imprimable', async () => {
+  mockFetch(SHARE);
+  renderPage();
+  const heading = await screen.findByRole('heading', { name: /Constellation des modèles/ });
+  expect(heading.closest('.no-print')).not.toBeNull();
+  expect(screen.getByRole('list', { name: 'Légende de la constellation' })).toBeInTheDocument();
+});
+
+test('bandeau : répétitions au pluriel juste après le nombre de cas', async () => {
+  mockFetch({ ...SHARE, run: { ...SHARE.run, repetitions: 3 } });
+  renderPage();
+  const facts = await screen.findByRole('list', { name: 'Informations sur la série' });
+  expect(within(facts).getAllByRole('listitem')[0]).toHaveTextContent('4 modèles testés sur 2 cas, 3 répétitions');
 });

@@ -6,6 +6,7 @@ import { getPublicShare, type PublicShare } from '../api/public-share';
 import { messageForError } from '../api/messages';
 import { Card } from '../components/ui/Card';
 import { CategoryChart } from '../components/results/CategoryChart';
+import { Constellation } from '../components/results/Constellation';
 import { Podium } from '../components/results/Podium';
 import { QualitySpeedChart } from '../components/results/QualitySpeedChart';
 import { RankingTable } from '../components/results/RankingTable';
@@ -97,7 +98,7 @@ function ShareContent({ share }: { share: PublicShare }) {
   const date = testDate(run.completedAt);
   const plural = run.modelCount > 1 ? 's' : '';
   const facts = [
-    `${run.modelCount} modèle${plural} testé${plural} sur ${run.testCount} cas`,
+    `${run.modelCount} modèle${plural} testé${plural} sur ${run.testCount} cas, ${run.repetitions} répétition${run.repetitions > 1 ? 's' : ''}`,
     run.judgeName ? `notés par un juge IA (${run.judgeName})` : null,
     share.showCosts && run.totalCostUsd !== null ? `coût total de la série : ${run.totalCostUsd.toLocaleString('fr-FR', { maximumFractionDigits: 4 })} $` : null,
   ].filter((f): f is string => f !== null);
@@ -106,14 +107,15 @@ function ShareContent({ share }: { share: PublicShare }) {
     <Frame auditUrl={share.auditUrl} printable>
       <section className="relative border-b border-line lg:flex lg:min-h-[480px] lg:items-center">
         {/* Sur petit écran, la gerbe passerait sous le titre et gênerait la lecture : réservée aux grands écrans. Sur grand
-            écran, elle occupe une bande à droite, plus étroite que 1024 px : la scène s'y centre, à l'écart du texte. */}
-        <div data-testid="share-gerbe" className="no-print absolute inset-y-0 right-0 hidden w-[42%] max-w-[880px] lg:block">
+            écran, elle occupe une bande qui commence juste après le milieu (près du titre, qui passe à la ligne avant),
+            plus étroite que 1024 px : la scène s'y centre, à l'écart du texte. */}
+        <div data-testid="share-gerbe" className="no-print absolute inset-y-0 left-[calc(50%_+_60px)] hidden w-[min(40%,760px)] lg:block">
           <ThreeStage factory={shareScene} fallback={<FanoutFallback className="h-full w-full" />} />
         </div>
         <div className="relative z-10 mx-auto w-full max-w-[1100px] px-4 py-14 sm:px-8 sm:py-20">
-          {/* Sur grand écran, le texte s'arrête avant la bande de la gerbe (58 % de la largeur, moins le retrait du conteneur
+          {/* Sur grand écran, le texte s'arrête avant la bande de la gerbe (milieu + 60 px, moins le retrait du conteneur
               centré et une marge) : un titre long passe à la ligne au lieu de passer sous l'animation. */}
-          <div data-testid="share-intro" className="max-w-[40rem] lg:max-w-[min(40rem,calc(58vw_-_max(0px,(100vw_-_1100px)/2)_-_56px))]">
+          <div data-testid="share-intro" className="max-w-[40rem] lg:max-w-[min(40rem,calc(50vw_+_60px_-_max(0px,(100vw_-_1100px)/2)_-_56px))]">
             {run.completedAt === null ? (
               <span className="mr-2 inline-block rounded-full border border-line-strong bg-night-2/70 px-3 py-1 font-mono text-[11px] font-semibold text-sky">Résultats provisoires</span>
             ) : null}
@@ -134,15 +136,20 @@ function ShareContent({ share }: { share: PublicShare }) {
 
       <main className="mx-auto flex max-w-[1100px] flex-col gap-5 px-4 py-6 pb-16 sm:px-8">
         <VerdictCards verdicts={share.verdicts} />
-        <Card className="flex flex-col gap-4">
-          <h2 className="m-0 font-display text-base font-bold text-white">
-            Podium <span className="ml-1 font-mono text-[11px] font-medium text-mute">score global pondéré</span>
-          </h2>
-          <div className="no-print">
-            <Podium rows={rows} />
-          </div>
-          <StaticPodium rows={rows} />
-        </Card>
+        {/* Comme dans l'application : constellation et podium côte à côte, à la même hauteur. La constellation n'est
+            pas imprimée (version imprimable) : le podium reprend alors toute la largeur. */}
+        <div className="grid gap-4 lg:grid-cols-[1.4fr_1fr] print:block">
+          <Constellation models={share.models} className="no-print" />
+          <Card className="flex flex-col gap-4">
+            <h2 className="m-0 font-display text-base font-bold text-white">
+              Podium <span className="ml-1 font-mono text-[11px] font-medium text-mute">score global pondéré</span>
+            </h2>
+            <div className="no-print">
+              <Podium rows={rows} />
+            </div>
+            <StaticPodium rows={rows} />
+          </Card>
+        </div>
         {rows.length > CHART_MODELS ? (
           <p className="m-0 text-xs text-mute">
             Graphes : {CHART_MODELS} premiers modèles sur {rows.length}.

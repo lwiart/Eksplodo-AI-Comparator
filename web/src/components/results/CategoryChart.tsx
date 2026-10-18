@@ -1,4 +1,4 @@
-import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import type { RankingModel } from '../../api/results';
 import { AXIS_TICK, GRID_STROKE, TOOLTIP_STYLE } from './chart-theme';
 import { score } from './format';
@@ -32,25 +32,36 @@ export function CategoryChart({ models, categories }: { models: RankingModel[]; 
   const names = new Map(scored.map((m) => [m.modelId, m.name]));
   const nameOf = (key: unknown) => names.get(String(key)) ?? String(key);
   return (
-    <div role="img" aria-label="Qualité par catégorie de test" data-testid="category-chart" className="h-[280px] w-full">
-      <ResponsiveContainer width="100%" height="100%">
-        <BarChart data={categoryRows(scored, categories)} margin={{ top: 12, right: 8, bottom: 0, left: 0 }}>
-          <CartesianGrid stroke={GRID_STROKE} vertical={false} />
-          <XAxis dataKey="category" tick={AXIS_TICK} stroke={GRID_STROKE} />
-          <YAxis domain={[0, 100]} ticks={[0, 20, 40, 60, 80, 100]} tick={AXIS_TICK} stroke={GRID_STROKE} width={36} />
-          {/* Infobulle non partagée : seule la barre survolée (un modèle) est détaillée. */}
-          <Tooltip
-            shared={false}
-            cursor={{ fill: 'rgba(63,162,224,0.08)' }}
-            {...TOOLTIP_STYLE}
-            formatter={(v, key) => [score(typeof v === 'number' ? v : null), nameOf(key)]}
-          />
-          <Legend formatter={(key) => <span className="text-xs text-ink">{nameOf(key)}</span>} iconType="circle" />
-          {scored.map((m) => (
-            <Bar key={m.modelId} dataKey={m.modelId} fill={m.color} radius={[4, 4, 0, 0]} isAnimationActive={false} />
-          ))}
-        </BarChart>
-      </ResponsiveContainer>
+    <div>
+      <div role="img" aria-label="Qualité par catégorie de test" data-testid="category-chart" className="h-[250px] w-full">
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={categoryRows(scored, categories)} margin={{ top: 12, right: 8, bottom: 0, left: 0 }}>
+            <CartesianGrid stroke={GRID_STROKE} vertical={false} />
+            <XAxis dataKey="category" tick={AXIS_TICK} stroke={GRID_STROKE} />
+            <YAxis domain={[0, 100]} ticks={[0, 20, 40, 60, 80, 100]} tick={AXIS_TICK} stroke={GRID_STROKE} width={36} />
+            {/* Infobulle non partagée : seule la barre survolée (un modèle) est détaillée. */}
+            <Tooltip
+              shared={false}
+              isAnimationActive={false}
+              cursor={{ fill: 'rgba(63,162,224,0.08)' }}
+              {...TOOLTIP_STYLE}
+              formatter={(v, key) => [score(typeof v === 'number' ? v : null), nameOf(key)]}
+            />
+            {scored.map((m) => (
+              <Bar key={m.modelId} dataKey={m.modelId} fill={m.color} radius={[4, 4, 0, 0]} isAnimationActive={false} />
+            ))}
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+      {/* Légende dessinée ici, dans l'ordre des barres (du mieux au moins bien noté) : celle de recharts réordonne les séries. */}
+      <ul aria-label="Légende : modèles du mieux au moins bien noté" className="m-0 mt-2 flex list-none flex-wrap justify-center gap-x-4 gap-y-1.5 p-0">
+        {scored.map((m) => (
+          <li key={m.modelId} className="flex items-center gap-1.5 text-xs text-ink">
+            <span aria-hidden="true" className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: m.color }} />
+            {m.name}
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

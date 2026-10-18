@@ -30,7 +30,7 @@ export function hoverDetails(m: RankingModel): string {
  * émet `CONSTELLATION_HOVER_EVENT` sur son canevas, l'événement remonte jusqu'au cadre écouté ici.
  * Sur mobile ou sans WebGL, pas de survol : la légende en texte suffit (la scène reste décorative).
  */
-export function Constellation({ models }: { models: RankingModel[] }) {
+export function Constellation({ models, className = '' }: { models: RankingModel[]; className?: string }) {
   const data = useMemo<ConstellationData>(
     () => ({
       models: models.map((m) => ({
@@ -76,7 +76,7 @@ export function Constellation({ models }: { models: RankingModel[] }) {
   useLayoutEffect(() => placeRef.current(), [hovered]);
 
   return (
-    <Card className="relative h-[360px] overflow-hidden p-0">
+    <Card className={`relative h-full min-h-[360px] overflow-hidden p-0 ${className}`}>
       <div ref={stageRef} className="pointer-events-none absolute inset-0">
         <ThreeStage factory={constellationScene} fallback={<ConstellationFallback data={data} />} data={data} />
         {hovered && (
