@@ -33,7 +33,7 @@ import { TextArea } from '../../components/ui/TextArea';
 const detailKey = (id: string | undefined) => [...TESTS_KEY, 'detail', id] as const;
 
 const DEFAULT_TEMPERATURE = 0.2;
-const DEFAULT_MAX_TOKENS = 16_000;
+const DEFAULT_MAX_TOKENS = 1000;
 const MAX_TOKENS_LIMIT = 16_000;
 
 type Form = {

@@ -66,12 +66,12 @@ async function fillRequired(user: ReturnType<typeof userEvent.setup>) {
   await user.type(screen.getByLabelText('Prompt utilisateur'), 'Bonjour');
 }
 
-test('éditeur : valeurs par défaut 0,2 et 16 000 ; max tokens 16 001 refusé avant envoi', async () => {
+test('éditeur : valeurs par défaut 0,2 et 1 000 ; max tokens 16 001 refusé avant envoi', async () => {
   const user = userEvent.setup();
   renderAt('/admin/tests/nouveau');
   expect(await screen.findByLabelText('Température')).toHaveValue('0,2');
   const max = screen.getByLabelText('Max tokens');
-  expect(max).toHaveValue('16 000');
+  expect(max).toHaveValue('1 000');
 
   await fillRequired(user);
   await user.clear(max);
@@ -102,7 +102,7 @@ test('éditeur : la virgule décimale est acceptée et le test créé est envoy�
         systemPrompt: null,
         userPrompt: 'Bonjour',
         temperature: 0.7,
-        maxTokens: 16000,
+        maxTokens: 1000,
         scoringMethod: 'manual',
         scoringConfig: {},
       },
