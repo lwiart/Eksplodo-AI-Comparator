@@ -132,6 +132,12 @@ Pour un Utilisateur, toute qualité affichée (vainqueur, évolution) respecte l
 | `npm run build` | Construit `dist/web` et `dist/server` |
 | `npm start` | Lance `dist/server/index.js` |
 
+## Importer des tests
+
+`npm run import:tests -- [fichier.json] [--url https://ia.eksplodo.fr] [--dry-run]` ajoute à l'application les tests d'un fichier JSON et la suite qui les regroupe, via l'API, avec un compte Admin. L'e-mail et le mot de passe sont demandés au clavier (ou lus dans `AIC_EMAIL` et `AIC_PASSWORD`). Un test dont le nom existe déjà est laissé tel quel, et la suite n'est créée que si son nom est libre : relancer le script ne crée pas de doublon. Aucun modèle d'IA n'est appelé.
+
+Exemple fourni : [`tests/codage-avance.json`](tests/codage-avance.json), cinq épreuves de développement notées par le juge (revue de sécurité et de concurrence, refactorisation sans régression, limiteur de débit sur spécification, cause racine d'une erreur en production, conception d'une fonctionnalité).
+
 ## Documentation interne
 
 - Spécification : [`superpowers/specs/2026-10-16-comparateur-ia-design.md`](superpowers/specs/2026-10-16-comparateur-ia-design.md)

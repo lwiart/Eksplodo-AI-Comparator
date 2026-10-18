@@ -12,6 +12,7 @@
     "build": "vite build && tsc -p tsconfig.server.json",
     "start": "node dist/server/index.js",
     "test": "vitest run",
+    "import:tests": "node scripts/import-tests.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.server.json && tsc -p tsconfig.web.json && tsc -p tsconfig.node.json"
   },
   "dependencies": {

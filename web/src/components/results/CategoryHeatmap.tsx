@@ -42,7 +42,7 @@ const QUALITY_KEY = 'quality';
 export type HeatmapSelection = { modelId: string; category: string | null };
 
 /** Colonne des modèles, fixe au défilement ; l'ombre pleine couvre les interstices entre cases, sous lesquels les notes défileraient. */
-const MODEL_CELL = 'heatmap-model sticky left-0 z-10 bg-night-1 px-2 shadow-[0_0_0_3px_var(--color-night-1)]';
+const MODEL_CELL = 'heatmap-model sticky left-0 z-10 bg-night-1 px-1.5 shadow-[0_0_0_3px_var(--color-night-1)] sm:px-2';
 
 /**
  * Matrice « Qualité par catégorie de test » : une ligne par modèle, une colonne par catégorie puis la qualité globale ;
@@ -83,6 +83,9 @@ export function CategoryHeatmap({
         Cliquez sur une catégorie ou sur « Qualité » pour trier les modèles ; un second clic revient à l'ordre du classement.
         {onSelect ? ' Cliquez sur une note pour afficher plus bas les réponses de ce modèle dans cette catégorie.' : null}
       </p>
+      {columns.length > 3 ? (
+        <p className="no-print m-0 mb-2 text-xs text-peach sm:hidden">Faites glisser le tableau vers la gauche pour voir toutes les catégories.</p>
+      ) : null}
       <div className="heatmap-scroll overflow-x-auto">
         <table aria-label="Qualité par catégorie de test" aria-describedby={hintId} className="heatmap-table border-separate border-spacing-[3px] text-xs">
           <thead>
@@ -97,13 +100,13 @@ export function CategoryHeatmap({
                     key={col.key}
                     scope="col"
                     aria-sort={sorted ? 'descending' : undefined}
-                    className={`heatmap-head min-w-[4.5rem] max-w-[8rem] p-0 align-bottom font-medium ${col.key === QUALITY_KEY ? 'heatmap-quality' : ''}`}
+                    className={`heatmap-head min-w-[3.25rem] max-w-[6rem] p-0 align-bottom font-medium sm:min-w-[4.5rem] sm:max-w-[8rem] ${col.key === QUALITY_KEY ? 'heatmap-quality' : ''}`}
                   >
                     <button
                       type="button"
                       onClick={() => setSortKey(sorted ? null : col.key)}
                       title={sorted ? "Revenir à l'ordre du classement" : 'Trier par note décroissante'}
-                      className={`w-full cursor-pointer rounded-md border-0 bg-transparent px-1.5 py-1.5 text-center text-xs leading-tight hover:bg-blue/10 focus-visible:outline-2 focus-visible:outline-blue ${
+                      className={`w-full cursor-pointer rounded-md border-0 bg-transparent px-1 py-1.5 text-center text-[10.5px] leading-tight [overflow-wrap:break-word] hover:bg-blue/10 focus-visible:outline-2 focus-visible:outline-blue sm:px-1.5 sm:text-xs ${
                         sorted ? 'font-semibold text-white' : 'font-medium text-ink'
                       }`}
                     >
@@ -122,12 +125,12 @@ export function CategoryHeatmap({
           <tbody>
             {rows.map((m) => (
               <tr key={m.modelId}>
-                <th scope="row" className={`${MODEL_CELL} py-1 text-left font-semibold whitespace-nowrap text-white`}>
-                  <span className="flex items-center gap-2">
-                    <span aria-hidden="true" className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: m.color }} />
-                    <span>
+                <th scope="row" className={`${MODEL_CELL} min-w-[6.5rem] max-w-[8.5rem] py-1 text-left text-[11.5px] leading-tight font-semibold text-white sm:max-w-none sm:text-xs sm:whitespace-nowrap`}>
+                  <span className="flex items-center gap-1.5 sm:gap-2">
+                    <span aria-hidden="true" className="h-2 w-2 shrink-0 rounded-full sm:h-2.5 sm:w-2.5" style={{ backgroundColor: m.color }} />
+                    <span className="min-w-0 [overflow-wrap:break-word]">
                       {m.name}
-                      {m.providerName ? <small className="block font-mono text-[10px] font-normal text-mute">{m.providerName}</small> : null}
+                      {m.providerName ? <small className="hidden font-mono text-[10px] font-normal text-mute sm:block">{m.providerName}</small> : null}
                     </span>
                   </span>
                 </th>
@@ -141,7 +144,7 @@ export function CategoryHeatmap({
                       key={col.key}
                       title={clickable ? `${label} · voir les réponses` : label}
                       aria-label={clickable ? undefined : label}
-                      className={`heatmap-cell rounded-md text-center font-mono text-[13px] font-semibold ${clickable ? 'p-0' : 'px-1.5 py-2'} ${col.key === QUALITY_KEY ? 'heatmap-quality ring-1 ring-white/30 ring-inset' : ''} ${
+                      className={`heatmap-cell rounded-md text-center font-mono text-xs font-semibold sm:text-[13px] ${clickable ? 'p-0' : 'px-1 py-1.5 sm:px-1.5 sm:py-2'} ${col.key === QUALITY_KEY ? 'heatmap-quality ring-1 ring-white/30 ring-inset' : ''} ${
                         v === null ? 'heatmap-empty bg-white/5 font-normal text-mute' : ''
                       } ${isSelected ? 'outline-2 outline-offset-1 outline-white' : ''}`}
                       // Couleur en ligne : la règle d'impression qui assombrit les textes clairs ne l'atteint pas.
@@ -153,7 +156,7 @@ export function CategoryHeatmap({
                           aria-label={label}
                           aria-pressed={isSelected}
                           onClick={() => onSelect(isSelected ? null : { modelId: m.modelId, category: col.category })}
-                          className="w-full cursor-pointer rounded-md border-0 bg-transparent px-1.5 py-2 font-mono text-[13px] font-semibold text-inherit hover:bg-white/15 focus-visible:outline-2 focus-visible:outline-white"
+                          className="w-full cursor-pointer rounded-md border-0 bg-transparent px-1 py-1.5 font-mono text-xs font-semibold text-inherit hover:bg-white/15 focus-visible:outline-2 focus-visible:outline-white sm:px-1.5 sm:py-2 sm:text-[13px]"
                         >
                           {score(v)}
                         </button>

@@ -46,8 +46,8 @@ export default function ResultsView({
 
   return (
     <section aria-label="Résultats" className="flex flex-col gap-4">
-      <div className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
-        <Constellation models={ranking.models} />
+      {/* Podium en premier, sur mobile comme sur grand écran ; la constellation vient ensuite (à droite sur grand écran). */}
+      <div className="grid gap-4 lg:grid-cols-[1fr_1.4fr]">
         <Card className="flex flex-col gap-5">
           {/* Titre en haut de la carte (pas centré sur le bouton) : aligné sur celui de la constellation voisine. */}
           <div className="flex flex-wrap items-start justify-between gap-3">
@@ -93,6 +93,7 @@ export default function ResultsView({
             ) : null}
           </div>
         </Card>
+        <Constellation models={ranking.models} />
       </div>
 
       {/* Nuage, classement puis matrice, chacun sur toute la largeur : la matrice a besoin de place pour ses colonnes. */}

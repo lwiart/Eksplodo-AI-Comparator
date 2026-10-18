@@ -186,7 +186,7 @@ test('en-tête : nom, suite, modèles × répétitions, juge, coût modèles + j
   expect(facts.getByText('3 tests, 2 modèles × 1 répétition')).toBeInTheDocument();
   expect(facts.getByText('Claude Opus')).toBeInTheDocument();
   expect(facts.getByText('2,41 $ modèles + 0,00 $ juge')).toBeInTheDocument();
-  expect(within(title.parentElement!).getByText('En cours')).toBeInTheDocument();
+  expect(within(title.closest('header')!).getByText('En cours')).toBeInTheDocument();
 });
 
 test('réponses tronquées comptées comme terminées ; plus d’appel à faire : notes du juge en attente au lieu d’un temps restant', async () => {
@@ -580,6 +580,8 @@ test('titre long : il passe à la ligne, pastille et « Partager » restent sur 
   const header = title.closest('header')!;
   // Aucun retour à la ligne de l'en-tête : le titre s'enroule dans sa colonne, le reste garde sa place.
   expect(header).not.toHaveClass('flex-wrap');
+  // Mobile : titre sur toute la largeur, pastille et « Partager » dessous ; à droite à partir de sm.
+  expect(header).toHaveClass('flex-col', 'sm:flex-row');
   expect(title.parentElement).toHaveClass('min-w-0', 'flex-1');
   expect(within(header).getByRole('button', { name: /Partager/ })).toHaveClass('shrink-0');
   await user.click(screen.getByRole('button', { name: 'Renommer la série' }));

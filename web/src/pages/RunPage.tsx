@@ -238,7 +238,7 @@ function CompletedView({ runId }: { runId: string }) {
   return <RunMetricsTable rows={results.data} prices={prices} />;
 }
 
-const TITLE = 'm-0 font-display text-[30px] leading-[1.1] font-extrabold tracking-[-0.01em] text-white';
+const TITLE = 'm-0 font-display text-[26px] leading-[1.1] font-extrabold tracking-[-0.01em] text-white sm:text-[30px]';
 /** Titre long : passe à la ligne (un mot très long est coupé) au lieu de repousser la pastille d'état et « Partager ». */
 const TITLE_WRAP = 'min-w-0 [overflow-wrap:anywhere]';
 /** Même borne que le serveur (création et renommage d'une série). */
@@ -425,21 +425,22 @@ export function RunPage() {
         <p className="text-sm text-mute">Chargement de la série…</p>
       ) : (
         <>
-          {/* Le titre occupe la place libre et passe à la ligne : pastille et « Partager » restent sur sa première ligne. */}
-          <header className="mb-4 flex items-start gap-3">
+          {/* Sur mobile, le titre prend toute la largeur et la pastille d'état et « Partager » passent dessous ;
+              à partir de sm, ils restent à droite de sa première ligne, le titre passant à la ligne dans la place libre. */}
+          <header className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start">
             <div className="flex min-w-0 flex-1 items-start gap-3">
               <RunTitle run={run.data} editable={isAdmin} />
-              {status ? (
-                <span className="mt-1.5 shrink-0">
-                  <RunStatusChip status={status} />
-                </span>
-              ) : null}
             </div>
-            {isAdmin ? (
-              <Button className="shrink-0" onClick={() => setSharing(true)}>
-                <span aria-hidden="true">⇪</span>
-                Partager
-              </Button>
+            {status || isAdmin ? (
+              <div className="flex shrink-0 items-center gap-3">
+                {status ? <RunStatusChip status={status} /> : null}
+                {isAdmin ? (
+                  <Button className="shrink-0" onClick={() => setSharing(true)}>
+                    <span aria-hidden="true">⇪</span>
+                    Partager
+                  </Button>
+                ) : null}
+              </div>
             ) : null}
           </header>
           {live ? (
