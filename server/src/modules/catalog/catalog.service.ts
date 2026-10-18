@@ -134,6 +134,25 @@ function defaultColor(apiModelId: string, displayName: string, providerBaseUrl: 
   return MODEL_PALETTE[(h >>> 0) % MODEL_PALETTE.length]!;
 }
 
+/**
+ * Un modèle par identifiant : certains fournisseurs (Eden AI) répètent la même entrée dans `/models`. La première est
+ * gardée, ses valeurs inconnues complétées par les suivantes.
+ */
+export function uniqueRemoteModels(list: RemoteModel[]): RemoteModel[] {
+  const byId = new Map<string, RemoteModel>();
+  for (const m of list) {
+    const seen = byId.get(m.id);
+    if (!seen) {
+      byId.set(m.id, { ...m });
+      continue;
+    }
+    for (const key of Object.keys(m) as (keyof RemoteModel)[]) {
+      if (seen[key] === null && m[key] !== null) (seen as Record<string, unknown>)[key] = m[key];
+    }
+  }
+  return [...byId.values()];
+}
+
 function errnoOf(err: unknown): number | undefined {
   const e = err as { errno?: number; cause?: { errno?: number } };
   return e.errno ?? e.cause?.errno;
@@ -306,7 +325,7 @@ export function createCatalogService(deps: CatalogServiceDeps) {
         throw err;
       }
       const added = await modelsRepo.apiModelIdsOf(id);
-      return list
+      return uniqueRemoteModels(list)
         .map(withKnownPrices)
         .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
         .map((m) => ({ ...m, alreadyAdded: added.has(m.id) }));

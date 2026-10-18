@@ -3,6 +3,7 @@ import { afterEach, describe, expect, test } from 'vitest';
 import { models } from '../src/db/schema/catalog.js';
 import { auditLog } from '../src/db/schema/core.js';
 import { fakeFetch } from './helpers/fake-fetch.js';
+import { uniqueRemoteModels } from '../src/modules/catalog/catalog.service.js';
 import { buildTestApp, loginAs, seedModel, seedProvider, seedUser, type TestApp } from './helpers/test-app.js';
 
 const PW = 'motdepasse-solide';
@@ -191,6 +192,14 @@ describe('fournisseurs', () => {
         expect.objectContaining({ id: 'mistral-small', alreadyAdded: false }),
       ]),
     );
+  });
+
+  test('remote-models : un identifiant répété par le fournisseur (Eden AI) n’apparaît qu’une fois', async () => {
+    const f = fakeFetch({ [`GET ${BASE}/models`]: modelsList(['mistral/mistral-large-4', 'mistral/mistral-large-4', 'mistral/mistral-large-4', 'mistral/mistral-large-latest']) });
+    const { get, db } = await setup({ fetch: f });
+    const p = await seedProvider(db, { apiKey: KEY });
+    const res = await get(`/api/providers/${p.id}/remote-models`);
+    expect(res.json().models.map((m: any) => m.id)).toEqual(['mistral/mistral-large-4', 'mistral/mistral-large-latest']);
   });
 
   test('remote-models : prix connus complétés quand le fournisseur n’en donne pas', async () => {
@@ -384,4 +393,18 @@ describe('audit', () => {
     expect(dump).not.toContain('secret-0123456789');
     expect(dump).not.toContain('apiKey');
   });
+});
+
+test('uniqueRemoteModels : première entrée gardée, valeurs inconnues complétées par les doublons', () => {
+  const base = { contextWindow: null, inputPricePerM: null, outputPricePerM: null, supportsVision: null, supportsPdf: null };
+  expect(
+    uniqueRemoteModels([
+      { ...base, id: 'a', name: 'A', inputPricePerM: 2 },
+      { ...base, id: 'b', name: 'B' },
+      { ...base, id: 'a', name: 'A bis', inputPricePerM: 9, outputPricePerM: 6, contextWindow: 128000, supportsVision: false },
+    ]),
+  ).toEqual([
+    { ...base, id: 'a', name: 'A', inputPricePerM: 2, outputPricePerM: 6, contextWindow: 128000, supportsVision: false },
+    { ...base, id: 'b', name: 'B' },
+  ]);
 });
