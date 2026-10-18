@@ -6,6 +6,7 @@ import { shareLinks, type ShareVerdict, type VerdictAuto } from '../../db/schema
 import { NotFoundError } from '../../errors.js';
 import { roundUsd } from '../../lib/money.js';
 import type { Weights } from '../runs/runs.service.js';
+import type { ScoringConfig, ScoringMethod } from '../tests/scoring-config.js';
 import { aggregateRun, rankModels, type AggregateInputRow } from '../scoring/aggregate.js';
 import { finalScore } from '../scoring/override.js';
 import { manualAvg, type RankingModel } from '../scoring/results.service.js';
@@ -38,6 +39,16 @@ export type PublicShare = {
         testName: string;
         category: string;
         userPrompt: string;
+        /** Détail du test (fenêtre « détail ») : consignes et résultat attendu, publiés avec les réponses. */
+        detail: {
+          tags: string[];
+          systemPrompt: string | null;
+          temperature: number;
+          maxTokens: number;
+          scoringMethod: ScoringMethod;
+          scoringConfig: ScoringConfig;
+          attachments: { index: number; originalName: string; mime: string; pages: number | null }[];
+        };
         answers: { modelKey: string; repetition: number; text: string | null; finalScore: number | null; judgeRationale: string | null }[];
       }[]
     | null;
@@ -202,6 +213,16 @@ export async function loadPublicShare(db: Db, token: string): Promise<PublicShar
       testName: t.snapshot.name,
       category: t.snapshot.category,
       userPrompt: t.snapshot.userPrompt,
+      detail: {
+        tags: [...(t.snapshot.tags ?? [])],
+        systemPrompt: t.snapshot.systemPrompt,
+        temperature: t.snapshot.temperature,
+        maxTokens: t.snapshot.maxTokens,
+        scoringMethod: t.snapshot.scoringMethod,
+        scoringConfig: t.snapshot.scoringConfig,
+        // Noms des pièces jointes seulement : jamais leur contenu ni leur chemin de stockage.
+        attachments: (t.snapshot.attachments ?? []).map((a, index) => ({ index, originalName: a.originalName, mime: a.mime, pages: a.pages ?? null })),
+      },
       answers: (byTest.get(t.id) ?? [])
         .sort((a, b) => a.order - b.order || a.repetition - b.repetition)
         .map((a) => ({ modelKey: a.modelKey, repetition: a.repetition, text: a.text, finalScore: a.finalScore, judgeRationale: a.judgeRationale })),

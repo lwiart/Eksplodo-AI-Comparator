@@ -1,5 +1,5 @@
 import { apiFetch } from './client';
-import type { RankingModel } from './results';
+import type { AnswersTest, RankingModel } from './results';
 import type { Weights } from './runs';
 
 // Types miroirs de server/src/modules/sharing/public-share.ts.
@@ -10,7 +10,9 @@ export type PublicVerdict = { label: string; text: string; model: { key: string;
 
 export type PublicAnswer = { modelKey: string; repetition: number; text: string | null; finalScore: number | null; judgeRationale: string | null };
 
-export type PublicResponse = { testName: string; category: string; userPrompt: string; answers: PublicAnswer[] };
+/** Détail du test publié avec les réponses : consignes envoyées et résultat attendu. */
+export type PublicTestDetail = Omit<AnswersTest, 'name' | 'category' | 'userPrompt'>;
+export type PublicResponse = { testName: string; category: string; userPrompt: string; detail: PublicTestDetail; answers: PublicAnswer[] };
 
 export type PublicShare = {
   title: string;

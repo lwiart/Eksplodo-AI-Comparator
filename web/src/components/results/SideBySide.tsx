@@ -24,14 +24,14 @@ import { SelectField } from '../ui/SelectField';
 import { costPerAnswer, DASH, score, tokensPerSecond } from './format';
 import { Markdown } from './Markdown';
 import { RaterSpread } from './RaterSpread';
+import { NO_FILTER, type AnswersFilter } from './answers-filter';
 import { TestDetailDialog } from './TestDetailDialog';
 
 type Tab = 'side' | 'blind' | 'spread';
 
 export type SideBySideTest = { runTestId: string; testName: string; category?: string };
 
-/** Filtre posé depuis la matrice « Qualité par catégorie de test » : un modèle, une catégorie (`null` : toutes). */
-export type AnswersFilter = { modelId: string; modelName: string; category: string | null };
+export { NO_FILTER, type AnswersFilter } from './answers-filter';
 
 /** Note imposée saisie : `undefined` quand ce n'est pas un nombre entier compris entre 0 et 100. */
 export function parseOverride(raw: string): number | undefined {
@@ -244,8 +244,10 @@ export function SideBySide({
   isAdmin,
   judgePending = 0,
   pollMs = false,
-  filter = null,
-  onClearFilter,
+  filter,
+  onFilterChange,
+  models = [],
+  focusKey = 0,
 }: {
   runId: string;
   tests: SideBySideTest[];
@@ -253,21 +255,30 @@ export function SideBySide({
   judgePending?: number;
   /** Intervalle de relecture des réponses (celui du classement pendant la série), `false` une fois tout rendu. */
   pollMs?: number | false;
-  /** Filtre de la matrice : seuls les tests de la catégorie et les réponses du modèle sont montrés. */
-  filter?: AnswersFilter | null;
-  onClearFilter?: () => void;
+  /** Filtre contrôlé (la matrice le pose aussi) ; sans lui, le composant garde son propre filtre. */
+  filter?: AnswersFilter;
+  onFilterChange?: (filter: AnswersFilter) => void;
+  /** Modèles de la série, pour la liste « Modèle ». */
+  models?: { modelId: string; name: string }[];
+  /** Change à chaque clic dans la matrice : la liste des réponses est alors amenée à l'écran. */
+  focusKey?: number;
 }) {
   const queryClient = useQueryClient();
   const [selected, setSelected] = useState('');
   const [tab, setTab] = useState<Tab>('side');
   const [detailOpen, setDetailOpen] = useState(false);
+  const [ownFilter, setOwnFilter] = useState<AnswersFilter>(NO_FILTER);
+  const current = filter ?? ownFilter;
+  const setFilter = onFilterChange ?? setOwnFilter;
   const cardRef = useRef<HTMLDivElement>(null);
-  const shown = filter?.category ? tests.filter((t) => t.category === filter.category) : tests;
+  const categories = [...new Set(tests.map((t) => t.category).filter((c): c is string => !!c))];
+  const shown = current.category ? tests.filter((t) => t.category === current.category) : tests;
   const runTestId = shown.some((t) => t.runTestId === selected) ? selected : (shown[0]?.runTestId ?? '');
-  // Un clic dans la matrice amène la liste des réponses à l'écran.
+  const filterModel = models.find((m) => m.modelId === current.modelId);
+  const filtered = current.modelId !== null || current.category !== null;
   useEffect(() => {
-    if (filter) cardRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
-  }, [filter]);
+    if (focusKey > 0) cardRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+  }, [focusKey]);
   const answers = useQuery({
     queryKey: answersKey(runId, runTestId),
     queryFn: () => getAnswers(runId, runTestId),
@@ -276,7 +287,7 @@ export function SideBySide({
   });
   const tabs: Tab[] = isAdmin ? ['side', 'blind', 'spread'] : ['side', 'blind'];
   const hiddenCount = answers.data?.answers.filter((a) => a.hiddenUntilScored).length ?? 0;
-  const visible = answers.data?.answers.filter((a) => !a.hiddenUntilScored && (!filter || a.modelId === filter.modelId)) ?? [];
+  const visible = answers.data?.answers.filter((a) => !a.hiddenUntilScored && (current.modelId === null || a.modelId === current.modelId)) ?? [];
   const method = answers.data?.test.scoringMethod;
   // Relance du juge proposée seulement sur un test noté par le juge (le serveur refuse les autres : `not_rescorable`).
   const canRescore = isAdmin && method === 'judge';
@@ -317,25 +328,41 @@ export function SideBySide({
         ) : null}
       </div>
 
-      {filter ? (
-        <div role="status" className="flex flex-wrap items-center gap-2 rounded-2xl border border-orange/50 bg-orange/10 px-3 py-2 text-sm text-white">
-          <span>
-            Filtre : <b>{filter.modelName}</b> · {filter.category ?? 'toutes les catégories'} ({shown.length} test{shown.length > 1 ? 's' : ''})
-          </span>
-          <Button variant="ghost" className="ml-auto px-3 py-1 text-xs" onClick={onClearFilter}>
-            Retirer le filtre
-          </Button>
-        </div>
-      ) : null}
-
+      {/* Filtres : catégorie et modèle (posés aussi par un clic dans la matrice), puis le test parmi ceux de la catégorie. */}
       <div className="flex flex-wrap items-end gap-2">
+        {categories.length > 1 ? (
+          <SelectField
+            label="Catégorie"
+            value={current.category ?? ''}
+            options={[{ value: '', label: 'Toutes' }, ...categories.map((c) => ({ value: c, label: c }))]}
+            onChange={(e) => setFilter({ ...current, category: e.target.value || null })}
+          />
+        ) : null}
         <SelectField label="Test" value={runTestId} options={shown.map((t) => ({ value: t.runTestId, label: t.testName }))} onChange={(e) => setSelected(e.target.value)} />
+        {models.length > 1 ? (
+          <SelectField
+            label="Modèle"
+            value={current.modelId ?? ''}
+            options={[{ value: '', label: 'Tous' }, ...models.map((m) => ({ value: m.modelId, label: m.name }))]}
+            onChange={(e) => setFilter({ ...current, modelId: e.target.value || null })}
+          />
+        ) : null}
         {answers.data ? (
           <Button variant="ghost" onClick={() => setDetailOpen(true)}>
             Détail du test
           </Button>
         ) : null}
       </div>
+      {filtered ? (
+        <div role="status" className="flex flex-wrap items-center gap-2 rounded-2xl border border-orange/50 bg-orange/10 px-3 py-2 text-sm text-white">
+          <span>
+            Filtre : <b>{filterModel?.name ?? 'tous les modèles'}</b> · {current.category ?? 'toutes les catégories'} ({shown.length} test{shown.length > 1 ? 's' : ''})
+          </span>
+          <Button variant="ghost" className="ml-auto px-3 py-1 text-xs" onClick={() => setFilter(NO_FILTER)}>
+            Retirer le filtre
+          </Button>
+        </div>
+      ) : null}
       {answers.data && detailOpen ? <TestDetailDialog test={answers.data.test} open={detailOpen} onOpenChange={setDetailOpen} /> : null}
 
       <div role="tablist" aria-label="Vue des réponses" className="flex flex-wrap gap-1.5">
@@ -389,8 +416,8 @@ export function SideBySide({
                     </Link>
                   </div>
                 ) : null}
-                {filter && visible.length === 0 && hiddenCount === 0 ? (
-                  <p className="m-0 text-sm text-mute md:col-span-2 xl:col-span-3">Aucune réponse de {filter.modelName} pour ce test.</p>
+                {current.modelId !== null && visible.length === 0 && hiddenCount === 0 ? (
+                  <p className="m-0 text-sm text-mute md:col-span-2 xl:col-span-3">Aucune réponse de {filterModel?.name ?? 'ce modèle'} pour ce test.</p>
                 ) : null}
                 {visible.map((a) => (
                   <div key={a.resultId} className="flex flex-col gap-1.5">

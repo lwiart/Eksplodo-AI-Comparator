@@ -23,6 +23,9 @@ afterEach(() => vi.unstubAllGlobals());
 const SERVER: [number | null, number | null][] = [[1, 84.3], [2, 71.1], [3, 55], [null, null]];
 const models: PublicModel[] = MODELS.map((m, i) => ({ ...m, modelId: `m${i + 1}`, rank: SERVER[i]![0], global: SERVER[i]![1] }));
 
+/** Détail de test publié avec les réponses (fenêtre « détail »). */
+const DETAIL = { tags: [], systemPrompt: null, temperature: 0.7, maxTokens: 1000, scoringMethod: 'judge' as const, scoringConfig: { criteria: 'Clarté et justesse.' }, attachments: [] };
+
 const SHARE: PublicShare = {
   title: 'Quelle IA pour vos réponses ?',
   intro: 'Première ligne\nSeconde ligne',
@@ -163,8 +166,8 @@ test('réponses publiées : sélecteur de test et Markdown assaini', async () =>
   mockFetch({
     ...SHARE,
     responses: [
-      { testName: 'Rédaction 1', category: 'Rédaction', userPrompt: 'Écris', answers: [{ modelKey: 'm1', repetition: 1, text: '**Gras** <script>alert(1)</script>', finalScore: 9, judgeRationale: 'Clair' }] },
-      { testName: 'Logique 1', category: 'Logique', userPrompt: 'Raisonne', answers: [{ modelKey: 'm2', repetition: 1, text: 'Autre réponse', finalScore: 7, judgeRationale: null }] },
+      { testName: 'Rédaction 1', category: 'Rédaction', userPrompt: 'Écris', detail: DETAIL, answers: [{ modelKey: 'm1', repetition: 1, text: '**Gras** <script>alert(1)</script>', finalScore: 9, judgeRationale: 'Clair' }] },
+      { testName: 'Logique 1', category: 'Logique', userPrompt: 'Raisonne', detail: DETAIL, answers: [{ modelKey: 'm2', repetition: 1, text: 'Autre réponse', finalScore: 7, judgeRationale: null }] },
     ],
   });
   renderPage();
@@ -287,11 +290,11 @@ test('pondération sous le podium : critères avec aide « ? », 0 % omis ; coû
 test('classement détaillé avant la matrice ; clic sur une note : réponses filtrées par modèle et catégorie', async () => {
   const user = userEvent.setup();
   const responses = [
-    { testName: 'Lettre', category: 'Rédaction', userPrompt: 'Écris.', answers: [
+    { testName: 'Lettre', category: 'Rédaction', userPrompt: 'Écris.', detail: { ...DETAIL, systemPrompt: 'Sois concis.' }, answers: [
       { modelKey: 'm1', repetition: 1, text: 'Lettre Alpha', finalScore: 90, judgeRationale: null },
       { modelKey: 'm2', repetition: 1, text: 'Lettre Bravo', finalScore: 70, judgeRationale: null },
     ] },
-    { testName: 'Énigme', category: 'Logique', userPrompt: 'Résous.', answers: [{ modelKey: 'm1', repetition: 1, text: 'Énigme Alpha', finalScore: 80, judgeRationale: null }] },
+    { testName: 'Énigme', category: 'Logique', userPrompt: 'Résous.', detail: DETAIL, answers: [{ modelKey: 'm1', repetition: 1, text: 'Énigme Alpha', finalScore: 80, judgeRationale: null }] },
   ];
   mockFetch({ ...SHARE, responses });
   renderPage();
@@ -306,4 +309,25 @@ test('classement détaillé avant la matrice ; clic sur une note : réponses fil
   expect(within(section.getByLabelText('Test')).getAllByRole('option').map((o) => o.textContent)).toEqual(['Lettre']);
   await user.click(section.getByRole('button', { name: 'Retirer le filtre' }));
   expect(section.getByText('Lettre Alpha')).toBeInTheDocument();
+});
+
+test('réponses publiées : filtre Modèle et détail du test dans une fenêtre', async () => {
+  const user = userEvent.setup();
+  const responses = [
+    { testName: 'Lettre', category: 'Rédaction', userPrompt: 'Écris.', detail: { ...DETAIL, systemPrompt: 'Sois concis.' }, answers: [
+      { modelKey: 'm1', repetition: 1, text: 'Lettre Alpha', finalScore: 90, judgeRationale: null },
+      { modelKey: 'm2', repetition: 1, text: 'Lettre Bravo', finalScore: 70, judgeRationale: null },
+    ] },
+  ];
+  mockFetch({ ...SHARE, responses });
+  renderPage();
+  const section = within(await screen.findByRole('region', { name: 'Réponses des modèles' }));
+  await user.selectOptions(section.getByRole('combobox', { name: 'Modèle' }), 'm2');
+  expect(section.queryByText('Lettre Alpha')).toBeNull();
+  expect(section.getByText('Lettre Bravo')).toBeInTheDocument();
+  expect(section.getByRole('status')).toHaveTextContent('Filtre : Bravo · toutes les catégories (1 test)');
+  await user.click(section.getByRole('button', { name: 'Lettre' }));
+  const dialog = within(await screen.findByRole('dialog', { name: 'Lettre' }));
+  expect(dialog.getByText('Sois concis.')).toBeInTheDocument();
+  expect(dialog.getByText('Clarté et justesse.')).toBeInTheDocument();
 });

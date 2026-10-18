@@ -5,6 +5,7 @@ import { ApiError } from '../api/client';
 import { getPublicShare, type PublicShare } from '../api/public-share';
 import { messageForError } from '../api/messages';
 import { Card } from '../components/ui/Card';
+import { NO_FILTER, selectionOf, type AnswersFilter } from '../components/results/answers-filter';
 import { CategoryHeatmap, type HeatmapSelection } from '../components/results/CategoryHeatmap';
 import { Constellation } from '../components/results/Constellation';
 import { Podium, PodiumHeading } from '../components/results/Podium';
@@ -92,8 +93,13 @@ function ShareContent({ share }: { share: PublicShare }) {
   // Rang et score global viennent du serveur : avec les coûts masqués, un recalcul donnerait un autre score.
   const rows: RankedRow[] = useMemo(() => share.models.map((model) => ({ model, rank: model.rank, global: model.global })), [share.models]);
   const { run } = share;
-  // Case de la matrice choisie : filtre les réponses publiées (seulement si le lien les publie).
-  const [selection, setSelection] = useState<HeatmapSelection | null>(null);
+  // Filtre des réponses publiées (si le lien les publie), partagé entre la matrice et les listes au-dessus des réponses.
+  const [filter, setFilter] = useState<AnswersFilter>(NO_FILTER);
+  const [focusKey, setFocusKey] = useState(0);
+  const select = (next: HeatmapSelection | null) => {
+    setFilter(next ?? NO_FILTER);
+    if (next) setFocusKey((k) => k + 1);
+  };
   const date = testDate(run.completedAt);
   const plural = run.modelCount > 1 ? 's' : '';
   const facts = [
@@ -156,10 +162,10 @@ function ShareContent({ share }: { share: PublicShare }) {
           <h2 className="m-0 mb-2 font-display text-sm font-bold text-white">
             Qualité par catégorie de test <span className="ml-1 font-mono text-[11px] font-medium text-mute">note moyenne sur 100</span>
           </h2>
-          <CategoryHeatmap models={share.models} categories={share.categories} selected={selection} onSelect={share.responses ? setSelection : undefined} />
+          <CategoryHeatmap models={share.models} categories={share.categories} selected={selectionOf(filter)} onSelect={share.responses ? select : undefined} />
         </Card>
         {share.responses ? (
-          <PublicResponses responses={share.responses} models={share.models} filter={selection} onClearFilter={() => setSelection(null)} />
+          <PublicResponses responses={share.responses} models={share.models} filter={filter} onFilterChange={setFilter} focusKey={focusKey} />
         ) : null}
         {isHttps(share.auditUrl) ? (
           <div className="no-print flex flex-col items-center gap-3 pt-6 text-center">

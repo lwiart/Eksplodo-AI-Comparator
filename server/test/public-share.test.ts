@@ -165,7 +165,17 @@ test('show_responses faux : responses null ; vrai : textes des réponses réussi
   const res = await s.pub((await s.create({ showResponses: true })).token);
   const { responses } = res.json();
   expect(responses).toHaveLength(2);
-  expect(Object.keys(responses[0]).sort()).toEqual(['answers', 'category', 'testName', 'userPrompt']);
+  expect(Object.keys(responses[0]).sort()).toEqual(['answers', 'category', 'detail', 'testName', 'userPrompt']);
+  // Détail du test : consignes et résultat attendu (fenêtre « détail » de la page publique), sans chemin ni contenu de fichier.
+  expect(responses[0].detail).toEqual({
+    tags: [],
+    systemPrompt: null,
+    temperature: expect.any(Number),
+    maxTokens: expect.any(Number),
+    scoringMethod: 'expected',
+    scoringConfig: { mode: 'exact', expected: 'Paris', ignoreCase: true, ignoreAccents: false },
+    attachments: [],
+  });
   expect(responses[0]).toMatchObject({ testName: 'Capitale', category: 'Culture', userPrompt: 'Capitale de la France ?' });
   expect(responses[0].answers).toEqual([{ modelKey: 'm1', repetition: 1, text: 'Paris', finalScore: 10, judgeRationale: 'Réponse exacte' }]);
   expect(responses[1].answers.map((a: { modelKey: string; text: string }) => [a.modelKey, a.text])).toEqual([

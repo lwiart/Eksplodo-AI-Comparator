@@ -9,7 +9,8 @@ import { useAuth } from '../auth/AuthProvider';
 import { ShareDialog } from '../components/sharing/ShareDialog';
 import { ActivityFeed } from '../components/runs/ActivityFeed';
 import type { HeatmapSelection } from '../components/results/CategoryHeatmap';
-import { SideBySide, type AnswersFilter, type SideBySideTest } from '../components/results/SideBySide';
+import { NO_FILTER, selectionOf, type AnswersFilter } from '../components/results/answers-filter';
+import { SideBySide, type SideBySideTest } from '../components/results/SideBySide';
 import { LiveMatrix } from '../components/runs/LiveMatrix';
 import { PauseNotice, RunControls } from '../components/runs/RunControls';
 import { RunMetricsTable } from '../components/runs/RunMetricsTable';
@@ -185,7 +186,14 @@ function ResultsSection({
     refetchInterval: pollMs,
     refetchOnWindowFocus: 'always',
   });
-  const [selection, setSelection] = useState<HeatmapSelection | null>(null);
+  // Filtre des réponses, partagé entre la matrice (clic sur une note) et les listes au-dessus des réponses.
+  const [filter, setFilter] = useState<AnswersFilter>(NO_FILTER);
+  const [focusKey, setFocusKey] = useState(0);
+  const selection = selectionOf(filter);
+  const select = (next: HeatmapSelection | null) => {
+    setFilter(next ?? NO_FILTER);
+    if (next) setFocusKey((k) => k + 1);
+  };
   const hasQuality = ranking.data?.models.some((m) => m.quality !== null) ?? false;
   if (!show && !hasQuality && judgePending === 0) return null;
   if (ranking.isError)
@@ -198,26 +206,21 @@ function ResultsSection({
   return (
     <Suspense fallback={<p className="text-sm text-mute">Chargement du classement…</p>}>
       <div className="flex flex-col gap-4">
-        <ResultsView runId={runId} ranking={ranking.data} isAdmin={isAdmin} selection={selection} onSelect={setSelection} />
+        <ResultsView runId={runId} ranking={ranking.data} isAdmin={isAdmin} selection={selection} onSelect={select} />
         <SideBySide
           runId={runId}
           tests={tests}
           isAdmin={isAdmin}
           judgePending={judgePending}
           pollMs={pollMs}
-          filter={filterOf(selection, ranking.data.models)}
-          onClearFilter={() => setSelection(null)}
+          filter={filter}
+          onFilterChange={setFilter}
+          models={ranking.data.models.map((m) => ({ modelId: m.modelId, name: m.name }))}
+          focusKey={focusKey}
         />
       </div>
     </Suspense>
   );
-}
-
-/** Filtre des réponses tiré de la case choisie (le nom du modèle vient du classement). */
-function filterOf(selection: HeatmapSelection | null, models: { modelId: string; name: string }[]): AnswersFilter | null {
-  if (!selection) return null;
-  const model = models.find((m) => m.modelId === selection.modelId);
-  return model ? { modelId: model.modelId, modelName: model.name, category: selection.category } : null;
 }
 
 function CompletedView({ runId }: { runId: string }) {

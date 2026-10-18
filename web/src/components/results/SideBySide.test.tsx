@@ -326,7 +326,11 @@ test('réponse tronquée : message orange avec la cause et l’indication de rel
 
 test('filtre de la matrice : tests de la catégorie et réponses du modèle seulement ; « Retirer le filtre »', async () => {
   const user = userEvent.setup();
-  const onClear = vi.fn();
+  const onChange = vi.fn();
+  const models = [
+    { modelId: 'm1', name: 'Claude Opus' },
+    { modelId: 'm2', name: 'GPT Test' },
+  ];
   const tests = [
     { runTestId: 'rt1', testName: 'Résumer un CCTP', category: 'Rédaction' },
     { runTestId: 'rt2', testName: 'Extraire', category: 'Extraction' },
@@ -339,7 +343,7 @@ test('filtre de la matrice : tests de la catégorie et réponses du modèle seul
   render(
     <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
       <MemoryRouter>
-        <SideBySide runId="r1" tests={tests} isAdmin={false} filter={{ modelId: 'm1', modelName: 'Claude Opus', category: 'Rédaction' }} onClearFilter={onClear} />
+        <SideBySide runId="r1" tests={tests} isAdmin={false} filter={{ modelId: 'm1', category: 'Rédaction' }} onFilterChange={onChange} models={models} />
       </MemoryRouter>
     </QueryClientProvider>,
   );
@@ -348,8 +352,34 @@ test('filtre de la matrice : tests de la catégorie et réponses du modèle seul
   expect(screen.getByRole('status')).toHaveTextContent('Filtre : Claude Opus · Rédaction (2 tests)');
   const options = within(screen.getByLabelText('Test')).getAllByRole('option').map((o) => o.textContent);
   expect(options).toEqual(['Résumer un CCTP', 'Lettre']);
+  expect(screen.getByLabelText('Catégorie')).toHaveValue('Rédaction');
+  expect(screen.getByLabelText('Modèle')).toHaveValue('m1');
+  await user.selectOptions(screen.getByLabelText('Modèle'), 'm2');
+  expect(onChange).toHaveBeenLastCalledWith({ modelId: 'm2', category: 'Rédaction' });
   await user.click(screen.getByRole('button', { name: 'Retirer le filtre' }));
-  expect(onClear).toHaveBeenCalled();
+  expect(onChange).toHaveBeenLastCalledWith({ modelId: null, category: null });
+});
+
+test('listes Catégorie et Modèle sans matrice : le composant filtre seul', async () => {
+  const user = userEvent.setup();
+  const tests = [
+    { runTestId: 'rt1', testName: 'Résumer un CCTP', category: 'Rédaction' },
+    { runTestId: 'rt2', testName: 'Extraire', category: 'Extraction' },
+  ];
+  answersBody = { test: TEST_INFO, answers: [answer({ modelId: 'm1' }), answer({ resultId: 'a2', modelId: 'm2', modelName: 'GPT Test' })] };
+  render(
+    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+      <MemoryRouter>
+        <SideBySide runId="r1" tests={tests} isAdmin={false} models={[{ modelId: 'm1', name: 'Claude Opus' }, { modelId: 'm2', name: 'GPT Test' }]} />
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+  await screen.findByRole('article', { name: 'GPT Test, répétition 1' });
+  await user.selectOptions(screen.getByLabelText('Modèle'), 'm2');
+  expect(screen.queryByRole('article', { name: 'Claude Opus, répétition 1' })).toBeNull();
+  await user.selectOptions(screen.getByLabelText('Catégorie'), 'Extraction');
+  expect(within(screen.getByLabelText('Test')).getAllByRole('option').map((o) => o.textContent)).toEqual(['Extraire']);
+  expect(screen.getByRole('status')).toHaveTextContent('Filtre : GPT Test · Extraction (1 test)');
 });
 
 test('nom du test cliquable : détail avec consigne système, prompt et résultat attendu', async () => {
