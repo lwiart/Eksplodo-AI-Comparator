@@ -556,3 +556,22 @@ test('Utilisateur : titre sans renommage', async () => {
   await user.click(title);
   expect(screen.queryByRole('textbox', { name: 'Nom de la série' })).toBeNull();
 });
+
+test('titre long : il passe à la ligne, pastille et « Partager » restent sur la même rangée ; édition sur toute la largeur', async () => {
+  const user = userEvent.setup();
+  renderPage();
+  const title = await screen.findByRole('heading', { level: 1, name: 'Polyvalence octobre' });
+  expect(title).toHaveClass('min-w-0', '[overflow-wrap:anywhere]');
+  const header = title.closest('header')!;
+  // Aucun retour à la ligne de l'en-tête : le titre s'enroule dans sa colonne, le reste garde sa place.
+  expect(header).not.toHaveClass('flex-wrap');
+  expect(title.parentElement).toHaveClass('min-w-0', 'flex-1');
+  expect(within(header).getByRole('button', { name: /Partager/ })).toHaveClass('shrink-0');
+  await user.click(screen.getByRole('button', { name: 'Renommer la série' }));
+  const field = screen.getByRole('textbox', { name: 'Nom de la série' });
+  expect(field.tagName).toBe('TEXTAREA');
+  expect(field).toHaveClass('w-full');
+  // Échap referme la zone sans enregistrer (Entrée, qui enregistre, est couverte plus haut).
+  await user.type(field, '{Escape}');
+  expect(screen.queryByRole('textbox', { name: 'Nom de la série' })).toBeNull();
+});

@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { lazy, Suspense, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { messageForError } from '../api/messages';
 import { answersPrefix, getRanking, rankingKey } from '../api/results';
@@ -201,6 +201,8 @@ function CompletedView({ runId }: { runId: string }) {
 }
 
 const TITLE = 'm-0 font-display text-[30px] leading-[1.1] font-extrabold tracking-[-0.01em] text-white';
+/** Titre long : passe à la ligne (un mot très long est coupé) au lieu de repousser la pastille d'état et « Partager ». */
+const TITLE_WRAP = 'min-w-0 [overflow-wrap:anywhere]';
 /** Même borne que le serveur (création et renommage d'une série). */
 const NAME_MAX = 200;
 
@@ -226,6 +228,14 @@ function RunTitle({ run, editable }: { run: RunSummary; editable: boolean }) {
   const [error, setError] = useState<string | null>(null);
   /** Entrée ou Échap déjà traités : la perte du focus qui suit ne doit pas enregistrer une seconde fois. */
   const handled = useRef(false);
+  const field = useRef<HTMLTextAreaElement>(null);
+  // Zone d'édition à la hauteur du texte : un nom long s'y lit en entier, sur plusieurs lignes.
+  useLayoutEffect(() => {
+    const el = field.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight}px`;
+  }, [draft, editing]);
 
   const rename = useMutation({
     mutationFn: (name: string) => renameRun(run.id, name),
@@ -270,16 +280,18 @@ function RunTitle({ run, editable }: { run: RunSummary; editable: boolean }) {
     rename.mutate(name);
   };
 
-  if (!editable) return <h1 className={TITLE}>{run.name}</h1>;
+  if (!editable) return <h1 className={`${TITLE} ${TITLE_WRAP}`}>{run.name}</h1>;
 
   if (editing)
     return (
-      <div className="flex min-w-0 flex-col gap-1">
+      <div className="flex min-w-0 flex-1 flex-col gap-1">
         <label htmlFor={inputId} className="sr-only">
           Nom de la série
         </label>
-        <input
+        <textarea
+          ref={field}
           id={inputId}
+          rows={1}
           autoFocus
           onFocus={(e) => e.currentTarget.select()}
           value={draft}
@@ -309,8 +321,7 @@ function RunTitle({ run, editable }: { run: RunSummary; editable: boolean }) {
             }
             save();
           }}
-          style={{ width: `${Math.max(draft.length, 8) + 2}ch` }}
-          className={`${TITLE} max-w-full rounded-lg border bg-night-0/60 px-2 py-0.5 ${error ? 'border-bad/60' : 'border-line-strong'}`}
+          className={`${TITLE} block w-full resize-none overflow-hidden rounded-lg border bg-night-0/60 px-2 py-0.5 ${error ? 'border-bad/60' : 'border-line-strong'}`}
         />
         {error ? (
           <p id={errorId} role="alert" className="m-0 text-xs text-bad">
@@ -324,7 +335,7 @@ function RunTitle({ run, editable }: { run: RunSummary; editable: boolean }) {
   // le crayon apparaît au survol du titre (`peer`), à son propre survol et au focus clavier.
   return (
     <>
-      <h1 className={`${TITLE} peer cursor-text`} title="Cliquer pour renommer" onClick={start}>
+      <h1 className={`${TITLE} ${TITLE_WRAP} peer cursor-text`} title="Cliquer pour renommer" onClick={start}>
         {run.name}
       </h1>
       <button
@@ -332,7 +343,7 @@ function RunTitle({ run, editable }: { run: RunSummary; editable: boolean }) {
         aria-label="Renommer la série"
         title="Renommer la série"
         onClick={start}
-        className="-ml-2 rounded-full p-1.5 text-mute opacity-0 transition-opacity peer-hover:opacity-100 hover:text-white hover:opacity-100 focus-visible:opacity-100"
+        className="-ml-2 shrink-0 rounded-full p-1.5 text-mute opacity-0 transition-opacity peer-hover:opacity-100 hover:text-white hover:opacity-100 focus-visible:opacity-100"
       >
         <PencilIcon />
       </button>
@@ -376,11 +387,18 @@ export function RunPage() {
         <p className="text-sm text-mute">Chargement de la série…</p>
       ) : (
         <>
-          <header className="mb-4 flex flex-wrap items-center gap-3">
-            <RunTitle run={run.data} editable={isAdmin} />
-            {status ? <RunStatusChip status={status} /> : null}
+          {/* Le titre occupe la place libre et passe à la ligne : pastille et « Partager » restent sur sa première ligne. */}
+          <header className="mb-4 flex items-start gap-3">
+            <div className="flex min-w-0 flex-1 items-start gap-3">
+              <RunTitle run={run.data} editable={isAdmin} />
+              {status ? (
+                <span className="mt-1.5 shrink-0">
+                  <RunStatusChip status={status} />
+                </span>
+              ) : null}
+            </div>
             {isAdmin ? (
-              <Button className="ml-auto" onClick={() => setSharing(true)}>
+              <Button className="shrink-0" onClick={() => setSharing(true)}>
                 <span aria-hidden="true">⇪</span>
                 Partager
               </Button>
