@@ -83,3 +83,45 @@ test('Utilisateur : pas de bouton d’ajout ni d’appel à /api/providers', asy
   expect(screen.queryByRole('button', { name: 'Ajouter des modèles' })).not.toBeInTheDocument();
   expect(apiFetch).not.toHaveBeenCalledWith('/api/providers');
 });
+
+test('Admin : « Vérifier les capacités » interroge les modèles disponibles affichés et enregistre les cases qui changent', async () => {
+  const user = userEvent.setup();
+  const deepseek = { ...MODELS[0]!, id: 'm3', providerId: 'p1', apiModelId: 'deepseek-flash', displayName: 'DeepSeek Flash', supportsVision: true, supportsPdf: true };
+  const accepted = { vision: { supported: true, message: 'Image acceptée par le modèle.' }, pdf: { supported: true, message: 'PDF accepté par le modèle.' } };
+  apiFetch.mockImplementation((path: string, init?: { method?: string; body?: { apiModelId?: string } }) => {
+    if (path === '/api/models') return Promise.resolve({ models: [...MODELS, deepseek] });
+    if (path === '/api/providers') return Promise.resolve({ providers: PROVIDERS });
+    if (path === '/api/providers/p1/check-capabilities') {
+      if (init?.body?.apiModelId === 'deepseek-flash')
+        return Promise.resolve({ capabilities: { ...accepted, pdf: { supported: false, message: 'PDF refusé : file must have a file_id or file_data' } } });
+      return Promise.resolve({ capabilities: accepted });
+    }
+    if (path === '/api/models/m3' && init?.method === 'PATCH') return Promise.resolve({ model: { ...deepseek, supportsPdf: false } });
+    return Promise.reject(new Error(`appel inattendu ${path}`));
+  });
+  renderPage('admin');
+  await screen.findByRole('link', { name: 'DeepSeek Flash' });
+  expect(screen.getByRole('button', { name: 'Aide : Vérifier les capacités' })).toHaveAccessibleDescription(/trois très petits appels réels/);
+  await user.click(screen.getByRole('button', { name: 'Vérifier les capacités' }));
+  const dialog = within(await screen.findByRole('dialog', { name: 'Vérifier les capacités des modèles' }));
+  // Mistral Large (indisponible) n'est pas proposé.
+  expect(dialog.queryByText('Mistral Large')).toBeNull();
+  expect(dialog.getByText(/^2 modèles disponibles/)).toBeInTheDocument();
+  await user.click(dialog.getByRole('button', { name: 'Lancer la vérification' }));
+  expect(await dialog.findByRole('status')).toHaveTextContent('2 vérifiés : 1 mis à jour.');
+
+  const checks = apiFetch.mock.calls.filter((c) => String(c[0]).endsWith('/check-capabilities')).map((c) => c[1].body.apiModelId);
+  expect(checks.sort()).toEqual(['claude-opus-5-5', 'deepseek-flash']);
+  const patches = apiFetch.mock.calls.filter((c) => c[1]?.method === 'PATCH');
+  expect(patches).toEqual([['/api/models/m3', { method: 'PATCH', body: { supportsVision: true, supportsPdf: false } }]]);
+  const row = within(dialog.getByText('DeepSeek Flash').closest('tr')!);
+  expect(row.getByLabelText('PDF : non, était oui')).toBeInTheDocument();
+  expect(row.getByText('PDF refusé : file must have a file_id or file_data')).toBeInTheDocument();
+  expect(within(dialog.getByText('Claude Opus 5.5').closest('tr')!).getByText('Inchangé.')).toBeInTheDocument();
+});
+
+test('Utilisateur : pas de bouton « Vérifier les capacités »', async () => {
+  renderPage('user');
+  await screen.findByRole('link', { name: 'Claude Opus 5.5' });
+  expect(screen.queryByRole('button', { name: 'Vérifier les capacités' })).toBeNull();
+});

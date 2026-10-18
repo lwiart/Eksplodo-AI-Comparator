@@ -5,10 +5,12 @@ import { MODELS_KEY, PROVIDERS_KEY, listModels, listProviders } from '../api/cat
 import { messageForError } from '../api/messages';
 import { useAuth } from '../auth/AuthProvider';
 import { formatContextShort, formatPricePair } from '../components/catalog/format';
+import { CapabilitiesBulkDialog } from '../components/catalog/CapabilitiesBulkDialog';
 import { RemoteModelsDialog } from '../components/catalog/RemoteModelsDialog';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { Chip } from '../components/ui/Chip';
+import { InfoTip } from '../components/ui/InfoTip';
 import { SelectField } from '../components/ui/SelectField';
 
 function Flag({ label, on }: { label: string; on: boolean }) {
@@ -64,6 +66,7 @@ export function ModelsPage() {
   const models = useQuery({ queryKey: MODELS_KEY, queryFn: listModels });
   const [providerId, setProviderId] = useState('');
   const [availableOnly, setAvailableOnly] = useState(false);
+  const [checking, setChecking] = useState(false);
 
   const all = models.data ?? [];
   const providerOptions = [...new Map(all.map((m) => [m.providerId, m.providerName])).entries()].map(([value, label]) => ({ value, label }));
@@ -76,7 +79,19 @@ export function ModelsPage() {
           <h1 className="m-0 font-display text-[30px] leading-[1.1] font-extrabold tracking-[-0.01em] text-white">Modèles</h1>
           <p className="mt-2 mb-0 max-w-prose text-sm text-mute">Prix en dollars par million de tokens (entrée / sortie).</p>
         </div>
-        {isAdmin ? <AddModels /> : null}
+        {isAdmin ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <Button variant="secondary" disabled={!rows.some((m) => m.available)} onClick={() => setChecking(true)}>
+              Vérifier les capacités
+            </Button>
+            <InfoTip label="Vérifier les capacités" width="w-80">
+              Interroge chaque modèle disponible parmi ceux affichés (filtre Fournisseur compris) par trois très petits appels réels : un message
+              sans pièce jointe, une image et un PDF d’une page. Les colonnes Vision et PDF sont corrigées et enregistrées selon la réponse du
+              fournisseur. Un résultat indéterminé ne change rien. Coût : quelques tokens par modèle.
+            </InfoTip>
+            <AddModels />
+          </div>
+        ) : null}
       </header>
 
       <div className="mb-4 flex flex-wrap items-end gap-4">
@@ -86,6 +101,8 @@ export function ModelsPage() {
           Disponibles seulement
         </label>
       </div>
+
+      {isAdmin ? <CapabilitiesBulkDialog models={rows.filter((m) => m.available)} open={checking} onOpenChange={setChecking} /> : null}
 
       {models.isError ? (
         <p role="alert" className="text-sm text-bad">
