@@ -123,6 +123,9 @@ test('méthode « Réponse attendue » : modes exact / contient / regex ; regex 
   await user.type(screen.getByLabelText('Éléments attendus (un par ligne)'), 'objet{enter}durée');
   // Expression régulière invalide.
   await user.click(screen.getByRole('radio', { name: 'Expression régulière' }));
+  // Type d'expression attendu précisé sous les champs, et petite documentation dans une aide « ? ».
+  expect(screen.getByText(/Expression régulière JavaScript, écrite sans les barres obliques autour/)).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Aide : Écrire une expression régulière' })).toHaveAccessibleDescription(/1957 seul, pas 19570/);
   await user.type(screen.getByLabelText('Motif'), '([[');
   await user.click(screen.getByRole('button', { name: 'Enregistrer' }));
   expect(await screen.findByText('Expression régulière invalide')).toBeInTheDocument();

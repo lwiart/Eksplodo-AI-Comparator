@@ -156,3 +156,21 @@ test('Admin : « Mettre à jour les tarifs » propose les tarifs annoncés par l
   ]);
   expect(apiFetch.mock.calls.some((c) => String(c[0]).includes('check-capabilities'))).toBe(false);
 });
+
+test('tri : clic sur « Modèle » (croissant, décroissant, ordre d’origine) et sur « Fournisseur »', async () => {
+  const user = userEvent.setup();
+  renderPage('admin');
+  await screen.findByRole('link', { name: 'Claude Opus 5.5' });
+  const names = () => screen.getAllByRole('link').map((a) => a.textContent).filter((t) => t === 'Claude Opus 5.5' || t === 'Mistral Large');
+  await user.click(screen.getByRole('button', { name: /^Modèle/ }));
+  expect(screen.getByRole('columnheader', { name: /Modèle/ })).toHaveAttribute('aria-sort', 'ascending');
+  expect(names()).toEqual(['Claude Opus 5.5', 'Mistral Large']);
+  await user.click(screen.getByRole('button', { name: /^Modèle/ }));
+  expect(names()).toEqual(['Mistral Large', 'Claude Opus 5.5']);
+  await user.click(screen.getByRole('button', { name: /^Modèle/ }));
+  expect(screen.getByRole('columnheader', { name: /Modèle/ })).not.toHaveAttribute('aria-sort');
+  await user.click(screen.getByRole('button', { name: /^Fournisseur/ }));
+  await user.click(screen.getByRole('button', { name: /^Fournisseur/ }));
+  expect(screen.getByRole('columnheader', { name: /Fournisseur/ })).toHaveAttribute('aria-sort', 'descending');
+  expect(names()).toEqual(['Mistral Large', 'Claude Opus 5.5']);
+});

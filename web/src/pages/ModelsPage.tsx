@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { MODELS_KEY, PROVIDERS_KEY, listModels, listProviders } from '../api/catalog';
+import { MODELS_KEY, PROVIDERS_KEY, listModels, listProviders, type PublicModel } from '../api/catalog';
 import { messageForError } from '../api/messages';
 import { useAuth } from '../auth/AuthProvider';
 import { formatContextShort, formatPricePair } from '../components/catalog/format';
@@ -14,6 +14,18 @@ import { Chip } from '../components/ui/Chip';
 import { HelpButton } from '../components/ui/HelpButton';
 import { InfoTip } from '../components/ui/InfoTip';
 import { SelectField } from '../components/ui/SelectField';
+
+type SortKey = 'name' | 'provider';
+const collator = new Intl.Collator('fr', { sensitivity: 'base', numeric: true });
+
+/** Modèles triés par nom, ou par fournisseur puis nom ; ordre alphabétique français (accents, nombres). */
+export function sortModels(models: PublicModel[], key: SortKey, dir: 'asc' | 'desc'): PublicModel[] {
+  const sign = dir === 'asc' ? 1 : -1;
+  return [...models].sort((a, b) => {
+    const primary = key === 'provider' ? collator.compare(a.providerName, b.providerName) : 0;
+    return sign * (primary || collator.compare(a.displayName, b.displayName));
+  });
+}
 
 function Flag({ label, on }: { label: string; on: boolean }) {
   return (
@@ -73,7 +85,27 @@ export function ModelsPage() {
 
   const all = models.data ?? [];
   const providerOptions = [...new Map(all.map((m) => [m.providerId, m.providerName])).entries()].map(([value, label]) => ({ value, label }));
-  const rows = all.filter((m) => (providerId === '' || m.providerId === providerId) && (!availableOnly || m.available));
+  // Tri au clic sur « Modèle » ou « Fournisseur » : croissant, puis décroissant, puis ordre d'origine.
+  const [sort, setSort] = useState<{ key: SortKey; dir: 'asc' | 'desc' } | null>(null);
+  const filtered = all.filter((m) => (providerId === '' || m.providerId === providerId) && (!availableOnly || m.available));
+  const rows = sort ? sortModels(filtered, sort.key, sort.dir) : filtered;
+  const cycle = (key: SortKey) => setSort((s) => (s?.key !== key ? { key, dir: 'asc' } : s.dir === 'asc' ? { key, dir: 'desc' } : null));
+  const header = (key: SortKey, label: string) => {
+    const active = sort?.key === key;
+    return (
+      <th scope="col" aria-sort={active ? (sort.dir === 'asc' ? 'ascending' : 'descending') : undefined} className="px-4 py-3 font-medium">
+        <button
+          type="button"
+          onClick={() => cycle(key)}
+          title={active && sort.dir === 'desc' ? 'Revenir à l’ordre d’origine' : 'Trier'}
+          className={`inline-flex cursor-pointer items-center gap-1 border-0 bg-transparent p-0 text-xs font-medium ${active ? 'text-white' : 'text-mute hover:text-white'}`}
+        >
+          {label}
+          <span aria-hidden="true">{active ? (sort.dir === 'asc' ? '↑' : '↓') : '↕'}</span>
+        </button>
+      </th>
+    );
+  };
 
   return (
     <div className="mx-auto max-w-[1100px]">
@@ -142,8 +174,8 @@ export function ModelsPage() {
           <table className="table-sticky-first w-full border-collapse text-sm">
             <thead>
               <tr className="text-left text-xs text-mute">
-                <th className="px-4 py-3 font-medium">Modèle</th>
-                <th className="px-4 py-3 font-medium">Fournisseur</th>
+                {header('name', 'Modèle')}
+                {header('provider', 'Fournisseur')}
                 <th className="px-4 py-3 font-medium">Prix $/M</th>
                 <th className="px-4 py-3 text-center font-medium">Vision</th>
                 <th className="px-4 py-3 text-center font-medium">PDF</th>

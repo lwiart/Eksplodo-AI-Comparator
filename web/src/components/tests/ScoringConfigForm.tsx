@@ -1,4 +1,5 @@
 import { Field } from '../ui/Field';
+import { InfoTip } from '../ui/InfoTip';
 import { TextArea } from '../ui/TextArea';
 import type { ExpectedConfig, JudgeConfig, ScoringConfig, ScoringMethod } from '../../api/tests';
 
@@ -225,6 +226,34 @@ export function ScoringConfigForm({ value, onChange, errors }: Props) {
                 hint="gimsuy"
                 onChange={(e) => set('flags', e.target.value)}
               />
+              <div className="col-span-full flex items-start gap-2 text-xs text-mute">
+                <p className="m-0">
+                  Expression régulière JavaScript, écrite sans les barres obliques autour (par exemple <code className="font-mono text-ink">^1$</code>, pas{' '}
+                  <code className="font-mono text-ink">/^1$/</code>). Elle est cherchée dans toute la réponse (50 000 premiers caractères) : la note vaut 100
+                  si elle trouve une correspondance, 0 sinon.
+                </p>
+                <InfoTip label="Écrire une expression régulière" width="w-80" align="right">
+                  <span className="block font-semibold text-white">Exemples</span>
+                  <span className="block font-mono">Paris</span>
+                  <span className="mb-1 block">le mot, n’importe où dans la réponse</span>
+                  <span className="block font-mono">^1$</span>
+                  <span className="mb-1 block">la réponse entière vaut exactement 1 (avec le drapeau m : une ligne vaut 1)</span>
+                  <span className="block font-mono">{String.raw`\b1957\b`}</span>
+                  <span className="mb-1 block">le nombre 1957 seul, pas 19570</span>
+                  <span className="block font-mono">(oui|yes)</span>
+                  <span className="mb-1 block">l’un ou l’autre</span>
+                  <span className="block font-mono">{String.raw`\d+ ?€`}</span>
+                  <span className="mb-2 block">un nombre suivi de « € »</span>
+                  <span className="block font-semibold text-white">À savoir</span>
+                  <span className="block">
+                    Caractères à précéder d’une barre oblique inverse pour les chercher tels quels : <code className="font-mono">{String.raw`. * + ? ( ) [ ] { } | ^ $ \ `}</code>
+                  </span>
+                  <span className="mt-1 block">
+                    Drapeaux : i majuscules ignorées, m ^ et $ valent pour chaque ligne, s le point inclut les retours à la ligne, u Unicode.
+                  </span>
+                  <span className="mt-1 block">Une expression trop lente (plus d’une seconde) donne 0.</span>
+                </InfoTip>
+              </div>
             </div>
           ) : null}
         </>
