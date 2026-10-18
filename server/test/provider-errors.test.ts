@@ -78,3 +78,18 @@ test('readableDetail : message des corps JSON Anthropic, OpenAI, Google, sinon t
   expect(readableDetail('')).toBe('');
   expect(readableDetail('x'.repeat(400))).toHaveLength(300);
 });
+
+test('refus de contenu (modération, cybersécurité) reconnu quel que soit le code HTTP, sans nouvelle tentative', () => {
+  const flagged = '{"error":{"code":403,"message":"This content was flagged for possible cybersecurity risk."}}';
+  const forbidden = httpError(403, flagged, {}, []);
+  expect(forbidden.code).toBe('content_refused');
+  expect(forbidden.message).toBe('Contenu refusé par le fournisseur (politique de contenu)');
+  expect(forbidden.retryable).toBe(false);
+  // Erreur dans le flux sans code numérique (502 par défaut) : code « cyber_policy » du fournisseur.
+  expect(httpError(502, '{"error":{"type":"invalid_request_error","code":"cyber_policy"}}', {}, []).code).toBe('content_refused');
+  expect(httpError(400, '{"error":{"code":"content_filter"}}', {}, []).code).toBe('content_refused');
+  // Une vraie clé refusée reste une clé refusée.
+  expect(httpError(401, '{"error":"invalid x-api-key"}', {}, []).code).toBe('auth_invalid');
+  const signal = new AbortController().signal;
+  expect(thrownError(new Error('content was flagged by moderation'), signal, []).code).toBe('content_refused');
+});

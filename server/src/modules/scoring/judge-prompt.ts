@@ -1,5 +1,6 @@
 // Prompt du juge : la réponse évaluée est une donnée encadrée par des balises, jamais une instruction.
 import type { GenerateRequest } from '../providers/types.js';
+import { withReasoningMargin } from '../runs/call.js';
 import type { TestSnapshot } from '../runs/snapshot.js';
 import type { JudgeConfig } from '../tests/scoring-config.js';
 
@@ -42,6 +43,6 @@ export function buildJudgeRequest(input: JudgeInput): GenerateRequest {
     prompt: parts.join('\n\n'),
     attachments,
     temperature: 0,
-    maxTokens: 800,
+    maxTokens: withReasoningMargin(800),
   };
 }

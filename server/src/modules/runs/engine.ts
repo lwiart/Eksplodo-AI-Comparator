@@ -39,7 +39,7 @@ import {
 import { pendingExpectedScores } from '../scoring/expected.js';
 import { parseJudgeReply } from '../scoring/judge-parse.js';
 import { recordUsage } from '../usage/usage.js';
-import { buildRequest, measureCall, type CallOutcome, type ModelPrices } from './call.js';
+import { buildRequest, isTruncatedEmpty, measureCall, truncatedMessage, withReasoningMargin, type CallOutcome, type ModelPrices } from './call.js';
 import { estimateInputTokens, maxCallCostUsd } from './estimate.js';
 import { RUN_EXECUTE, enqueueRunJob, withTxRetry } from './run-job.js';
 import type { TestSnapshot } from './snapshot.js';
@@ -102,7 +102,7 @@ type WorkItem = GenerateItem | JudgeItem;
 /** Contrôle avant un lancement ; `inFlightUsd` : réservations comptées, `fits` : un appel de ce coût maximal tiendrait. */
 type LaunchCheck = { verdict: 'ok' | 'stopped' | 'over_budget'; inFlightUsd: number; fits(costUsd: number): boolean };
 
-const FINISHED_STATUSES = ['done', 'error', 'timeout', 'unsupported'] as const;
+const FINISHED_STATUSES = ['done', 'error', 'timeout', 'unsupported', 'truncated'] as const;
 
 /** Attente annulable : rejette avec la raison du signal. */
 function abortableSleep(ms: number, signal: AbortSignal): Promise<void> {
@@ -426,13 +426,15 @@ export async function executeRunSlice(deps: EngineDeps, job: Job, ctx: JobContex
 
   async function finishDone(item: GenerateItem, o: CallOutcome): Promise<void> {
     const costUsd = roundUsd(o.costUsd ?? 0);
+    // Réflexion qui a épuisé la limite avant tout texte : réponse « tronquée », facturée mais ni jugée ni notée.
+    const truncated = isTruncatedEmpty(o);
     const committed = await withTxRetry(() =>
       db.transaction(async (tx) => {
         const res = await tx
           .update(results)
           .set({
-            status: 'done',
-            responseText: o.text,
+            status: truncated ? 'truncated' : 'done',
+            responseText: truncated ? null : o.text,
             finishReason: o.finishReason,
             inputTokens: o.inputTokens,
             outputTokens: o.outputTokens,
@@ -443,8 +445,8 @@ export async function executeRunSlice(deps: EngineDeps, job: Job, ctx: JobContex
             tokensPerS: o.tokensPerS,
             costUsd,
             costSource: o.costSource,
-            errorCode: null,
-            errorMessage: null,
+            errorCode: truncated ? 'truncated' : null,
+            errorMessage: truncated ? truncatedMessage(withReasoningMargin(item.snapshot.maxTokens)) : null,
             completedAt: ctx.now(),
           })
           .where(and(eq(results.id, item.resultId), eq(results.status, 'running')));
@@ -469,7 +471,7 @@ export async function executeRunSlice(deps: EngineDeps, job: Job, ctx: JobContex
     if (!committed) return;
     finished++;
     // Test noté par le juge : sa note rejoint la file de la tranche (même concurrence, même plafond).
-    if (item.snapshot.scoringMethod === 'judge') {
+    if (item.snapshot.scoringMethod === 'judge' && !truncated) {
       await addJudgements([{ resultId: item.resultId, snapshot: item.snapshot, responseChars: o.text.length }]);
     }
     await notifyFinished(item.resultId);

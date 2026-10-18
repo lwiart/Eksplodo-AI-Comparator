@@ -13,6 +13,7 @@ import { ProviderError, httpError } from '../src/modules/providers/errors.js';
 import { resetFakeCallCounters } from '../src/modules/providers/fake.js';
 import { createProviderRegistry, type ProviderLike } from '../src/modules/providers/registry.js';
 import type { GenerateEvent, ProviderAdapter } from '../src/modules/providers/types.js';
+import { withReasoningMargin } from '../src/modules/runs/call.js';
 import { executeRunSlice, type EngineDeps } from '../src/modules/runs/engine.js';
 import { createOnResultFinished } from '../src/modules/scoring/on-result.js';
 import { createRunsService } from '../src/modules/runs/runs.service.js';
@@ -591,6 +592,28 @@ test('modèle à raisonnement : coût sans double compte du raisonnement', async
     const expected = Math.round(((r.inputTokens! * 2 + (r.outputTokens! + 24) * 8) / 1_000_000) * 1e6) / 1e6;
     expect(r.costUsd).toBeCloseTo(expected, 6);
   }
+});
+
+test('réflexion qui épuise la limite : réponse « tronquée », facturée, ni notée ni jugée ; limite envoyée = test + marge', async () => {
+  const { runId } = await seedRun({
+    prompts: ['[[fake:think-to-limit]] Écris une nouvelle'],
+    scoring: { method: 'expected', config: { mode: 'regex', pattern: '.', flags: '' } },
+  });
+  await drain(engineDeps({ onResultFinished: createOnResultFinished({ db: t.db }) }));
+  const rows = await resultRows(runId);
+  expect(rows).toHaveLength(2);
+  const sent = withReasoningMargin(1000);
+  expect(sent).toBe(5000);
+  for (const r of rows) {
+    expect(r).toMatchObject({ status: 'truncated', responseText: null, autoScore: null, errorCode: 'truncated', finishReason: 'length' });
+    expect(r.scoreStatus).not.toBe('done');
+    // La limite envoyée au fournisseur inclut la marge de réflexion (le faux modèle réfléchit jusqu'à elle).
+    expect(r.reasoningTokens).toBe(sent);
+    expect(r.errorMessage).toBe(`Aucun texte : la limite de ${sent} tokens a été atteinte pendant la réflexion, avant la réponse.`);
+    expect(r.costUsd).toBeGreaterThan(0);
+  }
+  expect(await t.db.select().from(aiUsage).where(eq(aiUsage.runId, runId))).toHaveLength(2);
+  expect(await runRow(runId)).toMatchObject({ status: 'completed' });
 });
 
 test('monthSpend : mois civil en Europe/Paris, part du juge séparée', async () => {

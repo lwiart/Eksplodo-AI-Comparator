@@ -158,7 +158,7 @@ test('créer une série : instantanés, résultats, tâche run_execute unique, s
     budgetUsd: 5,
     startedAt: null,
     completedAt: null,
-    counts: { pending: 8, running: 0, done: 0, error: 0, timeout: 0, unsupported: 0, total: 8 },
+    counts: { pending: 8, running: 0, done: 0, error: 0, timeout: 0, unsupported: 0, truncated: 0, total: 8 },
   });
   expect(await countOf(t, results)).toBe(2 * 2 * 2);
 
@@ -447,7 +447,7 @@ test('progress : compteurs, matrice test × modèle et activité', async () => {
   expect(p).toMatchObject({
     status: 'running',
     pauseReason: null,
-    counts: { pending: 4, running: 1, done: 2, error: 1, timeout: 0, unsupported: 0, total: 8 },
+    counts: { pending: 4, running: 1, done: 2, error: 1, timeout: 0, unsupported: 0, truncated: 0, total: 8 },
     modelsCostUsd: 0.03,
     judgeCostUsd: 0,
     budgetUsd: null,
@@ -473,16 +473,16 @@ test('progress : compteurs, matrice test × modèle et activité', async () => {
       runTestId: rtA,
       testName: 'A',
       cells: [
-        { modelId: t.modelA.id, pending: 1, running: 0, done: 1, failed: 0, unsupported: 0 },
-        { modelId: t.modelB.id, pending: 1, running: 0, done: 1, failed: 0, unsupported: 0 },
+        { modelId: t.modelA.id, pending: 1, running: 0, done: 1, failed: 0, unsupported: 0, truncated: 0 },
+        { modelId: t.modelB.id, pending: 1, running: 0, done: 1, failed: 0, unsupported: 0, truncated: 0 },
       ],
     },
     {
       runTestId: rtB,
       testName: 'B',
       cells: [
-        { modelId: t.modelA.id, pending: 1, running: 0, done: 0, failed: 1, unsupported: 0 },
-        { modelId: t.modelB.id, pending: 1, running: 1, done: 0, failed: 0, unsupported: 0 },
+        { modelId: t.modelA.id, pending: 1, running: 0, done: 0, failed: 1, unsupported: 0, truncated: 0 },
+        { modelId: t.modelB.id, pending: 1, running: 1, done: 0, failed: 0, unsupported: 0, truncated: 0 },
       ],
     },
   ]);

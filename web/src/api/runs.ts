@@ -6,7 +6,8 @@ export const DEFAULT_WEIGHTS: Weights = { quality: 50, speed: 20, cost: 20, reli
 
 export type RunStatus = 'queued' | 'running' | 'paused' | 'completed' | 'interrupted';
 export type PauseReason = 'user' | 'budget' | null;
-export type ResultStatus = 'pending' | 'running' | 'done' | 'error' | 'timeout' | 'unsupported';
+/** `truncated` : réponse vide, la réflexion du modèle a épuisé la limite de tokens. */
+export type ResultStatus = 'pending' | 'running' | 'done' | 'error' | 'timeout' | 'unsupported' | 'truncated';
 
 export type RunInput = {
   name: string;
@@ -29,6 +30,7 @@ export type StatusCounts = {
   error: number;
   timeout: number;
   unsupported: number;
+  truncated: number;
   total: number;
 };
 
@@ -64,7 +66,7 @@ export type RunSummary = {
   counts: StatusCounts;
 };
 
-export type MatrixCell = { modelId: string; pending: number; running: number; done: number; failed: number; unsupported: number };
+export type MatrixCell = { modelId: string; pending: number; running: number; done: number; failed: number; unsupported: number; truncated: number };
 
 export type RunProgress = {
   status: RunStatus;

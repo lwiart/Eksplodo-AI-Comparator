@@ -174,6 +174,14 @@ export function createFakeAdapter(
 
     await sleep(Math.round(profile.firstTokenMs * latencyFactor), signal);
 
+    // Modèle qui réfléchit jusqu'à épuiser la limite, sans écrire de réponse (réponse « tronquée »).
+    if (has('think-to-limit')) {
+      yield { type: 'reasoning', delta: sentence(rng, 40 * CHARS_PER_TOKEN) };
+      yield { type: 'usage', inputTokens: inputTokens(req), outputTokens: 0, reasoningTokens: req.maxTokens };
+      yield { type: 'finish', reason: 'length' };
+      return;
+    }
+
     const refusal = has('refusal');
     const forcedLength = has('length');
     const wanted = refusal ? 12 : forcedLength ? Math.max(naturalTokens, req.maxTokens + 1) : naturalTokens;

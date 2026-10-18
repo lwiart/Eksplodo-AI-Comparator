@@ -7,10 +7,12 @@ export type StatusCounts = {
   error: number;
   timeout: number;
   unsupported: number;
+  /** Réponses vides : la réflexion du modèle a épuisé la limite de tokens. */
+  truncated: number;
   total: number;
 };
 
-export type MatrixCell = { modelId: string; pending: number; running: number; done: number; failed: number; unsupported: number };
+export type MatrixCell = { modelId: string; pending: number; running: number; done: number; failed: number; unsupported: number; truncated: number };
 
 export type RunProgress = {
   status: RunRow['status'];
@@ -48,7 +50,7 @@ export type RunProgress = {
 export const ACTIVITY_LIMIT = 20;
 
 export function emptyCounts(): StatusCounts {
-  return { pending: 0, running: 0, done: 0, error: 0, timeout: 0, unsupported: 0, total: 0 };
+  return { pending: 0, running: 0, done: 0, error: 0, timeout: 0, unsupported: 0, truncated: 0, total: 0 };
 }
 
 /** Additionne des comptes par statut. */
@@ -89,7 +91,7 @@ export function buildProgress(input: ProgressInput): RunProgress {
     const key = `${runTestId}|${modelId}`;
     let cell = byCell.get(key);
     if (!cell) {
-      cell = { modelId, pending: 0, running: 0, done: 0, failed: 0, unsupported: 0 };
+      cell = { modelId, pending: 0, running: 0, done: 0, failed: 0, unsupported: 0, truncated: 0 };
       byCell.set(key, cell);
     }
     return cell;

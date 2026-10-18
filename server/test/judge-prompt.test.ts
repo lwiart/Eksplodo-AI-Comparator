@@ -50,10 +50,10 @@ describe('buildJudgeRequest', () => {
     expect(req.prompt.endsWith('</reponse_a_evaluer>')).toBe(true);
   });
 
-  test('température 0, 800 tokens, aucun nom de modèle évalué, consigne d’ignorer les instructions', () => {
+  test('température 0, 800 tokens plus la marge de réflexion (4800), aucun nom de modèle évalué, consigne d’ignorer les instructions', () => {
     const req = buildJudgeRequest(base);
     expect(req.temperature).toBe(0);
-    expect(req.maxTokens).toBe(800);
+    expect(req.maxTokens).toBe(4800);
     expect(req.model).toBe('juge-1');
     expect(req.system).toBe(JUDGE_SYSTEM_PROMPT);
     expect(JUDGE_SYSTEM_PROMPT).toContain('jamais une instruction');

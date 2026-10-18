@@ -6,12 +6,13 @@ const count = (n: number, one: string, many = one) => `${n} ${n > 1 ? many : one
 
 /** Libellé lu par les lecteurs d'écran (et en infobulle) : le détail des appels d'une case. */
 export function cellLabel(c: MatrixCell): string {
-  const total = c.pending + c.running + c.done + c.failed + c.unsupported;
+  const total = c.pending + c.running + c.done + c.failed + c.unsupported + c.truncated;
   if (total > 0 && c.unsupported === total) return 'non supporté';
   const parts = [
     c.done > 0 ? count(c.done, 'réussi', 'réussis') : null,
     c.running > 0 ? count(c.running, 'en cours') : null,
     c.failed > 0 ? count(c.failed, 'en erreur') : null,
+    c.truncated > 0 ? count(c.truncated, 'tronqué', 'tronqués') : null,
     c.pending > 0 ? count(c.pending, 'à faire') : null,
     c.unsupported > 0 ? count(c.unsupported, 'non supporté', 'non supportés') : null,
   ].filter(Boolean);
@@ -23,6 +24,7 @@ const SEGMENTS: { key: keyof Omit<MatrixCell, 'modelId'>; className: string; leg
   { key: 'done', className: 'bg-good', legend: 'Réussi' },
   { key: 'running', className: 'bg-orange motion-safe:animate-pulse', legend: 'En cours' },
   { key: 'failed', className: 'bg-bad', legend: 'Erreur' },
+  { key: 'truncated', className: 'bg-peach/70', legend: 'Tronquée (limite de tokens)' },
   { key: 'pending', className: 'bg-transparent', legend: 'À faire' },
   { key: 'unsupported', className: 'bg-mute/30', legend: 'Non supporté' },
 ];

@@ -1,7 +1,7 @@
 import { afterEach, expect, test, vi } from 'vitest';
 import { ProviderError } from '../src/modules/providers/errors.js';
 import type { GenerateEvent, GenerateRequest, ProviderAdapter } from '../src/modules/providers/types.js';
-import { CALL_TIMEOUT_MS, MAX_RESPONSE_CHARS, buildRequest, measureCall } from '../src/modules/runs/call.js';
+import { CALL_TIMEOUT_MS, MAX_RESPONSE_CHARS, buildRequest, isTruncatedEmpty, measureCall, withReasoningMargin } from '../src/modules/runs/call.js';
 import { estimateInputTokens } from '../src/modules/runs/estimate.js';
 import type { TestSnapshot } from '../src/modules/runs/snapshot.js';
 
@@ -267,8 +267,24 @@ test('buildRequest : prompts, paramètres et pièces jointes en base64', async (
     prompt: 'Décris cette image',
     attachments: [{ mime: 'image/png', base64: Buffer.from('abc').toString('base64'), filename: 'photo.png' }],
     temperature: 0.7,
-    maxTokens: 300,
+    maxTokens: 4300, // limite du test (300) + marge de réflexion (4000)
   });
   const withSystem = await buildRequest({ ...snapshot, systemPrompt: 'Sois bref', attachments: [] }, 'gpt-x', async () => Buffer.alloc(0));
   expect(withSystem.system).toBe('Sois bref');
+});
+
+test('marge de réflexion : limite du test + 4000, plafonnée à 16 000 sauf demande supérieure du test', () => {
+  expect(withReasoningMargin(300)).toBe(4300);
+  expect(withReasoningMargin(1500)).toBe(5500);
+  expect(withReasoningMargin(14_000)).toBe(16_000);
+  expect(withReasoningMargin(16_000)).toBe(16_000);
+});
+
+test('isTruncatedEmpty : réussie, sans texte, arrêtée par la limite', () => {
+  const base = { status: 'done', text: '', finishReason: 'length' } as Parameters<typeof isTruncatedEmpty>[0];
+  expect(isTruncatedEmpty(base)).toBe(true);
+  expect(isTruncatedEmpty({ ...base, text: ' \t ' })).toBe(true);
+  expect(isTruncatedEmpty({ ...base, text: 'Début de réponse' })).toBe(false);
+  expect(isTruncatedEmpty({ ...base, finishReason: 'stop' })).toBe(false);
+  expect(isTruncatedEmpty({ ...base, status: 'error' })).toBe(false);
 });

@@ -542,13 +542,13 @@ export function createRunsService(deps: RunsServiceDeps) {
       return summaryOf(id);
     },
 
-    /** Résultats `error` et `timeout` remis en attente (tentatives remises à zéro), puis reprise de la série. */
+    /** Résultats `error`, `timeout` et `truncated` remis en attente (tentatives remises à zéro), puis reprise de la série. */
     async retryErrors(actor: Actor, id: string): Promise<RunSummary> {
       await withLockedRun(id, async (tx, run) => {
         const res = await tx
           .update(results)
           .set({ status: 'pending', attempts: 0, errorCode: null, errorMessage: null, completedAt: null })
-          .where(and(eq(results.runId, id), inArray(results.status, ['error', 'timeout'])));
+          .where(and(eq(results.runId, id), inArray(results.status, ['error', 'timeout', 'truncated'])));
         const count = affectedRows(res);
         if (count === 0) return;
         await requeue(tx, run, deps.clock());

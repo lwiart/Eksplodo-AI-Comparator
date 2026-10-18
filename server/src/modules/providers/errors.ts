@@ -8,6 +8,7 @@ export type ProviderErrorCode =
   | 'timeout'
   | 'context_too_long'
   | 'bad_request'
+  | 'content_refused'
   | 'invalid_response';
 
 const MESSAGES: Record<ProviderErrorCode, string> = {
@@ -18,6 +19,7 @@ const MESSAGES: Record<ProviderErrorCode, string> = {
   timeout: 'Délai dépassé',
   context_too_long: 'Contexte trop long pour ce modèle',
   bad_request: 'Requête refusée par le fournisseur',
+  content_refused: 'Contenu refusé par le fournisseur (politique de contenu)',
   invalid_response: 'Réponse du fournisseur illisible',
 };
 
@@ -103,8 +105,11 @@ function parseRetryAfter(value: string | null): number | null {
 const CONTEXT_TOO_LONG =
   /context_length_exceeded|maximum context length|prompt is too long|too many tokens|exceeds the context window|input token count/i;
 const KEY_INVALID = /API_KEY_INVALID|API key not valid/i;
+/** Blocage par la politique de contenu du fournisseur (modération, cybersécurité…), quel que soit le code HTTP renvoyé. */
+const CONTENT_REFUSED = /content was flagged|flagged for possible|cyber_policy|content[_ ]policy|content_filter|moderation|safety system/i;
 
 function classify(status: number, body: string): ProviderErrorCode {
+  if (status >= 400 && CONTENT_REFUSED.test(body)) return 'content_refused';
   if (status === 401 || status === 403) return 'auth_invalid';
   if (status === 404) return 'model_not_found';
   if (status === 408) return 'timeout';
@@ -149,5 +154,6 @@ export function thrownError(err: unknown, signal: AbortSignal, secrets: (string 
   }
   if (isTimeout(err)) return new ProviderError('timeout');
   const text = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
+  if (CONTENT_REFUSED.test(text)) return new ProviderError('content_refused', { detail: safeDetail(text, secrets) });
   return new ProviderError('provider_unavailable', { detail: safeDetail(text, secrets) });
 }

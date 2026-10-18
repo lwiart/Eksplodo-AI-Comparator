@@ -867,3 +867,18 @@ test('Utilisateur : 403 sur pause, resume, retry-errors, models, PATCH', async (
   // Série inconnue : 404 pour l'Admin.
   expect((await t.post(`/api/runs/${randomUUID()}/pause`)).statusCode).toBe(404);
 });
+
+test('« Relancer les erreurs » remet aussi en file les réponses tronquées', async () => {
+  const t = await setup({ models: 2 });
+  const [m0, m1] = t.modelIds as [string, string];
+  const runId = await t.createRun(['Un'], { modelIds: [m0, m1] });
+  await t.db
+    .update(results)
+    .set({ status: 'truncated', attempts: 1, errorCode: 'truncated', errorMessage: 'Aucun texte' })
+    .where(and(eq(results.runId, runId), eq(results.modelId, m1)));
+  expect((await t.post(`/api/runs/${runId}/pause`)).statusCode).toBe(200);
+  const retried = await t.post(`/api/runs/${runId}/retry-errors`);
+  expect(retried.statusCode).toBe(200);
+  const row = (await t.resultRows(runId)).find((r) => r.modelId === m1)!;
+  expect(row).toMatchObject({ status: 'pending', attempts: 0, errorCode: null, errorMessage: null });
+});

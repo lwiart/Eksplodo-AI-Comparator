@@ -144,6 +144,27 @@ export async function measureCall(
   };
 }
 
+/**
+ * Marge de réflexion ajoutée à la limite de sortie d'un test : les modèles qui réfléchissent comptent cette réflexion dans
+ * la même limite et pouvaient l'épuiser sans écrire de réponse. Un modèle qui ne réfléchit pas ne consomme rien de plus.
+ */
+export const REASONING_MARGIN = 4000;
+/** Plafond de la limite envoyée (marge comprise), sauf si le test demande lui-même davantage. */
+export const MAX_REQUEST_TOKENS = 16_000;
+
+/** Limite de tokens envoyée au fournisseur : celle du test, plus la marge de réflexion, dans la limite du plafond. */
+export function withReasoningMargin(maxTokens: number): number {
+  return Math.max(maxTokens, Math.min(maxTokens + REASONING_MARGIN, MAX_REQUEST_TOKENS));
+}
+
+/** Réponse coupée par la limite avant tout texte : la réflexion a consommé toute la limite. */
+export function isTruncatedEmpty(o: CallOutcome): boolean {
+  return o.status === 'done' && o.text.trim() === '' && o.finishReason === 'length';
+}
+
+export const truncatedMessage = (maxTokens: number): string =>
+  `Aucun texte : la limite de ${maxTokens} tokens a été atteinte pendant la réflexion, avant la réponse.`;
+
 /** Requête d'un test figé pour un modèle ; `readFile` lit le contenu d'une pièce jointe. */
 export async function buildRequest(
   snapshot: TestSnapshot,
@@ -159,6 +180,6 @@ export async function buildRequest(
     prompt: snapshot.userPrompt,
     attachments,
     temperature: snapshot.temperature,
-    maxTokens: snapshot.maxTokens,
+    maxTokens: withReasoningMargin(snapshot.maxTokens),
   };
 }

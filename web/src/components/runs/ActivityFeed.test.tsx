@@ -31,3 +31,8 @@ test('fil d’activité : durée affichée, ou « Réponse reçue » quand elle 
   expect(hidden).toHaveTextContent('GPT Test');
   expect(hidden).toHaveTextContent('Réponse reçue');
 });
+
+test('fil d’activité : réponse tronquée signalée comme telle', () => {
+  render(<ActivityFeed activity={[item({ resultId: 't', status: 'truncated', totalMs: 9000 })]} />);
+  expect(screen.getByRole('listitem')).toHaveTextContent('Tronquée : limite de tokens atteinte');
+});

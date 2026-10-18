@@ -98,7 +98,7 @@ export const results = mysqlTable(
       .notNull()
       .references(() => models.id, { onDelete: 'restrict' }),
     repetition: int('repetition').notNull(),
-    status: mysqlEnum('status', ['pending', 'running', 'done', 'error', 'timeout', 'unsupported']).notNull(),
+    status: mysqlEnum('status', ['pending', 'running', 'done', 'error', 'timeout', 'unsupported', 'truncated']).notNull(),
     attempts: int('attempts').notNull().default(0),
     responseText: mediumtext('response_text'),
     finishReason: varchar('finish_reason', { length: 20 }),

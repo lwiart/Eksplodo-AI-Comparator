@@ -64,6 +64,7 @@ const STATUS_LABELS: Record<ResultStatus, string> = {
   error: 'erreur',
   timeout: 'délai dépassé',
   unsupported: 'non pris en charge',
+  truncated: 'tronquée',
 };
 
 const CSV_HEADER = [

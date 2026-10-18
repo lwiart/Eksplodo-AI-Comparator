@@ -297,3 +297,29 @@ test('pièces jointes du test : vignettes au-dessus des réponses, visionneuse i
   await user.keyboard('{ArrowRight}');
   expect(within(dialog).getByRole('img', { name: 'plan.png' })).toHaveAttribute('src', '/api/runs/r1/answers/rt1/attachments/0?inline=1');
 });
+
+test('réponse tronquée : message orange avec la cause et l’indication de relance ; erreur longue sans débordement', async () => {
+  answersBody = {
+    test: TEST_INFO,
+    answers: [
+      answer({
+        resultId: 't1',
+        status: 'truncated',
+        responseText: null,
+        finalScore: null,
+        autoScore: null,
+        judgeRationale: null,
+        errorMessage: 'Aucun texte : la limite de 1500 tokens a été atteinte pendant la réflexion, avant la réponse.',
+      }),
+      answer({ resultId: 'e1', modelName: 'GPT Test', status: 'error', responseText: null, finalScore: null, errorMessage: 'Requête refusée : {"error":{"message":"file_must_have_a_file_id_or_file_data"}}' }),
+    ],
+  };
+  renderBlock(true);
+  const card = await screen.findByRole('article', { name: 'Claude Opus, répétition 1' });
+  const message = within(card).getByText(/Réponse tronquée\./).closest('p')!;
+  expect(message).toHaveTextContent('la limite de 1500 tokens a été atteinte pendant la réflexion');
+  expect(message).toHaveClass('text-peach');
+  expect(within(card).getByText(/Relancer les erreurs/)).toBeInTheDocument();
+  const error = within(screen.getByRole('article', { name: 'GPT Test, répétition 1' })).getByText(/Requête refusée/);
+  expect(error).toHaveClass('[overflow-wrap:anywhere]', 'text-bad');
+});

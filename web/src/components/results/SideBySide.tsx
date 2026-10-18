@@ -152,8 +152,16 @@ function AnswerCard({
           <ScoreDetail a={answer} />
         </span>
       </header>
-      {failed ? (
-        <p className="m-0 text-sm text-bad">{answer.errorMessage ?? 'Pas de réponse pour ce résultat.'}</p>
+      {answer.status === 'truncated' ? (
+        <div className="flex flex-col gap-1">
+          <p className="m-0 text-sm [overflow-wrap:anywhere] text-peach">
+            <b>Réponse tronquée.</b> {answer.errorMessage ?? 'Aucun texte : la limite de tokens a été atteinte pendant la réflexion.'}
+          </p>
+          <p className="m-0 text-xs text-mute">Elle n’entre pas dans la note. « Relancer les erreurs » la rejoue avec une marge de réflexion.</p>
+        </div>
+      ) : failed ? (
+        // Message du fournisseur souvent long et sans espaces (JSON) : il passe à la ligne au lieu de déborder de la carte.
+        <p className="m-0 text-sm [overflow-wrap:anywhere] text-bad">{answer.errorMessage ?? 'Pas de réponse pour ce résultat.'}</p>
       ) : (
         <div className="max-h-[360px] overflow-y-auto pr-1 text-ink">
           {answer.responseText ? <Markdown text={answer.responseText} /> : <span className="text-mute">Réponse vide.</span>}

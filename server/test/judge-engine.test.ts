@@ -59,7 +59,8 @@ test('série avec tests notés par le juge : chaque réponse est notée, coût d
   // Requêtes du juge : modèle juge, température 0, 800 tokens, sans le nom du modèle évalué, réponse encadrée.
   expect(judgeRequests).toHaveLength(8);
   for (const req of judgeRequests) {
-    expect(req).toMatchObject({ model: 'fake-juge-1', temperature: 0, maxTokens: 800 });
+    // Limite du juge (800) plus la marge de réflexion : un juge qui réfléchit garde de quoi rendre son verdict.
+    expect(req).toMatchObject({ model: 'fake-juge-1', temperature: 0, maxTokens: 4800 });
     expect(req.prompt).not.toMatch(/Modèle \d|fake-modele/);
     expect(req.prompt).toContain('<reponse_a_evaluer>');
   }

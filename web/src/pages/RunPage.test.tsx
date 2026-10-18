@@ -13,8 +13,8 @@ vi.mock('../api/client', async (importOriginal) => ({
   apiFetch,
 }));
 
-const counts = (over: Record<string, number> = {}) => ({ pending: 0, running: 0, done: 0, error: 0, timeout: 0, unsupported: 0, total: 0, ...over });
-const cell = (modelId: string, over: Record<string, number> = {}) => ({ modelId, pending: 0, running: 0, done: 0, failed: 0, unsupported: 0, ...over });
+const counts = (over: Record<string, number> = {}) => ({ pending: 0, running: 0, done: 0, error: 0, timeout: 0, unsupported: 0, truncated: 0, total: 0, ...over });
+const cell = (modelId: string, over: Record<string, number> = {}) => ({ modelId, pending: 0, running: 0, done: 0, failed: 0, unsupported: 0, truncated: 0, ...over });
 
 const SUMMARY = {
   id: 'r1',
