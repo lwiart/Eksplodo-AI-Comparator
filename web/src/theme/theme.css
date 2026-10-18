@@ -197,6 +197,52 @@ html[data-animations="off"] .reveal-in { animation: none; }
   .ranking-definitions {
     break-inside: avoid;
   }
+  /* Matrice « Qualité par catégorie » : tient en largeur sur une page A4 portrait (colonnes égales, en-têtes sur
+     plusieurs lignes), sans défilement ; les fonds des cases s'impriment (print-color-adjust plus bas). */
+  .heatmap-scroll {
+    overflow: visible !important;
+  }
+  .heatmap-table {
+    table-layout: fixed;
+    width: 100%;
+    border-spacing: 1.5pt;
+  }
+  .heatmap-table th,
+  .heatmap-table td {
+    min-width: 0;
+    max-width: none;
+    padding: 2pt 1.5pt;
+    font-size: 7.5pt;
+    line-height: 1.2;
+    overflow-wrap: anywhere;
+    hyphens: auto;
+  }
+  .heatmap-table th *,
+  .heatmap-table td * {
+    font-size: inherit;
+  }
+  .heatmap-table small {
+    font-size: 6.5pt;
+  }
+  .heatmap-table button {
+    padding: 0;
+  }
+  .heatmap-table thead th:first-child {
+    width: 18%;
+  }
+  .heatmap-table tr {
+    break-inside: avoid;
+  }
+  /* Colonne des modèles : plus fixe ni sombre sur papier. */
+  .heatmap-model {
+    position: static !important;
+    background: #fff !important;
+    white-space: normal !important;
+  }
+  .heatmap-empty {
+    background: #eef2f5 !important;
+    color: #4a5f6b !important;
+  }
   .ranking-definitions dl {
     font-size: 8pt;
   }

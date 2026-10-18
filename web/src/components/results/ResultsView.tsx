@@ -6,14 +6,14 @@ import { RUNS_KEY, updateRun, type Weights } from '../../api/runs';
 import { rankedRows, sameWeights } from '../../lib/ranking';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
-import { CategoryChart } from './CategoryChart';
+import { CategoryHeatmap } from './CategoryHeatmap';
 import { Constellation } from './Constellation';
 import { Podium } from './Podium';
 import { QualitySpeedChart } from './QualitySpeedChart';
 import { RankingTable } from './RankingTable';
 import { WeightSliders } from './WeightSliders';
 
-/** Nombre de modèles tracés dans les graphes (les mieux classés). */
+/** Nombre de modèles tracés dans le nuage qualité et vitesse (les mieux classés) ; la matrice par catégorie les montre tous. */
 const CHART_MODELS = 6;
 
 /** Vue résultats d'une série : podium et pondération, graphes, classement ; le classement se recalcule sans appel serveur. */
@@ -21,7 +21,8 @@ export default function ResultsView({ runId, ranking, isAdmin }: { runId: string
   const queryClient = useQueryClient();
   const [weights, setWeights] = useState<Weights>(ranking.weights);
   const rows = useMemo(() => rankedRows(ranking.models, weights), [ranking.models, weights]);
-  const chartModels = useMemo(() => rows.slice(0, CHART_MODELS).map((r) => r.model), [rows]);
+  const rankedModels = useMemo(() => rows.map((r) => r.model), [rows]);
+  const chartModels = useMemo(() => rankedModels.slice(0, CHART_MODELS), [rankedModels]);
   const changed = !sameWeights(weights, ranking.weights);
 
   const save = useMutation({
@@ -83,25 +84,24 @@ export default function ResultsView({ runId, ranking, isAdmin }: { runId: string
         </Card>
       </div>
 
-      {rows.length > CHART_MODELS ? (
-        <p className="m-0 text-xs text-mute">
-          Graphes : {CHART_MODELS} premiers modèles sur {rows.length}, selon la pondération actuelle.
-        </p>
-      ) : null}
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Card>
-          <h2 className="m-0 mb-2 font-display text-sm font-bold text-white">
-            Qualité et vitesse <span className="ml-1 font-mono text-[11px] font-medium text-mute">en haut à droite : idéal</span>
-          </h2>
-          <QualitySpeedChart models={chartModels} />
-        </Card>
-        <Card>
-          <h2 className="m-0 mb-2 font-display text-sm font-bold text-white">
-            Qualité par catégorie de test <span className="ml-1 font-mono text-[11px] font-medium text-mute">note moyenne sur 100</span>
-          </h2>
-          <CategoryChart models={chartModels} categories={ranking.categories} />
-        </Card>
-      </div>
+      {/* Nuage puis matrice, chacun sur toute la largeur : la matrice a besoin de place pour ses colonnes. */}
+      <Card className="min-w-0">
+        <h2 className="m-0 mb-2 font-display text-sm font-bold text-white">
+          Qualité et vitesse <span className="ml-1 font-mono text-[11px] font-medium text-mute">en haut à droite : idéal</span>
+        </h2>
+        {rows.length > CHART_MODELS ? (
+          <p className="m-0 mb-2 text-xs text-mute">
+            {CHART_MODELS} premiers modèles sur {rows.length}, selon la pondération actuelle ; la matrice par catégorie les montre tous.
+          </p>
+        ) : null}
+        <QualitySpeedChart models={chartModels} />
+      </Card>
+      <Card className="min-w-0">
+        <h2 className="m-0 mb-2 font-display text-sm font-bold text-white">
+          Qualité par catégorie de test <span className="ml-1 font-mono text-[11px] font-medium text-mute">note moyenne sur 100</span>
+        </h2>
+        <CategoryHeatmap models={rankedModels} categories={ranking.categories} />
+      </Card>
 
       <RankingTable rows={rows} judgeName={ranking.judge?.modelName} />
     </section>

@@ -81,6 +81,34 @@ test('graphes : titre « Qualité par catégorie de test » et libellé de l’a
   expect(screen.getByTestId('quality-speed-chart').textContent).toContain('Qualité (note sur 100)');
 });
 
+test('mise en page : nuage puis matrice par catégorie, chacun sur toute la largeur', () => {
+  renderView(false);
+  const card = (name: string) => screen.getByRole('heading', { level: 2, name }).parentElement!;
+  const scatter = card('Qualité et vitesse en haut à droite : idéal');
+  const heatmap = card('Qualité par catégorie de test note moyenne sur 100');
+  expect(within(scatter).getByTestId('quality-speed-chart')).toBeInTheDocument();
+  expect(within(heatmap).getByRole('table', { name: 'Qualité par catégorie de test' })).toBeInTheDocument();
+  // Plus de grille à deux colonnes : les deux cartes sont des enfants directs de la colonne des résultats, l'une sous l'autre.
+  const section = screen.getByRole('region', { name: 'Résultats' });
+  expect(scatter.parentElement).toBe(section);
+  expect(heatmap.parentElement).toBe(section);
+  expect(section).toHaveClass('flex', 'flex-col');
+  expect(scatter.compareDocumentPosition(heatmap) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(section.querySelector('.lg\\:grid-cols-2')).toBeNull();
+});
+
+test('matrice par catégorie : lignes dans l’ordre du classement, réordonnées avec la pondération', async () => {
+  const user = userEvent.setup();
+  renderView(false);
+  const matrix = () => within(screen.getByRole('table', { name: 'Qualité par catégorie de test' }));
+  const rows = () => matrix().getAllByRole('rowheader').map((h) => h.textContent!.replace(/(Anthropic|OpenAI|Mistral|Autre)$/, ''));
+  expect(rows()).toEqual(['Alpha', 'Bravo', 'Charlie']);
+  const speed = screen.getByRole('slider', { name: 'Vitesse' });
+  speed.focus();
+  await user.keyboard('{ArrowRight>60/}');
+  expect(rows()).toEqual(['Charlie', 'Bravo', 'Alpha']);
+});
+
 test('pondération : une icône d’aide par curseur, avec la définition du critère', () => {
   renderView(false);
   const group = within(screen.getByRole('group', { name: 'Pondération' }));
@@ -102,10 +130,13 @@ test('classement détaillé : aides sur les en-têtes et définitions imprimable
   expect(screen.getByRole('region', { name: 'Définitions' })).toHaveClass('print-only');
 });
 
-test('plus de six modèles : les graphes l’indiquent', () => {
-  const extra = ['e', 'f', 'g'].map((id) => model({ modelId: id, name: `Extra ${id}` }));
+test('plus de six modèles : le nuage l’indique, la matrice les montre tous', () => {
+  const extra = ['e', 'f', 'g', 'h'].map((id) => model({ modelId: id, name: `Extra ${id}` }));
   renderView(false, { ...RANKING, models: [...MODELS, ...extra] });
-  expect(screen.getByText(/6 premiers modèles sur 7/)).toBeInTheDocument();
+  const scatter = screen.getByRole('heading', { level: 2, name: 'Qualité et vitesse en haut à droite : idéal' }).parentElement!;
+  expect(within(scatter).getByText(/6 premiers modèles sur 8/)).toBeInTheDocument();
+  // Tous les modèles notés par catégorie (Delta n'en a aucune) : 7 lignes, au-delà des 6 du nuage.
+  expect(within(screen.getByRole('table', { name: 'Qualité par catégorie de test' })).getAllByRole('rowheader')).toHaveLength(7);
 });
 
 test('six modèles ou moins : pas de mention', () => {

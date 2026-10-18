@@ -67,7 +67,15 @@ test('page publique : titre, verdicts, podium, graphes et classement ; seule GET
   expect(within(screen.getByRole('list', { name: 'Verdicts' })).getAllByRole('listitem')).toHaveLength(2);
   expect(screen.getByRole('list', { name: 'Podium' })).toBeInTheDocument();
   expect(screen.getByTestId('quality-speed-chart')).toBeInTheDocument();
-  expect(screen.getByTestId('category-chart')).toBeInTheDocument();
+  // Matrice par catégorie : tous les modèles notés, dans l'ordre du serveur, sous le nuage et sur toute la largeur.
+  const matrix = screen.getByRole('table', { name: 'Qualité par catégorie de test' });
+  expect(within(matrix).getAllByRole('rowheader').map((h) => h.textContent)).toEqual(['AlphaAnthropic', 'BravoOpenAI', 'CharlieMistral']);
+  const scatterCard = screen.getByTestId('quality-speed-chart').parentElement!;
+  const heatmapCard = screen.getByRole('heading', { level: 2, name: 'Qualité par catégorie de test note moyenne sur 100' }).parentElement!;
+  expect(heatmapCard).toContainElement(matrix);
+  expect(scatterCard.parentElement).toBe(heatmapCard.parentElement);
+  expect(heatmapCard.parentElement).toHaveClass('flex', 'flex-col');
+  expect(heatmapCard.parentElement!.querySelector('.lg\\:grid-cols-2')).toBeNull();
   expect(screen.getByRole('heading', { level: 2, name: 'Qualité par catégorie de test note moyenne sur 100' })).toBeInTheDocument();
   expect(screen.getByTestId('quality-speed-chart').textContent).toContain('Qualité (note sur 100)');
   // Rang et score global du serveur, pas un recalcul.
