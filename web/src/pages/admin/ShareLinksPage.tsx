@@ -118,7 +118,7 @@ export function ShareLinksPage() {
             Aucun lien pour le moment. Ouvrez une <Link to="/series" className="text-peach">série</Link> terminée et choisissez « Partager ».
           </p>
         ) : (
-          <table className="w-full min-w-[860px] border-collapse text-left text-sm">
+          <table className="table-sticky-first w-full min-w-[860px] border-collapse text-left text-sm">
             <caption className="sr-only">Liens de partage</caption>
             <thead>
               <tr className="border-b border-line text-[12px] text-mute">

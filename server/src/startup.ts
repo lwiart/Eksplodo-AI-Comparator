@@ -5,6 +5,7 @@ import type { Clock } from './lib/clock.js';
 import { ensureBootstrapAdmin } from './modules/auth/bootstrap.js';
 import { upgradeLegacyKeys } from './modules/catalog/key-upgrade.js';
 import { seedProviders } from './modules/catalog/seed.js';
+import { seedModels, seedTests } from './modules/tests/seed.js';
 
 const DEFAULT_LOCK_TIMEOUT_SEC = 120;
 
@@ -49,7 +50,10 @@ export async function withStartupLock<T>(
   }
 }
 
-/** Migrations, amorçage du premier Admin et conversion des anciennes clés, sérialisés entre processus par le même verrou. */
+/**
+ * Migrations, amorçage du premier Admin, des fournisseurs et du jeu de tests, puis conversion des anciennes clés, sérialisés
+ * entre processus par le même verrou.
+ */
 export async function prepareDatabase(deps: {
   db: Db;
   config: AppConfig;
@@ -69,6 +73,16 @@ export async function prepareDatabase(deps: {
         ...(deps.logger ? { logger: deps.logger } : {}),
       });
       await seedProviders(deps.db, deps.clock());
+      // Première installation : fournisseurs et modèles, puis tests et suites, du jeu livré avec l'application.
+      const catalog = await seedModels({ db: deps.db, now: deps.clock(), ...(deps.config.seedDir ? { seedDir: deps.config.seedDir } : {}) });
+      if (catalog.status === 'seeded') deps.logger?.info(`Modèles installés : ${catalog.models} (fournisseurs ajoutés : ${catalog.providers})`);
+      const seeded = await seedTests({
+        db: deps.db,
+        dataDir: deps.config.dataDir,
+        now: deps.clock(),
+        ...(deps.config.seedDir ? { seedDir: deps.config.seedDir } : {}),
+      });
+      if (seeded.status === 'seeded') deps.logger?.info(`Jeu de tests installé : ${seeded.tests} tests, ${seeded.suites} suites`);
       const keys = await upgradeLegacyKeys(deps.db, deps.config.encryptionKey);
       if (keys.upgraded > 0) deps.logger?.info(`Clés des fournisseurs converties au format lié au fournisseur : ${keys.upgraded}`);
       if (keys.unreadable > 0) {

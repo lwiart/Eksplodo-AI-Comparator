@@ -95,6 +95,60 @@ html[data-animations="off"] *::after {
   backdrop-filter: blur(6px);
 }
 
+/*
+ * Tableaux : première colonne figée au défilement horizontal, de même largeur partout (celle de la matrice « Qualité par
+ * catégorie »), les autres colonnes défilent. Fond opaque pour que les cellules ne se voient pas dessous ; le conteneur
+ * du tableau porte `overflow-x-auto`.
+ */
+.table-sticky-first > :is(thead, tbody, tfoot) > tr > :first-child {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background-color: var(--color-night-1);
+  box-shadow: inset -1px 0 0 var(--color-line);
+  width: 7.5rem;
+  min-width: 7.5rem;
+  max-width: 7.5rem;
+  white-space: normal;
+  overflow-wrap: break-word;
+}
+@media (min-width: 640px) {
+  .table-sticky-first > :is(thead, tbody, tfoot) > tr > :first-child {
+    width: 13rem;
+    min-width: 13rem;
+    max-width: 13rem;
+  }
+}
+
+/* Classement : le rang (étroit) puis le modèle restent figés ensemble ; le modèle a la largeur commune ci-dessus. */
+.table-sticky-rank > :is(thead, tbody, tfoot) > tr > :nth-child(-n + 2) {
+  position: sticky;
+  z-index: 2;
+  background-color: var(--color-night-1);
+}
+.table-sticky-rank > :is(thead, tbody, tfoot) > tr > :nth-child(1) {
+  left: 0;
+  width: 3rem;
+  min-width: 3rem;
+  max-width: 3rem;
+}
+.table-sticky-rank > :is(thead, tbody, tfoot) > tr > :nth-child(2) {
+  left: 3rem;
+  box-shadow: inset -1px 0 0 var(--color-line);
+  width: 7.5rem;
+  min-width: 7.5rem;
+  max-width: 7.5rem;
+  white-space: normal;
+  overflow-wrap: break-word;
+}
+@media (min-width: 640px) {
+  .table-sticky-rank > :is(thead, tbody, tfoot) > tr > :nth-child(2) {
+    width: 13rem;
+    min-width: 13rem;
+    max-width: 13rem;
+  }
+}
+
 /* Bandeau défilant des fournisseurs (pages publiques) : la piste contient deux fois la liste, d'où -50 %. */
 .ticker-window {
   -webkit-mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
@@ -147,6 +201,11 @@ html[data-animations="off"] .reveal-in { animation: none; }
   display: none;
 }
 @media print {
+  :is(.table-sticky-first > :is(thead, tbody, tfoot) > tr > :first-child, .table-sticky-rank > :is(thead, tbody, tfoot) > tr > :nth-child(-n + 2)) {
+    position: static;
+    box-shadow: none;
+  }
+
   .no-print {
     display: none !important;
   }

@@ -60,7 +60,7 @@ export function RankingTable({ rows, judgeName, hideCosts = false }: { rows: Ran
         </p>
       </div>
       <div className="ranking-scroll mt-3 overflow-x-auto">
-        <table aria-labelledby={headingId} className="ranking-table w-full border-collapse text-sm">
+        <table aria-labelledby={headingId} className="table-sticky-rank ranking-table w-full border-collapse text-sm">
           <thead>
             <tr className="text-left text-xs text-mute">
               <th scope="col" className={`${TH} ranking-col-rank`}>Rang</th>

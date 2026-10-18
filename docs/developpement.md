@@ -132,6 +132,12 @@ Pour un Utilisateur, toute qualité affichée (vainqueur, évolution) respecte l
 | `npm run build` | Construit `dist/web` et `dist/server` |
 | `npm start` | Lance `dist/server/index.js` |
 
+## Jeu de première installation
+
+À la première mise en service d'une base neuve, le serveur installe le jeu livré dans `server/seed/` (`tests.json` et `attachments/`) : fournisseurs supplémentaires (jamais de clé : elle se saisit dans l'écran Fournisseurs), modèles, tests (pièces jointes comprises) et suites. Chaque partie n'est installée qu'**une fois dans la vie de la base** (réglages `models.seeded_at` et `tests.seeded_at`) et seulement si la base n'a encore **aucun modèle**, respectivement **aucun test** : une installation existante n'est jamais modifiée, et un élément supprimé ensuite n'est pas recréé (`server/src/modules/tests/seed.ts`). La variable facultative `SEED_DIR` désigne un autre dossier ; un dossier sans `tests.json` n'installe rien.
+
+`npm run export:tests -- [--url https://ia.eksplodo.fr] [--out server/seed]` régénère ce jeu depuis une application en service, avec un compte Admin (lecture seule, aucun appel à un modèle).
+
 ## Importer des tests
 
 `npm run import:tests -- [fichier.json] [--url https://ia.eksplodo.fr] [--dry-run]` ajoute à l'application les tests d'un fichier JSON et la suite qui les regroupe, via l'API, avec un compte Admin. L'e-mail et le mot de passe sont demandés au clavier (ou lus dans `AIC_EMAIL` et `AIC_PASSWORD`). Un test dont le nom existe déjà est laissé tel quel, et la suite n'est créée que si son nom est libre : relancer le script ne crée pas de doublon. Aucun modèle d'IA n'est appelé.

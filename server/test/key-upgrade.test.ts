@@ -73,6 +73,7 @@ describe('conversion des clés v1', () => {
       APP_BASE_URL: 'http://localhost:3000',
       DATABASE_URL: empty.url,
       DATA_DIR: '/tmp/aic',
+      SEED_DIR: '/aucun-jeu-de-tests',
       CRON_SECRET: 'x'.repeat(32),
       APP_ENCRYPTION_KEY: encryptionKey.toString('base64'),
     });

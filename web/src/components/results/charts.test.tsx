@@ -105,3 +105,16 @@ test('nuage : pas de contour de focus du navigateur sur le graphe (plus de recta
   expect(frame.className).toContain('[&_*:focus]:outline-none');
   expect(frame.querySelector('.recharts-wrapper [tabindex="0"]')).toBeNull();
 });
+
+test('nuage : un clic sur un nom de la légende choisit son point (pulsation et bulle), un second le libère', async () => {
+  const user = userEvent.setup();
+  render(<QualitySpeedChart models={MODELS} />);
+  const legend = within(screen.getByRole('list', { name: 'Légende du nuage' }));
+  await user.click(legend.getByRole('button', { name: 'Charlie' }));
+  expect(legend.getByRole('button', { name: 'Charlie' })).toHaveAttribute('aria-pressed', 'true');
+  const charlie = screen.getAllByTestId('quality-speed-point').find((p) => p.getAttribute('aria-label') === 'Charlie')!;
+  expect(charlie).toHaveAttribute('data-pinned', 'true');
+  expect(screen.getByTestId('quality-speed-popup')).toHaveTextContent('Charlie');
+  await user.click(legend.getByRole('button', { name: 'Charlie' }));
+  expect(screen.queryByTestId('quality-speed-popup')).toBeNull();
+});

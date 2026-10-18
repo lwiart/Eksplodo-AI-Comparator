@@ -45,7 +45,7 @@ export function RunsPage() {
         </Card>
       ) : (
         <Card className="overflow-x-auto p-0">
-          <table className="w-full border-collapse text-sm">
+          <table className="table-sticky-first w-full border-collapse text-sm">
             <thead>
               <tr className="text-left text-xs text-mute">
                 <th className="px-4 py-3 font-medium">Série</th>

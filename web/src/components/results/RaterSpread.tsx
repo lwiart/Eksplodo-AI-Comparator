@@ -19,7 +19,7 @@ export function RaterSpread({ runId, runTestId }: { runId: string; runTestId: st
   if (items.length === 0) return <p className="m-0 text-sm text-mute">Aucune note manuelle enregistrée pour ce test.</p>;
   return (
     <div className="overflow-x-auto">
-      <table aria-label="Écarts entre évaluateurs" className="w-full border-collapse text-[13px]">
+      <table aria-label="Écarts entre évaluateurs" className="table-sticky-first w-full border-collapse text-[13px]">
         <thead>
           <tr className="text-left text-[11px] text-mute">
             <th scope="col" className="px-2 py-2 font-medium">Modèle</th>

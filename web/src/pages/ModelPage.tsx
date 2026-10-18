@@ -101,7 +101,7 @@ function StatsSections({ model }: { model: Model }) {
       <Card className="min-[800px]:col-span-2">
         <h2 className="m-0 mb-3 font-display text-lg font-bold text-white">Historique des séries</h2>
         <div className="overflow-x-auto">
-          <table className="w-full border-collapse text-sm">
+          <table className="table-sticky-first w-full border-collapse text-sm">
             <thead>
               <tr className="text-left text-xs text-mute">
                 <th className="py-1.5 pr-3 font-medium">Série</th>

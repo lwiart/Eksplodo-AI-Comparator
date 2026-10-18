@@ -12,7 +12,7 @@ export function RecentRuns({ runs }: { runs: Dashboard['recentRuns'] }) {
       {runs.length === 0 ? (
         <p className="m-0 px-4 pt-3 pb-5 text-sm text-mute">Aucune série pour l’instant.</p>
       ) : (
-        <table className="mt-2 w-full border-collapse text-sm">
+        <table className="table-sticky-first mt-2 w-full border-collapse text-sm">
           <thead>
             <tr className="text-left text-xs text-mute">
               <th className="px-4 py-2 font-medium">Série</th>

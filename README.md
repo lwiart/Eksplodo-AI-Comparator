@@ -92,7 +92,7 @@ npm install
 npm run dev
 ```
 
-Dans `.env`, renseignez au minimum `APP_ENCRYPTION_KEY` et le premier compte Admin (`BOOTSTRAP_ADMIN_EMAIL`, `BOOTSTRAP_ADMIN_PASSWORD`). Ajoutez `AIC_FAKE_LLM=1` pour essayer sans aucun appel payant : un faux fournisseur répond à la place des vrais. L'interface s'ouvre sur http://localhost:5173.
+Dans `.env`, renseignez au minimum `APP_ENCRYPTION_KEY` et le premier compte Admin (`BOOTSTRAP_ADMIN_EMAIL`, `BOOTSTRAP_ADMIN_PASSWORD`). Au premier démarrage, l'application installe un **jeu de départ** : les fournisseurs, un catalogue de modèles, une batterie de tests prêts à l'emploi et leurs suites (il ne reste qu'à saisir vos clés API). Ajoutez `AIC_FAKE_LLM=1` pour essayer sans aucun appel payant : un faux fournisseur répond à la place des vrais. L'interface s'ouvre sur http://localhost:5173.
 
 Le détail (variables, tests automatisés, règles de calcul, directives du faux fournisseur) est dans le [guide technique](docs/developpement.md).
 

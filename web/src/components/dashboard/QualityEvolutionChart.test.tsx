@@ -1,7 +1,15 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen } from '@testing-library/react';
+import { cloneElement, type ReactElement } from 'react';
+import userEvent from '@testing-library/user-event';
 import { expect, test, vi } from 'vitest';
 import type { Evolution } from '../../api/dashboard';
+
+// jsdom ne mesure rien : le conteneur adaptatif reçoit une taille fixe (sinon aucun point n'est dessiné).
+vi.mock('recharts', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('recharts')>()),
+  ResponsiveContainer: ({ children }: { children: ReactElement<{ width?: number; height?: number }> }) => cloneElement(children, { width: 600, height: 260 }),
+}));
 
 const apiFetch = vi.hoisted(() => vi.fn());
 vi.mock('../../api/client', async (importOriginal) => ({
@@ -66,4 +74,23 @@ test('séries terminées sans note de qualité : message distinct', async () => 
   renderChart({ ...EVOLUTION, series: [{ modelId: 'x', name: 'Alpha', color: '#F0631F', points: [null, null] }] });
   expect(await screen.findByText('Aucune note de qualité pour ces séries')).toBeInTheDocument();
   expect(screen.queryByText('Aucune série terminée pour cette suite')).toBeNull();
+});
+
+test('évolution : un nom de la légende met sa courbe en avant et ouvre la bulle de son dernier point ; toucher un point le choisit', async () => {
+  const user = userEvent.setup();
+  render(<EvolutionLines evolution={EVOLUTION} />);
+  const legend = screen.getByRole('list', { name: 'Légende' });
+  const alpha = Array.from(legend.querySelectorAll('button')).find((b) => b.textContent === 'Alpha')!;
+  await user.click(alpha);
+  expect(alpha).toHaveAttribute('aria-pressed', 'true');
+  // Dernier point d'Alpha : la série B.
+  const chosen = document.querySelector('[data-evolution-dot="Alpha"][data-pinned]');
+  expect(chosen).toHaveAttribute('data-index', '1');
+  expect(chosen!.querySelector('animate')).not.toBeNull();
+  expect(screen.getByTestId('evolution-tooltip')).toHaveTextContent('Série B · 15/10/2026 · juge : aucun');
+  expect(screen.getByTestId('evolution-tooltip')).toHaveTextContent('Alpha : 8');
+  // Toucher le premier point d'Alpha : il devient le point choisi.
+  await user.click(document.querySelector('[data-evolution-dot="Alpha"][data-index="0"]')!);
+  expect(document.querySelector('[data-evolution-dot="Alpha"][data-pinned]')).toHaveAttribute('data-index', '0');
+  expect(screen.getByTestId('evolution-tooltip')).toHaveTextContent('Série A · 10/09/2026 · juge : Claude Opus');
 });

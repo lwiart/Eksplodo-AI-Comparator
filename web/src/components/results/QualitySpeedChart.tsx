@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { CartesianGrid, ReferenceArea, ResponsiveContainer, Scatter, ScatterChart, XAxis, YAxis, ZAxis } from 'recharts';
 import type { RankingModel } from '../../api/results';
 import { InfoTip } from '../ui/InfoTip';
-import { AXIS_TICK, GRID_STROKE, TOOLTIP_STYLE } from './chart-theme';
+import { ChartPopup, HoverLayer, Pulse, useChosenPosition, type At } from './chart-popup';
+import { AXIS_TICK, GRID_STROKE } from './chart-theme';
 import { DEFINITIONS } from './definitions';
 import { score } from './format';
 
@@ -16,49 +17,17 @@ export function scatterPoints(models: RankingModel[]): ScatterPoint[] {
   return models.flatMap((m) => (m.quality === null || m.speed === null ? [] : [{ modelId: m.modelId, name: m.name, color: m.color, speed: m.speed, quality: m.quality }]));
 }
 
-/** Point montré : le modèle et sa position dans le graphe (pixels). */
-type Shown = { point: ScatterPoint; cx: number; cy: number };
-
-/** Largeur approximative de la bulle : elle reste dans le cadre du graphe. */
-const POPUP_HALF = 80;
-/** Hauteur approximative de la bulle : un point plus haut que cela la reçoit en dessous, sinon elle serait coupée. */
-const POPUP_HEIGHT = 80;
-
-/**
- * Calque de la bulle : il garde le point survolé dans son propre état, si bien que le survol ne redessine pas le graphe
- * (recharts remplacerait alors les points sous la souris, qui relanceraient le survol). Le point choisi l'emporte.
- */
-function PopupLayer({ pinned, hoverRef, frame }: { pinned: Shown | null; hoverRef: { current: (s: Shown | null) => void }; frame: { current: HTMLDivElement | null } }) {
-  const [hovered, setHovered] = useState<Shown | null>(null);
-  useEffect(() => {
-    hoverRef.current = setHovered;
-    return () => {
-      hoverRef.current = () => {};
-    };
-  }, [hoverRef]);
-  const shown = pinned ?? hovered;
-  return shown ? <PointPopup shown={shown} width={frame.current?.clientWidth ?? 0} /> : null;
-}
-
-/** Bulle d'un point : nom du modèle, couleur, qualité et vitesse, posée au-dessus du point. */
-function PointPopup({ shown, width }: { shown: Shown; width: number }) {
-  const { point: p, cx, cy } = shown;
-  const left = Math.min(Math.max(cx, POPUP_HALF), Math.max(POPUP_HALF, width - POPUP_HALF));
-  const below = cy < POPUP_HEIGHT;
+/** Contenu de la bulle d'un point : nom du modèle, couleur, qualité et vitesse. */
+function PointDetails({ p }: { p: ScatterPoint }) {
   return (
-    <div
-      data-testid="quality-speed-popup"
-      data-placement={below ? 'below' : 'above'}
-      style={{ ...TOOLTIP_STYLE.contentStyle, left, top: cy, transform: below ? 'translate(-50%, 14px)' : 'translate(-50%, calc(-100% - 14px))' }}
-      className="pointer-events-none absolute z-10 px-3 py-2 whitespace-nowrap"
-    >
-      <div className="flex items-center gap-2 font-semibold text-white">
+    <>
+      <div className="flex items-center gap-2 font-semibold whitespace-nowrap text-white">
         <span aria-hidden="true" className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: p.color }} />
         {p.name}
       </div>
-      <div className="font-mono text-xs">Qualité {score(p.quality)}</div>
-      <div className="font-mono text-xs">Vitesse {score(p.speed)}</div>
-    </div>
+      <div className="font-mono">Qualité {score(p.quality)}</div>
+      <div className="font-mono">Vitesse {score(p.speed)}</div>
+    </>
   );
 }
 
@@ -86,50 +55,52 @@ export function QualitySpeedHeading() {
 
 /**
  * Nuage qualité × vitesse (notes sur 100) de tous les modèles ; en haut à droite, la zone idéale (zone orangée, sans
- * libellé pour ne masquer aucun point). La légende, dessinée en HTML sous le graphe, peut passer sur plusieurs lignes.
+ * libellé pour ne masquer aucun point). Toucher un point, ou son nom dans la légende sous le graphe, le choisit : il
+ * pulse et sa bulle reste affichée ; à la souris, la bulle apparaît aussi au survol.
  */
 export function QualitySpeedChart({ models }: { models: RankingModel[] }) {
   const points = useMemo(() => scatterPoints(models), [models]);
   const frame = useRef<HTMLDivElement>(null);
-  // Point touché (ou cliqué) : il pulse et sa bulle reste affichée ; point survolé à la souris : bulle seule (calque).
-  const [pinned, setPinned] = useState<Shown | null>(null);
-  const hoverRef = useRef<(s: Shown | null) => void>(() => {});
-  const pinnedId = pinned?.point.modelId ?? null;
-  // Données des points, stables tant que le choix ne change pas : le survol ne redessine pas les points (sinon le point
-  // serait remplacé entre le survol et le clic), et l'état « choisi » y figure (recharts ne redessine que sur données).
-  const series = useMemo(() => points.map((p) => [{ ...p, pinned: p.modelId === pinnedId }]), [points, pinnedId]);
+  const [chosenId, setChosenId] = useState<string | null>(null);
+  const hoverRef = useRef<(v: { point: ScatterPoint; at: At } | null) => void>(() => {});
+  const chosen = points.find((p) => p.modelId === chosenId) ?? null;
+  // Position du point choisi, relue dans le DOM : le choix peut venir de la légende, sans coordonnées.
+  const chosenAt = useChosenPosition(frame, chosen ? `[data-model="${CSS.escape(chosen.modelId)}"] [data-dot]` : null);
+  // Données stables tant que le choix ne change pas : le survol ne redessine pas les points (recharts ne redessine que sur
+  // changement de données, et l'état « choisi » y figure).
+  const series = useMemo(() => points.map((p) => [{ ...p, chosen: p.modelId === chosenId }]), [points, chosenId]);
+  const toggle = useCallback((id: string) => setChosenId((c) => (c === id ? null : id)), []);
+
   // Fonction de dessin stable : une nouvelle fonction à chaque rendu ferait redessiner (remplacer) tous les points.
-  const renderPoint = useCallback((props: unknown) => {
-    const { cx = 0, cy = 0, payload } = props as { cx?: number; cy?: number; payload: ScatterPoint & { pinned: boolean } };
-    const isPinned = payload.pinned;
-    const { pinned: _flag, ...point } = payload;
-    const here = { point, cx, cy };
-    return (
-      <g
-        data-testid="quality-speed-point"
-        data-pinned={isPinned || undefined}
-        aria-label={payload.name}
-        style={{ cursor: 'pointer' }}
-        onClick={(e) => {
-          e.stopPropagation();
-          setPinned(isPinned ? null : here);
-        }}
-        onMouseEnter={() => hoverRef.current(here)}
-        onMouseLeave={() => hoverRef.current(null)}
-      >
-        {isPinned ? (
-          <circle cx={cx} cy={cy} r={7} fill={payload.color}>
-            <animate attributeName="r" values="7;20;7" dur="1.4s" repeatCount="indefinite" />
-            <animate attributeName="opacity" values="0.55;0;0.55" dur="1.4s" repeatCount="indefinite" />
-          </circle>
-        ) : null}
-        {/* Zone de toucher plus large que le point, invisible. */}
-        <circle cx={cx} cy={cy} r={14} fill="transparent" />
-        <circle cx={cx} cy={cy} r={isPinned ? 8 : 6} fill={payload.color} stroke={isPinned ? '#fff' : 'none'} strokeWidth={2} />
-      </g>
-    );
-  }, []);
+  const renderPoint = useCallback(
+    (props: unknown) => {
+      const { cx = 0, cy = 0, payload } = props as { cx?: number; cy?: number; payload: ScatterPoint & { chosen: boolean } };
+      const { chosen: isChosen, ...point } = payload;
+      return (
+        <g
+          data-testid="quality-speed-point"
+          data-model={point.modelId}
+          data-pinned={isChosen || undefined}
+          aria-label={point.name}
+          style={{ cursor: 'pointer' }}
+          onClick={(e) => {
+            e.stopPropagation();
+            toggle(point.modelId);
+          }}
+          onMouseEnter={() => hoverRef.current({ point, at: { x: cx, y: cy } })}
+          onMouseLeave={() => hoverRef.current(null)}
+        >
+          {isChosen ? <Pulse cx={cx} cy={cy} color={point.color} /> : null}
+          {/* Zone de toucher plus large que le point, invisible. */}
+          <circle cx={cx} cy={cy} r={14} fill="transparent" />
+          <circle data-dot cx={cx} cy={cy} r={isChosen ? 8 : 6} fill={point.color} stroke={isChosen ? '#fff' : 'none'} strokeWidth={2} />
+        </g>
+      );
+    },
+    [toggle],
+  );
   if (points.length === 0) return <p className="m-0 py-10 text-center text-sm text-mute">Pas encore de modèle avec une qualité et une vitesse.</p>;
+  const frameWidth = frame.current?.clientWidth ?? 0;
 
   return (
     <div data-testid="quality-speed-chart" className="w-full">
@@ -139,7 +110,7 @@ export function QualitySpeedChart({ models }: { models: RankingModel[] }) {
         role="img"
         aria-label="Nuage qualité et vitesse des modèles"
         className="relative h-[280px] w-full [&_*:focus]:outline-none [&_.recharts-surface]:outline-none [&_.recharts-wrapper]:outline-none"
-        onClick={() => setPinned(null)}
+        onClick={() => setChosenId(null)}
       >
         <ResponsiveContainer width="100%" height="100%">
           <ScatterChart accessibilityLayer={false} margin={{ top: 12, right: 24, bottom: 24, left: 4 }}>
@@ -182,16 +153,41 @@ export function QualitySpeedChart({ models }: { models: RankingModel[] }) {
             ))}
           </ScatterChart>
         </ResponsiveContainer>
-        <PopupLayer pinned={pinned} hoverRef={hoverRef} frame={frame} />
+        {chosen && chosenAt ? (
+          <ChartPopup at={chosenAt} frameWidth={frameWidth} testId="quality-speed-popup">
+            <PointDetails p={chosen} />
+          </ChartPopup>
+        ) : (
+          <HoverLayer
+            hoverRef={hoverRef}
+            render={(h) => (
+              <ChartPopup at={h.at} frameWidth={frame.current?.clientWidth ?? 0} testId="quality-speed-popup">
+                <PointDetails p={h.point} />
+              </ChartPopup>
+            )}
+          />
+        )}
       </div>
-      {/* Légende sous le graphe, hors du SVG : elle ne chevauche ni le titre de l'axe des vitesses ni les points. */}
-      <ul aria-label="Légende du nuage" className="m-0 mt-2 flex list-none flex-wrap justify-center gap-x-4 gap-y-1.5 p-0">
-        {points.map((p) => (
-          <li key={p.modelId} className="flex items-center gap-1.5 text-xs text-ink">
-            <span aria-hidden="true" className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: p.color }} />
-            {p.name}
-          </li>
-        ))}
+      {/* Légende sous le graphe, hors du SVG : chaque nom choisit son point (pulsation et bulle). */}
+      <ul aria-label="Légende du nuage" className="m-0 mt-2 flex list-none flex-wrap justify-center gap-x-1 gap-y-1 p-0">
+        {points.map((p) => {
+          const active = p.modelId === chosenId;
+          return (
+            <li key={p.modelId}>
+              <button
+                type="button"
+                aria-pressed={active}
+                onClick={() => toggle(p.modelId)}
+                className={`flex cursor-pointer items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs ${
+                  active ? 'border-peach bg-night-2 text-white' : 'border-transparent bg-transparent text-ink hover:text-white'
+                }`}
+              >
+                <span aria-hidden="true" className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: p.color }} />
+                {p.name}
+              </button>
+            </li>
+          );
+        })}
       </ul>
     </div>
   );

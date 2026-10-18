@@ -106,7 +106,7 @@ export function UsersPage() {
         ) : users.isPending ? (
           <p className="m-4 text-sm text-mute">Chargement des comptes…</p>
         ) : (
-          <table className="w-full min-w-[820px] border-collapse text-left text-sm">
+          <table className="table-sticky-first w-full min-w-[820px] border-collapse text-left text-sm">
             <caption className="sr-only">Comptes utilisateurs</caption>
             <thead>
               <tr className="border-b border-line text-[12px] text-mute">

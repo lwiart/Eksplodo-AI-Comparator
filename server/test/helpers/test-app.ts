@@ -26,6 +26,8 @@ export function testConfig(): AppConfig {
     appBaseUrl: 'http://localhost:3000',
     databaseUrl: 'mysql://u:p@127.0.0.1:3307/x',
     dataDir: '/tmp/aic',
+    // Aucun jeu de tests en test : les bases de test démarrent vides (dossier inexistant = rien à installer).
+    seedDir: '/aucun-jeu-de-tests',
     encryptionKey: Buffer.alloc(32, 7),
     cronSecret: 'x'.repeat(32),
     smtp: null,

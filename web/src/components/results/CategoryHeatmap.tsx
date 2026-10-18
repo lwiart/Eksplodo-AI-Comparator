@@ -125,7 +125,7 @@ export function CategoryHeatmap({
           <tbody>
             {rows.map((m) => (
               <tr key={m.modelId}>
-                <th scope="row" className={`${MODEL_CELL} min-w-[6.5rem] max-w-[8.5rem] py-1 text-left text-[11.5px] leading-tight font-semibold text-white sm:max-w-none sm:text-xs sm:whitespace-nowrap`}>
+                <th scope="row" className={`${MODEL_CELL} w-[7.5rem] min-w-[7.5rem] max-w-[7.5rem] py-1 text-left text-[11.5px] leading-tight font-semibold text-white sm:w-[13rem] sm:min-w-[13rem] sm:max-w-[13rem] sm:text-xs`}>
                   <span className="flex items-center gap-1.5 sm:gap-2">
                     <span aria-hidden="true" className="h-2 w-2 shrink-0 rounded-full sm:h-2.5 sm:w-2.5" style={{ backgroundColor: m.color }} />
                     <span className="min-w-0 [overflow-wrap:break-word]">

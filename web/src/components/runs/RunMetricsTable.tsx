@@ -70,7 +70,7 @@ export function RunMetricsTable({ rows, prices }: { rows: ResultRow[]; prices?: 
         <p className="mt-1 mb-0 text-xs text-mute">Médianes calculées sur les réponses réussies. Tarifs : ceux du catalogue aujourd’hui.</p>
       </div>
       <div className="mt-3 overflow-x-auto">
-        <table aria-labelledby={headingId} className="w-full border-collapse text-sm">
+        <table aria-labelledby={headingId} className="table-sticky-first w-full border-collapse text-sm">
           <thead>
             <tr className="text-left text-xs text-mute">
               <th scope="col" className="px-4 py-3 font-medium">Modèle</th>

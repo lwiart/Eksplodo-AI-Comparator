@@ -6,6 +6,8 @@ export type AppConfig = {
   appBaseUrl: string;
   databaseUrl: string;
   dataDir: string;
+  /** Dossier du jeu de tests installé à la première mise en service ; défaut : `server/seed` de l'application. */
+  seedDir?: string;
   /** Clé maîtresse AES-256 (32 octets) qui chiffre les clés des fournisseurs ; ne jamais journaliser. */
   encryptionKey: Buffer;
   cronSecret: string;
@@ -26,6 +28,8 @@ const schema = z.object({
   APP_BASE_URL: z.string().min(1, 'APP_BASE_URL est obligatoire').url('APP_BASE_URL doit être une URL valide'),
   DATABASE_URL: z.string().min(1, 'DATABASE_URL est obligatoire'),
   DATA_DIR: z.string().min(1, 'DATA_DIR est obligatoire'),
+  /** Facultative : dossier du jeu de tests de première installation (défaut : `server/seed`). */
+  SEED_DIR: z.string().min(1).optional(),
   APP_ENCRYPTION_KEY: z.string().min(1, 'APP_ENCRYPTION_KEY est obligatoire'),
   CRON_SECRET: z.string().min(32, 'CRON_SECRET doit contenir au moins 32 caractères'),
   SMTP_HOST: z.string().optional(),
@@ -98,6 +102,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
     appBaseUrl: e.APP_BASE_URL.replace(/\/+$/, ''),
     databaseUrl: e.DATABASE_URL,
     dataDir: e.DATA_DIR,
+    ...(e.SEED_DIR ? { seedDir: e.SEED_DIR } : {}),
     encryptionKey,
     cronSecret: e.CRON_SECRET,
     smtp,

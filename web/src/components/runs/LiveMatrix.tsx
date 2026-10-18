@@ -59,7 +59,7 @@ export function LiveMatrix({ matrix, models }: Pick<RunProgress, 'matrix' | 'mod
         </ul>
       </div>
       <div className="overflow-x-auto">
-        <table aria-labelledby={headingId} className="w-full border-collapse text-xs">
+        <table aria-labelledby={headingId} className="table-sticky-first w-full border-collapse text-xs">
           <thead>
             <tr>
               <th scope="col" className="w-px">
