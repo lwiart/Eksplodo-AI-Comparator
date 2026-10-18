@@ -1,7 +1,7 @@
 import { act, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { expect, test } from 'vitest';
-import { CONSTELLATION_HOVER_EVENT, UNRATED_COLOR, type ConstellationHover } from '../../three/constellation-scene';
+import { CONSTELLATION_HOVER_EVENT, CONSTELLATION_PIN_EVENT, UNRATED_COLOR, type ConstellationHover } from '../../three/constellation-scene';
 import { Constellation, hoverDetails } from './Constellation';
 import { MODELS } from './ranking.fixtures';
 
@@ -59,7 +59,7 @@ test('mesures de l’étiquette : qualité arrondie, débit omis s’il est inco
   expect(hoverDetails(MODELS[3]!)).toBe('Pas encore noté');
 });
 
-test('légende sous la scène (jamais par-dessus) ; toucher une pastille affiche nom, qualité et débit', async () => {
+test('légende sous la scène (jamais par-dessus) ; toucher une pastille met sa planète en surbrillance, sans ligne de détail', async () => {
   const user = userEvent.setup();
   render(<Constellation models={MODELS} />);
   const legend = screen.getByRole('list', { name: 'Légende de la constellation' });
@@ -69,8 +69,20 @@ test('légende sous la scène (jamais par-dessus) ; toucher une pastille affiche
   const chip = within(legend).getByRole('button', { name: first.name });
   await user.click(chip);
   expect(chip).toHaveAttribute('aria-pressed', 'true');
-  expect(screen.getByRole('status')).toHaveTextContent(first.name);
-  expect(screen.getByRole('status')).toHaveTextContent(hoverDetails(first));
-  await user.click(chip);
+  // Repli SVG : l'astre choisi est marqué ; aucune ligne de détail sous la légende.
+  expect(screen.getAllByTestId('constellation-astre').filter((g) => g.dataset.selected === 'true')).toHaveLength(1);
   expect(screen.queryByRole('status')).toBeNull();
+  await user.click(chip);
+  expect(chip).toHaveAttribute('aria-pressed', 'false');
+  expect(screen.getAllByTestId('constellation-astre').filter((g) => g.dataset.selected === 'true')).toHaveLength(0);
+});
+
+test('appui sur une planète (événement de la scène) : sa pastille est marquée', () => {
+  render(<Constellation models={MODELS} />);
+  const origin = screen.getByTestId('constellation-fallback');
+  act(() => {
+    origin.dispatchEvent(new CustomEvent(CONSTELLATION_PIN_EVENT, { bubbles: true, detail: MODELS[1]!.modelId }));
+  });
+  const legend = screen.getByRole('list', { name: 'Légende de la constellation' });
+  expect(within(legend).getByRole('button', { name: MODELS[1]!.name })).toHaveAttribute('aria-pressed', 'true');
 });

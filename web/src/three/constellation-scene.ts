@@ -1,4 +1,4 @@
-import type { BufferAttribute, Material, Mesh, Object3D } from 'three';
+import type { BufferAttribute, Color, Material, Mesh, Object3D } from 'three';
 import { createInteractionGate } from './interaction-gate';
 import type { SceneFactory } from './useThreeScene';
 
@@ -8,7 +8,12 @@ import type { SceneFactory } from './useThreeScene';
  */
 export type ConstellationData = {
   models: { id: string; color: string; quality: number | null; tokensPerS: number | null }[];
+  /** Astre choisi (pastille de la légende ou appui) : mis en surbrillance, son étiquette reste affichée. */
+  selectedId?: string | null;
 };
+
+/** Émis sur le canevas quand un appui épingle un astre (`detail` : son identifiant) ou le libère (`null`). */
+export const CONSTELLATION_PIN_EVENT = 'constellation-pin';
 
 // ---------- géométrie pure (testée) ----------
 
@@ -131,6 +136,12 @@ const CAM = { y: 2.6, z: 9.5 };
 const HUB_COLOR = 0xffb48a;
 const HALO_OPACITY = 0.12;
 const HALO_OPACITY_HOVER = 0.32; // l'astre survolé est mis en valeur, sans mouvement de caméra
+const HALO_OPACITY_SELECTED = 0.45;
+const SELECTED_SCALE = 1.3;
+const RING_COLOR = 0x3fa2e0;
+const RING_OPACITY = 0.16;
+const RING_COLOR_SELECTED = 0xffb48a;
+const RING_OPACITY_SELECTED = 0.7;
 
 type Astre = { id: string; key: string; size: number; radius: number; speed: number; phase: number; mesh: Mesh; halo: Mesh; ring: Mesh };
 
@@ -231,10 +242,25 @@ export const constellationScene: SceneFactory = ({ THREE, canvas, width, height,
     canvas.dispatchEvent(new CustomEvent<ConstellationHover | null>(CONSTELLATION_HOVER_EVENT, { bubbles: true, detail: next }));
   }
 
+  /**
+   * Mise en valeur : l'astre choisi (épinglé) est agrandi, son halo renforcé et son orbite colorée ; l'astre seulement
+   * survolé a un halo plus visible.
+   */
+  function refreshEmphasis() {
+    for (const a of astres) {
+      const selected = a === pinned;
+      haloMaterial(a).opacity = selected ? HALO_OPACITY_SELECTED : a === hovered ? HALO_OPACITY_HOVER : HALO_OPACITY;
+      a.mesh.scale.setScalar(selected ? SELECTED_SCALE : 1);
+      a.halo.scale.setScalar(selected ? SELECTED_SCALE : 1);
+      const ring = a.ring.material as Material & { opacity: number; color: Color };
+      ring.opacity = selected ? RING_OPACITY_SELECTED : RING_OPACITY;
+      ring.color.setHex(selected ? RING_COLOR_SELECTED : RING_COLOR);
+    }
+  }
+
   function setHovered(a: Astre | null) {
-    if (hovered && hovered !== a) haloMaterial(hovered).opacity = HALO_OPACITY;
     hovered = a;
-    if (a) haloMaterial(a).opacity = HALO_OPACITY_HOVER;
+    refreshEmphasis();
     canvas.style.cursor = a ? 'help' : '';
     emitHover();
   }
@@ -270,6 +296,7 @@ export const constellationScene: SceneFactory = ({ THREE, canvas, width, height,
     const a = astreAt(at.x, at.y);
     pinned = a && a !== pinned ? a : null;
     pick();
+    canvas.dispatchEvent(new CustomEvent<string | null>(CONSTELLATION_PIN_EVENT, { bubbles: true, detail: pinned?.id ?? null }));
   };
   canvas.addEventListener('click', onTap);
 
@@ -330,9 +357,16 @@ export const constellationScene: SceneFactory = ({ THREE, canvas, width, height,
   }
 
   function setData(raw: unknown) {
-    const models = (raw as ConstellationData | undefined)?.models ?? [];
+    const data = raw as ConstellationData | undefined;
+    const models = data?.models ?? [];
     const same = models.length === astres.length && models.every((m, i) => astres[i]!.key === astreKey(m));
     if (!same) build(models);
+    // Choix venu de la légende : l'astre est épinglé (surbrillance et étiquette), ou libéré.
+    const target = astres.find((a) => a.id === data?.selectedId) ?? null;
+    if (target !== pinned) {
+      pinned = target;
+      pick();
+    }
   }
 
   const gate =

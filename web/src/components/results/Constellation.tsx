@@ -3,6 +3,7 @@ import type { RankingModel } from '../../api/results';
 import { ConstellationFallback } from '../../three/ConstellationFallback';
 import {
   CONSTELLATION_HOVER_EVENT,
+  CONSTELLATION_PIN_EVENT,
   UNRATED_COLOR,
   constellationScene,
   placeLabel,
@@ -29,10 +30,11 @@ export function hoverDetails(m: RankingModel): string {
  * vitesse de rotation suit aussi le débit (les astres proches tournent plus vite). Une icône « ? » l'explique.
  * Survoler un astre (grand écran) ou appuyer dessus (tous écrans) affiche son nom, sa qualité et son débit dans une
  * étiquette qui le suit : la scène émet `CONSTELLATION_HOVER_EVENT` sur son canevas, l'événement remonte jusqu'au cadre
- * écouté ici. La légende, sous la scène (jamais par-dessus), est faite de pastilles : en toucher une affiche le même
- * détail sous la légende, y compris sans WebGL.
+ * écouté ici. Toucher un astre ou une pastille de la légende (sous la scène, jamais par-dessus) le choisit : il est mis
+ * en surbrillance (plus gros, halo et orbite colorés) et son étiquette reste affichée sur lui ; la pastille est marquée.
  */
 export function Constellation({ models, className = '' }: { models: RankingModel[]; className?: string }) {
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const data = useMemo<ConstellationData>(
     () => ({
       models: models.map((m) => ({
@@ -41,15 +43,15 @@ export function Constellation({ models, className = '' }: { models: RankingModel
         quality: m.quality,
         tokensPerS: m.raw.medianTokensPerS,
       })),
+      selectedId,
     }),
-    [models],
+    [models, selectedId],
   );
 
   const stageRef = useRef<HTMLDivElement>(null);
   const labelRef = useRef<HTMLDivElement>(null);
   const hoverRef = useRef<ConstellationHover | null>(null);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
 
   // Place l'étiquette près de l'astre, sans rendu React : la position change à chaque image tant que l'astre tourne.
   const placeRef = useRef(() => {
@@ -70,12 +72,17 @@ export function Constellation({ models, className = '' }: { models: RankingModel
       setHoveredId(hover?.id ?? null);
       placeRef.current();
     };
+    // Appui sur un astre : même choix que la pastille de la légende (surbrillance, détail sous la légende).
+    const onPin = (e: Event) => setSelectedId((e as CustomEvent<string | null>).detail ?? null);
     stage.addEventListener(CONSTELLATION_HOVER_EVENT, onHover);
-    return () => stage.removeEventListener(CONSTELLATION_HOVER_EVENT, onHover);
+    stage.addEventListener(CONSTELLATION_PIN_EVENT, onPin);
+    return () => {
+      stage.removeEventListener(CONSTELLATION_HOVER_EVENT, onHover);
+      stage.removeEventListener(CONSTELLATION_PIN_EVENT, onPin);
+    };
   }, []);
 
   const hovered = hoveredId === null ? undefined : models.find((m) => m.modelId === hoveredId);
-  const selected = selectedId === null ? undefined : models.find((m) => m.modelId === selectedId);
   // Nouvelle étiquette (autre astre) : sa taille change, on la replace une fois rendue.
   useLayoutEffect(() => placeRef.current(), [hovered]);
 
@@ -135,14 +142,6 @@ export function Constellation({ models, className = '' }: { models: RankingModel
             );
           })}
         </ul>
-        {selected ? (
-          <p role="status" className="m-0 flex flex-wrap items-center gap-x-2 font-mono text-[11px] text-white">
-            <span aria-hidden="true" className="h-2 w-2 rounded-full" style={{ backgroundColor: selected.quality === null ? UNRATED_COLOR : selected.color }} />
-            <span className="font-semibold">{selected.name}</span>
-            {selected.providerName ? <span className="text-mute">{selected.providerName}</span> : null}
-            <span className="text-peach">{hoverDetails(selected)}</span>
-          </p>
-        ) : null}
         <p className="m-0 font-mono text-[10px] font-medium text-mute">
           Taille = qualité · Plus près du centre = débit plus élevé · Touchez ou survolez un astre pour son nom
         </p>

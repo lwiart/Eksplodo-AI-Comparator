@@ -73,7 +73,8 @@ function ProviderCard({ provider }: { provider: PublicProvider }) {
   const switchId = `enabled-${provider.id}`;
 
   return (
-    <section aria-label={provider.name}>
+    // min-w-0 : sans lui, l'adresse tronquée de l'API impose sa pleine largeur à la colonne et la carte déborde sur mobile.
+    <section aria-label={provider.name} className="min-w-0">
       <Card className={`flex h-full flex-col gap-4 ${provider.enabled ? '' : 'opacity-70'}`}>
         <div className="flex items-start gap-3">
           <ProviderLogo name={provider.name} />
@@ -183,7 +184,7 @@ export function ProvidersPage() {
       ) : providers.isPending ? (
         <p className="text-sm text-mute">Chargement des fournisseurs…</p>
       ) : (
-        <div className="grid gap-4 min-[900px]:grid-cols-2">
+        <div className="grid grid-cols-[minmax(0,1fr)] gap-4 min-[900px]:grid-cols-[repeat(2,minmax(0,1fr))]">
           {providers.data.map((p) => (
             <ProviderCard key={p.id} provider={p} />
           ))}

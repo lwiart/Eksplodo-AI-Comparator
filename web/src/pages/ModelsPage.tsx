@@ -11,6 +11,7 @@ import { RemoteModelsDialog } from '../components/catalog/RemoteModelsDialog';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { Chip } from '../components/ui/Chip';
+import { HelpButton } from '../components/ui/HelpButton';
 import { InfoTip } from '../components/ui/InfoTip';
 import { SelectField } from '../components/ui/SelectField';
 
@@ -83,22 +84,22 @@ export function ModelsPage() {
         </div>
         {isAdmin ? (
           <div className="flex flex-wrap items-center gap-2">
-            <Button variant="secondary" disabled={!rows.some((m) => m.available)} onClick={() => setChecking(true)}>
+            <HelpButton
+              helpLabel="Vérifier les capacités"
+              disabled={!rows.some((m) => m.available)}
+              onClick={() => setChecking(true)}
+              help="Interroge chaque modèle disponible parmi ceux affichés (filtre Fournisseur compris) par trois très petits appels réels : un message sans pièce jointe, une image et un PDF d’une page. Les colonnes Vision et PDF sont corrigées et enregistrées selon la réponse du fournisseur. Un résultat indéterminé ne change rien. Coût : quelques tokens par modèle."
+            >
               Vérifier les capacités
-            </Button>
-            <InfoTip label="Vérifier les capacités" width="w-80">
-              Interroge chaque modèle disponible parmi ceux affichés (filtre Fournisseur compris) par trois très petits appels réels : un message
-              sans pièce jointe, une image et un PDF d’une page. Les colonnes Vision et PDF sont corrigées et enregistrées selon la réponse du
-              fournisseur. Un résultat indéterminé ne change rien. Coût : quelques tokens par modèle.
-            </InfoTip>
-            <Button variant="secondary" disabled={!rows.some((m) => m.available)} onClick={() => setPricing(true)}>
+            </HelpButton>
+            <HelpButton
+              helpLabel="Mettre à jour les tarifs"
+              disabled={!rows.some((m) => m.available)}
+              onClick={() => setPricing(true)}
+              help="Relit la liste des modèles de chaque fournisseur (appel gratuit, sans tokens) pour les modèles disponibles affichés, puis montre le tarif actuel et le tarif annoncé. Seuls les changements cochés sont enregistrés. Les modèles OpenRouter suivis par la synchronisation quotidienne le restent."
+            >
               Mettre à jour les tarifs
-            </Button>
-            <InfoTip label="Mettre à jour les tarifs" width="w-80">
-              Relit la liste des modèles de chaque fournisseur (appel gratuit, sans tokens) pour les modèles disponibles affichés, puis montre
-              le tarif actuel et le tarif annoncé. Seuls les changements cochés sont enregistrés. Les modèles OpenRouter suivis par la
-              synchronisation quotidienne le restent.
-            </InfoTip>
+            </HelpButton>
             <AddModels />
           </div>
         ) : null}

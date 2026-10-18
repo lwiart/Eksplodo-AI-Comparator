@@ -1,4 +1,5 @@
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { cloneElement, type ReactElement } from 'react';
 import { expect, test, vi } from 'vitest';
 import { MODELS } from './ranking.fixtures';
@@ -70,4 +71,37 @@ test('nuage : titres des deux axes, dont « Qualité (note sur 100) » vertical 
 test('graphes vides : message plutôt qu’un graphe', () => {
   render(<QualitySpeedChart models={[MODELS[3]!]} />);
   expect(screen.getByText(/Pas encore de modèle/)).toBeInTheDocument();
+});
+
+test('nuage : toucher un point le fait pulser et affiche sa bulle ; un second toucher la referme', async () => {
+  const user = userEvent.setup();
+  render(<QualitySpeedChart models={MODELS} />);
+  const points = screen.getAllByTestId('quality-speed-point');
+  expect(points).toHaveLength(3);
+  const bravo = points.find((p) => p.getAttribute('aria-label') === 'Bravo')!;
+  await user.click(bravo);
+  // Le point est redessiné : on le relit après le toucher.
+  const pinned = screen.getAllByTestId('quality-speed-point').find((p) => p.getAttribute('aria-label') === 'Bravo')!;
+  expect(pinned).toHaveAttribute('data-pinned', 'true');
+  expect(pinned.querySelector('animate[attributeName="r"]')).not.toBeNull();
+  const popup = screen.getByTestId('quality-speed-popup');
+  expect(popup).toHaveTextContent('Bravo');
+  expect(popup).toHaveTextContent('Qualité 70');
+  expect(popup).toHaveTextContent('Vitesse 60');
+  const again = screen.getAllByTestId('quality-speed-point').find((p) => p.getAttribute('aria-label') === 'Bravo')!;
+  await user.click(again);
+  // Libéré : plus de pulsation ; la bulle de survol reste tant que la souris est dessus, puis disparaît.
+  const released = screen.getAllByTestId('quality-speed-point').find((p) => p.getAttribute('aria-label') === 'Bravo')!;
+  expect(released).not.toHaveAttribute('data-pinned');
+  expect(released.querySelector('animate')).toBeNull();
+  // Le point a été redessiné au clic : la sortie de la souris lui est envoyée directement.
+  fireEvent.mouseLeave(released);
+  expect(screen.queryByTestId('quality-speed-popup')).toBeNull();
+});
+
+test('nuage : pas de contour de focus du navigateur sur le graphe (plus de rectangle blanc au toucher)', () => {
+  render(<QualitySpeedChart models={MODELS} />);
+  const frame = screen.getByRole('img', { name: 'Nuage qualité et vitesse des modèles' });
+  expect(frame.className).toContain('[&_*:focus]:outline-none');
+  expect(frame.querySelector('.recharts-wrapper [tabindex="0"]')).toBeNull();
 });

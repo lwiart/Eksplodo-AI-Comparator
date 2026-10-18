@@ -20,10 +20,14 @@ export function ConstellationFallback({ data, className = '' }: { data: Constell
         const r = orbitRadius(ranks[i]!, count);
         const angle = -Math.PI / 2 + i * 1.1; // même déphasage que la scène 3D
         const color = astreColor(m.color, m.quality);
+        const selected = m.id === data.selectedId;
+        const cx = Math.cos(angle) * r;
+        const cy = Math.sin(angle) * r;
         return (
-          <g key={m.id} data-testid="constellation-astre">
-            <circle r={r} fill="none" stroke="#3FA2E0" strokeOpacity="0.16" strokeWidth="0.03" />
-            <circle cx={Math.cos(angle) * r} cy={Math.sin(angle) * r} r={astreRadius(m.quality)} fill={color} />
+          <g key={m.id} data-testid="constellation-astre" data-selected={selected || undefined}>
+            <circle r={r} fill="none" stroke={selected ? PEACH : '#3FA2E0'} strokeOpacity={selected ? 0.7 : 0.16} strokeWidth="0.03" />
+            {selected ? <circle cx={cx} cy={cy} r={astreRadius(m.quality) * 1.9} fill={color} fillOpacity="0.3" /> : null}
+            <circle cx={cx} cy={cy} r={astreRadius(m.quality) * (selected ? 1.3 : 1)} fill={color} />
           </g>
         );
       })}
