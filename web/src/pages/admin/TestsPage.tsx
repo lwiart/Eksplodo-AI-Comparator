@@ -38,7 +38,8 @@ function TestRow({ test, onDelete, onRestore }: { test: PublicTest; onDelete(): 
             ))}
           </div>
         </div>
-        <div className="flex flex-col gap-0.5 text-xs text-mute">
+        {/* Colonnes de largeur fixe : les infos et les boutons s'alignent d'une carte à l'autre, quelle que soit la longueur des textes. */}
+        <div className="flex flex-col gap-0.5 text-xs text-mute sm:w-64 sm:shrink-0">
           <span>Notation : {METHOD_LABEL[test.scoringMethod]}</span>
           <span>
             {test.usedInRuns > 0 ? `Utilisé dans ${test.usedInRuns} ${test.usedInRuns > 1 ? 'séries' : 'série'}` : 'Jamais utilisé'}
@@ -46,7 +47,7 @@ function TestRow({ test, onDelete, onRestore }: { test: PublicTest; onDelete(): 
           </span>
           <span>Modifié le {formatDate(test.updatedAt)}</span>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 sm:w-52 sm:shrink-0 sm:justify-end">
           {test.archivedAt ? (
             <>
               <Chip tone="live">Archivé</Chip>
