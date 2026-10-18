@@ -9,6 +9,7 @@ import { audit } from '../audit/audit.js';
 import type { Actor } from '../auth/actor.js';
 import { isOpenRouter } from '../providers/openrouter.js';
 import { ProviderError, readableDetail } from '../providers/errors.js';
+import { brandColor } from './brand-colors.js';
 import { KeyMissingError, KeyUnreadableError, sealApiKey, type KeyState, type Registry } from '../providers/registry.js';
 import type { RemoteModel } from '../providers/types.js';
 import { KNOWN_PRICES } from './known-prices.js';
@@ -116,13 +117,15 @@ const LIST_MODELS_TIMEOUT_MS = 15_000;
 /** Une nouveauté du catalogue OpenRouter reste signalée 30 jours après sa première apparition. */
 const NEW_MODEL_WINDOW_MS = 30 * 24 * 3_600_000;
 
-/** Palette des modèles : la couleur par défaut en est tirée par hachage de l'identifiant API. */
+/** Palette des modèles : sans couleur de marque connue, la couleur par défaut en est tirée par hachage de l'identifiant API. */
 const MODEL_PALETTE = [
   '#6EA8FE', '#F59E0B', '#34D399', '#F472B6', '#A78BFA', '#22D3EE',
   '#FB7185', '#A3E635', '#FBBF24', '#60A5FA', '#E879F9', '#2DD4BF',
 ] as const;
 
-function defaultColor(apiModelId: string): string {
+function defaultColor(apiModelId: string, displayName: string, providerBaseUrl: string): string {
+  const brand = brandColor(apiModelId, displayName, providerBaseUrl);
+  if (brand) return brand;
   let h = 0x811c9dc5;
   for (let i = 0; i < apiModelId.length; i++) {
     h ^= apiModelId.charCodeAt(i);
@@ -337,7 +340,7 @@ export function createCatalogService(deps: CatalogServiceDeps) {
           providerId: input.providerId,
           apiModelId: input.apiModelId,
           displayName: input.displayName,
-          color: input.color ?? defaultColor(input.apiModelId),
+          color: input.color ?? defaultColor(input.apiModelId, input.displayName, p.baseUrl),
           ...(input.inputPricePerM === undefined ? {} : { inputPricePerM: input.inputPricePerM }),
           ...(input.outputPricePerM === undefined ? {} : { outputPricePerM: input.outputPricePerM }),
           ...(input.priceSource === undefined ? {} : { priceSource: input.priceSource }),

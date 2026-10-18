@@ -66,7 +66,7 @@ export function RemoteModelsDialog({ providerId, providerBaseUrl, open, onOpenCh
     setEntries((list) =>
       checked ? [...list, {
               key: m.id,
-              draft: draftFromRemote(m, list.length),
+              draft: draftFromRemote(m, list.length, providerBaseUrl),
               manual: false,
               remote:
                 m.inputPricePerM !== null && m.outputPricePerM !== null ? { input: m.inputPricePerM, output: m.outputPricePerM } : null,
@@ -75,7 +75,7 @@ export function RemoteModelsDialog({ providerId, providerBaseUrl, open, onOpenCh
   }
 
   function addManual() {
-    setEntries((list) => [...list, { key: `manual-${manualCount}`, draft: emptyDraft(list.length), manual: true, remote: null }]);
+    setEntries((list) => [...list, { key: `manual-${manualCount}`, draft: emptyDraft(list.length, providerBaseUrl), manual: true, remote: null }]);
     setManualCount((n) => n + 1);
   }
 
@@ -180,7 +180,7 @@ export function RemoteModelsDialog({ providerId, providerBaseUrl, open, onOpenCh
 
         {manualEntries.map((entry) => (
           <div key={entry.key} className="rounded-xl border border-line p-3">
-            <ModelForm idEditable value={entry.draft} onChange={(d) => edit(entry.key, d)} />
+            <ModelForm idEditable providerBaseUrl={providerBaseUrl} value={entry.draft} onChange={(d) => edit(entry.key, d)} />
             {errors[entry.key] ? (
               <p role="alert" className="m-0 mt-2 text-xs text-bad">
                 {errors[entry.key]}

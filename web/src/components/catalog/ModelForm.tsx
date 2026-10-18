@@ -1,4 +1,6 @@
+import { useEffect, useId, useState } from 'react';
 import type { ModelInput, PriceSource, PublicModel, RemoteModelView } from '../../api/catalog';
+import { brandColor } from '../../lib/brand-colors';
 import { Field } from '../ui/Field';
 
 /** Brouillon de modèle : les nombres restent en texte tant que le formulaire est ouvert (saisie libre). */
@@ -11,17 +13,24 @@ export type ModelDraft = {
   supportsVision: boolean;
   supportsPdf: boolean;
   contextWindow: string;
+  /** Couleur encore choisie par défaut : elle suit la marque reconnue tant que l'Admin ne l'a pas changée. */
+  colorAuto?: boolean;
 };
 
 const PALETTE = ['#3FA2E0', '#F0631F', '#4FD1A5', '#B58CFF', '#FFB48A', '#7CC4EF', '#FF7A7A', '#E6C84F'];
 
 const text = (n: number | null) => (n === null ? '' : String(n));
 
-export function emptyDraft(index = 0): ModelDraft {
+/** Couleur de marque si elle est connue, sinon une couleur de la palette. */
+const defaultColor = (index: number, apiModelId = '', displayName = '', providerBaseUrl?: string) =>
+  brandColor(apiModelId, displayName, providerBaseUrl) ?? PALETTE[index % PALETTE.length]!;
+
+export function emptyDraft(index = 0, providerBaseUrl?: string): ModelDraft {
   return {
     apiModelId: '',
     displayName: '',
-    color: PALETTE[index % PALETTE.length]!,
+    color: defaultColor(index, '', '', providerBaseUrl),
+    colorAuto: true,
     inputPricePerM: '',
     outputPricePerM: '',
     supportsVision: false,
@@ -31,11 +40,11 @@ export function emptyDraft(index = 0): ModelDraft {
 }
 
 /** Brouillon prérempli depuis un modèle distant ; les valeurs inconnues restent vides pour que l'Admin les complète. */
-export function draftFromRemote(m: RemoteModelView, index: number): ModelDraft {
+export function draftFromRemote(m: RemoteModelView, index: number, providerBaseUrl?: string): ModelDraft {
   return {
     apiModelId: m.id,
     displayName: m.name,
-    color: PALETTE[index % PALETTE.length]!,
+    color: defaultColor(index, m.id, m.name, providerBaseUrl),
     inputPricePerM: text(m.inputPricePerM),
     outputPricePerM: text(m.outputPricePerM),
     supportsVision: m.supportsVision ?? false,
@@ -96,16 +105,73 @@ export function draftToInput(providerId: string, d: ModelDraft, priceSource?: Pr
   };
 }
 
+const HEX = /^#[0-9A-Fa-f]{6}$/;
+
+/** `#RRGGBB` (le # est facultatif à la saisie), en majuscules ; `null` sinon. */
+export function parseHex(raw: string): string | null {
+  const t = raw.trim();
+  const hex = t.startsWith('#') ? t : `#${t}`;
+  return HEX.test(hex) ? hex.toUpperCase() : null;
+}
+
+/** Couleur saisie d'abord en HEX ; la pastille ouvre le sélecteur du navigateur pour qui préfère choisir à l'œil. */
+export function ColorField({ value, onChange }: { value: string; onChange(color: string): void }) {
+  const [raw, setRaw] = useState(value.toUpperCase());
+  useEffect(() => setRaw(value.toUpperCase()), [value]);
+  const invalid = parseHex(raw) === null;
+  const id = useId();
+  return (
+    <div className="flex flex-col gap-1.5 text-[13px] font-medium text-ink">
+      <label htmlFor={id}>Couleur (HEX)</label>
+      <span className="flex items-center gap-2">
+        <input
+          id={id}
+          type="text"
+          value={raw}
+          maxLength={7}
+          spellCheck={false}
+          autoComplete="off"
+          aria-invalid={invalid}
+          placeholder="#RRGGBB"
+          onChange={(e) => {
+            setRaw(e.target.value);
+            const hex = parseHex(e.target.value);
+            if (hex !== null) onChange(hex);
+          }}
+          className={`h-[42px] min-w-0 flex-1 rounded-xl border bg-night-0/60 px-3 font-mono text-sm text-white uppercase ${invalid ? 'border-bad' : 'border-line-strong'}`}
+        />
+        <input
+          type="color"
+          aria-label="Choisir la couleur dans la palette"
+          value={value}
+          onChange={(e) => onChange(e.target.value.toUpperCase())}
+          className="block h-[42px] w-[42px] shrink-0 cursor-pointer rounded-xl border border-line-strong bg-night-0/60 p-1"
+        />
+      </span>
+      {invalid ? <span className="text-xs text-bad">Code attendu : #RRGGBB</span> : null}
+    </div>
+  );
+}
+
 type Props = {
   value: ModelDraft;
   onChange(value: ModelDraft): void;
   /** Identifiant API modifiable : ajout à la main uniquement (il ne change plus après la création). */
   idEditable?: boolean;
+  /** Adresse de l'API du fournisseur : sert à reconnaître la marque d'un modèle ajouté à la main. */
+  providerBaseUrl?: string;
 };
 
 /** Formulaire compact d'un modèle : nom affiché, couleur, prix par million de tokens, capacités, contexte. */
-export function ModelForm({ value, onChange, idEditable = false }: Props) {
-  const set = <K extends keyof ModelDraft>(key: K, v: ModelDraft[K]) => onChange({ ...value, [key]: v });
+export function ModelForm({ value, onChange, idEditable = false, providerBaseUrl }: Props) {
+  const set = <K extends keyof ModelDraft>(key: K, v: ModelDraft[K]) => {
+    const next = { ...value, [key]: v };
+    // Couleur restée par défaut : elle suit la marque reconnue dans l'identifiant ou le nom saisis.
+    if (value.colorAuto && (key === 'apiModelId' || key === 'displayName')) {
+      next.color = brandColor(next.apiModelId, next.displayName, providerBaseUrl) ?? value.color;
+    }
+    onChange(next);
+  };
   return (
     <div className="grid grid-cols-2 gap-3 min-[640px]:grid-cols-4">
       {idEditable ? (
@@ -118,15 +184,7 @@ export function ModelForm({ value, onChange, idEditable = false }: Props) {
         />
       ) : null}
       <Field label="Nom affiché" autoComplete="off" value={value.displayName} onChange={(e) => set('displayName', e.target.value)} />
-      <label className="flex flex-col gap-1.5 text-[13px] font-medium text-ink">
-        Couleur
-        <input
-          type="color"
-          value={value.color}
-          onChange={(e) => set('color', e.target.value)}
-          className="block h-[42px] w-full cursor-pointer rounded-xl border border-line-strong bg-night-0/60 p-1"
-        />
-      </label>
+      <ColorField value={value.color} onChange={(color) => onChange({ ...value, color, colorAuto: false })} />
       <Field label="Prix entrée ($/M)" inputMode="decimal" value={value.inputPricePerM} onChange={(e) => set('inputPricePerM', e.target.value)} />
       <Field label="Prix sortie ($/M)" inputMode="decimal" value={value.outputPricePerM} onChange={(e) => set('outputPricePerM', e.target.value)} />
       <Field label="Contexte (tokens)" inputMode="numeric" value={value.contextWindow} onChange={(e) => set('contextWindow', e.target.value)} />

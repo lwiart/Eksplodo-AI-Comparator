@@ -253,7 +253,8 @@ describe('modèles', () => {
       priceSource: 'manual',
       available: true,
     });
-    expect(res.json().model.color).toMatch(/^#[0-9A-Fa-f]{6}$/);
+    // Marque reconnue dans l'identifiant : couleur de Mistral par défaut.
+    expect(res.json().model.color).toBe('#FA520F');
     const again = await post('/api/models', body);
     expect(again.statusCode).toBe(409);
     expect(code(again)).toBe('model_exists');

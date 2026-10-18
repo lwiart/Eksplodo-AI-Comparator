@@ -147,7 +147,7 @@ test('Admin : modifier prix, couleur et activation ; Utilisateur : lecture seule
   const input = screen.getByLabelText('Prix entrée ($/M)');
   await user.clear(input);
   await user.type(input, '5');
-  fireEvent.change(screen.getByLabelText('Couleur'), { target: { value: '#112233' } });
+  fireEvent.change(screen.getByLabelText('Choisir la couleur dans la palette'), { target: { value: '#112233' } });
   await user.click(screen.getByRole('switch', { name: 'Actif' }));
   await user.click(screen.getByRole('button', { name: 'Enregistrer' }));
   const call = apiFetch.mock.calls.find(([, init]) => init?.method === 'PATCH')!;
