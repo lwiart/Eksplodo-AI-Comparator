@@ -64,6 +64,20 @@ function ProgressStrip({ progress }: { progress: RunProgress }) {
   const total = progress.counts.total;
   const pct = total === 0 ? 0 : Math.round((done / total) * 100);
   const spent = progress.modelsCostUsd + progress.judgeCostUsd;
+  // Plus aucun appel de modèle à faire : la série attend encore les notes du juge (ou se termine).
+  const callsLeft = progress.counts.pending + progress.counts.running;
+  const remaining =
+    progress.status === 'paused'
+      ? 'En pause'
+      : progress.status === 'interrupted'
+        ? 'Interrompue'
+        : callsLeft === 0 && progress.judgePending > 0
+          ? `Notation du juge : ${progress.judgePending} en attente`
+          : callsLeft === 0
+            ? 'Finalisation…'
+            : progress.etaSeconds === null
+              ? 'Après les premières réponses'
+              : `≈ ${duration(progress.etaSeconds)}`;
   return (
     <Card className="flex flex-col gap-3">
       <div className="flex flex-wrap items-end justify-between gap-x-8 gap-y-3">
@@ -86,7 +100,7 @@ function ProgressStrip({ progress }: { progress: RunProgress }) {
         <div>
           <div className="text-xs text-mute">Temps restant estimé</div>
           <div className="font-mono text-lg font-semibold text-white">
-            {progress.status === 'paused' ? 'En pause' : progress.status === 'interrupted' ? 'Interrompue' : progress.etaSeconds === null ? 'Après les premières réponses' : `≈ ${duration(progress.etaSeconds)}`}
+            {remaining}
           </div>
         </div>
       </div>

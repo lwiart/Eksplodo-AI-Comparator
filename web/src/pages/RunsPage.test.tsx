@@ -11,7 +11,7 @@ vi.mock('../api/client', async (importOriginal) => ({
   apiFetch,
 }));
 
-const counts = (over: Record<string, number> = {}) => ({ pending: 0, running: 0, done: 0, error: 0, timeout: 0, unsupported: 0, total: 0, ...over });
+const counts = (over: Record<string, number> = {}) => ({ pending: 0, running: 0, done: 0, error: 0, timeout: 0, unsupported: 0, truncated: 0, total: 0, ...over });
 const summary = (over: Record<string, unknown>) => ({
   id: 'r1',
   name: 'Série',

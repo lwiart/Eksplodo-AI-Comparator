@@ -36,9 +36,9 @@ export const RUN_STATUS_LABELS: Record<RunStatus, string> = {
   interrupted: 'Interrompue',
 };
 
-/** Appels terminés, quelle que soit l'issue (réussis, en erreur, hors délai ou non supportés). */
+/** Appels terminés, quelle que soit l'issue (réussis, en erreur, hors délai, non supportés ou tronqués). */
 export function finishedCalls(c: StatusCounts): number {
-  return c.done + c.error + c.timeout + c.unsupported;
+  return c.done + c.error + c.timeout + c.unsupported + c.truncated;
 }
 
 const LINK_BUTTON =

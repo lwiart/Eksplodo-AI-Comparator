@@ -189,6 +189,21 @@ test('en-tête : nom, suite, modèles × répétitions, juge, coût modèles + j
   expect(within(title.parentElement!).getByText('En cours')).toBeInTheDocument();
 });
 
+test('réponses tronquées comptées comme terminées ; plus d’appel à faire : notes du juge en attente au lieu d’un temps restant', async () => {
+  renderPage('admin', {
+    ...PROGRESS,
+    counts: counts({ done: 3, truncated: 2, error: 1, total: 6 }),
+    running: [],
+    etaSeconds: 0,
+    judgePending: 4,
+  });
+  const bar = await screen.findByRole('progressbar', { name: 'Avancement' });
+  expect(bar).toHaveAttribute('aria-valuenow', '100');
+  expect(screen.getByText('6 / 6 appels')).toBeInTheDocument();
+  expect(screen.getByText('Notation du juge : 4 en attente')).toBeInTheDocument();
+  expect(screen.queryByText(/^≈/)).toBeNull();
+});
+
 test('vue en direct : progression, matrice test × modèle, fil d’activité', async () => {
   renderPage();
   const bar = await screen.findByRole('progressbar', { name: 'Avancement' });
