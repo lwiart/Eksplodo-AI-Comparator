@@ -243,7 +243,12 @@ test('interrogation toutes les 2 s, arrêtée à completed', async () => {
   expect(progressCalls()).toBe(3);
   await tick(10_000);
   expect(progressCalls()).toBe(3);
-  expect(await screen.findByRole('table', { name: 'Métriques par modèle' })).toBeInTheDocument();
+  const metrics = await screen.findByRole('table', { name: 'Métriques par modèle' });
+  // Série terminée : progression puis métriques, avant les réponses côte à côte.
+  const progressMatrix = screen.getByRole('table', { name: 'Progression par test et par modèle' });
+  const answers = screen.getByRole('heading', { name: /Réponses côte à côte/ });
+  expect(progressMatrix.compareDocumentPosition(metrics) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(metrics.compareDocumentPosition(answers) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 });
 
 test('onglet caché : pas d’interrogation, une requête au retour', async () => {

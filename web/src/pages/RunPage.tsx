@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { lazy, Suspense, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useParams } from 'react-router-dom';
 import { MODELS_KEY, listModels } from '../api/catalog';
 import { messageForError } from '../api/messages';
@@ -159,6 +159,7 @@ function ResultsSection({
   active,
   tests,
   judgePending,
+  beforeAnswers,
 }: {
   runId: string;
   isAdmin: boolean;
@@ -166,6 +167,8 @@ function ResultsSection({
   active: boolean;
   tests: SideBySideTest[];
   judgePending: number;
+  /** Sections placées entre les résultats et les réponses côte à côte (série terminée : progression et métriques). */
+  beforeAnswers?: ReactNode;
 }) {
   // Classement et réponses côte à côte interrogés ensemble tant que la série est active ou que des notes du juge sont
   // attendues ; une dernière relecture quand la série passe à un état final ou que ces notes sont toutes rendues (sinon
@@ -208,6 +211,7 @@ function ResultsSection({
     <Suspense fallback={<p className="text-sm text-mute">Chargement du classement…</p>}>
       <div className="flex flex-col gap-4">
         <ResultsView runId={runId} ranking={ranking.data} isAdmin={isAdmin} selection={selection} onSelect={select} />
+        {beforeAnswers}
         <SideBySide
           runId={runId}
           tests={tests}
@@ -465,10 +469,17 @@ export function RunPage() {
                   failedModelIds: m.cells.filter((c) => c.failed > 0).map((c) => c.modelId),
                 }))}
                 judgePending={progress.data.judgePending}
+                beforeAnswers={
+                  // Série terminée : la matrice reste visible (erreurs et réponses tronquées d'un coup d'œil), puis les
+                  // métriques par modèle, avant les réponses côte à côte.
+                  progress.data.status === 'completed' ? (
+                    <>
+                      <LiveMatrix matrix={progress.data.matrix} models={progress.data.models} />
+                      <CompletedView runId={id} />
+                    </>
+                  ) : null
+                }
               />
-              {/* Série terminée : la matrice reste visible pour repérer d'un coup d'œil les erreurs et les réponses tronquées. */}
-              {progress.data.status === 'completed' ? <LiveMatrix matrix={progress.data.matrix} models={progress.data.models} /> : null}
-              {progress.data.status === 'completed' ? <CompletedView runId={id} /> : null}
             </div>
           ) : (
             <p className="text-sm text-mute">Chargement de l’avancement…</p>
