@@ -872,7 +872,7 @@
       "systemPrompt": null,
       "userPrompt": "Écris une très courte nouvelle (200 mots environ) qui se passe dans un phare, avec une chute inattendue. Donne-lui un titre.",
       "temperature": 0.9,
-      "maxTokens": 2000,
+      "maxTokens": 3000,
       "scoringMethod": "manual",
       "scoringConfig": {},
       "attachments": []
