@@ -196,3 +196,11 @@ test('menu : chaque entrée a son icône « ? » avec une courte description, ho
   }
   expect(screen.getByRole('button', { name: 'Aide : Suites' })).toHaveAccessibleDescription('Listes ordonnées de tests à lancer ensemble dans une série.');
 });
+
+test('lien « Aide » juste au-dessus du menu du compte, pour tous les rôles', () => {
+  renderShell('user');
+  const aside = screen.getAllByRole('link', { name: /Aide/ })[0]!;
+  expect(aside).toHaveAttribute('href', '/aide');
+  const account = screen.getAllByRole('button', { name: /Laurent|Utilisateur/ })[0]!;
+  expect(aside.compareDocumentPosition(account) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+});

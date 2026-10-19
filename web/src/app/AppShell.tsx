@@ -239,6 +239,20 @@ function SidebarBody({ user, onNavigate }: { user: PublicUser; onNavigate?: () =
         <ExploreSection onNavigate={onNavigate} />
         {user.role === 'admin' ? <AdminSection onNavigate={onNavigate} /> : null}
       </nav>
+      <NavLink
+        to="/aide"
+        onClick={onNavigate}
+        className={({ isActive }) =>
+          `mb-2 flex items-center gap-2.5 rounded-[10px] py-[9px] pl-2.5 text-sm no-underline transition-colors ${
+            isActive ? 'bg-gradient-to-r from-orange/20 to-orange/[0.02] text-white shadow-[inset_2px_0_0_var(--color-orange)]' : 'text-ink hover:bg-blue/10'
+          }`
+        }
+      >
+        <span aria-hidden="true" className="w-[18px] text-center opacity-85">
+          ?
+        </span>
+        Aide
+      </NavLink>
       <AccountMenu user={user} onNavigate={onNavigate} />
     </>
   );

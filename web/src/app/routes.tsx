@@ -3,6 +3,7 @@ import { useAuth, type Role } from '../auth/AuthProvider';
 import { AccessDeniedPage } from '../pages/AccessDeniedPage';
 import { BlindScoringPage } from '../pages/BlindScoringPage';
 import { AccountPage } from '../pages/AccountPage';
+import { HelpPage } from '../pages/HelpPage';
 import { DashboardPage } from '../pages/DashboardPage';
 import { InvitationPage } from '../pages/InvitationPage';
 import { LaunchRunPage } from '../pages/LaunchRunPage';
@@ -72,6 +73,7 @@ export function AppRoutes() {
           <Route path="/a-noter" element={<ToScorePage />} />
           <Route path="/a-noter/:runTestId" element={<BlindScoringPage />} />
           <Route path="/compte" element={<AccountPage />} />
+          <Route path="/aide" element={<HelpPage />} />
           <Route element={<RequireRole roles={['admin']} />}>
             <Route path="/admin/utilisateurs" element={<UsersPage />} />
             <Route path="/admin/fournisseurs" element={<ProvidersPage />} />
