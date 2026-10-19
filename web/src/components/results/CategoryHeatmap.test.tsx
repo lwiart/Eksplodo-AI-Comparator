@@ -18,7 +18,7 @@ test('matrice : une ligne par modèle noté dans l’ordre reçu, avec pastille 
   const alpha = matrix().getByRole('rowheader', { name: /Alpha/ });
   expect(alpha).toHaveTextContent('Anthropic');
   expect((alpha.querySelector('[aria-hidden="true"]') as HTMLElement).style.backgroundColor).toBe('rgb(240, 99, 31)');
-  expect(matrix().getAllByRole('columnheader').map((h) => h.textContent)).toEqual(['Modèle', 'Rédaction', 'Logique', 'Qualité']);
+  expect(matrix().getAllByRole('columnheader').map((h) => h.textContent!.replace(/[↕↑↓]/g, ''))).toEqual(['Modèle', 'Rédaction', 'Logique', 'Qualité']);
   // Légende de l'échelle sous la matrice.
   expect(within(screen.getByRole('group', { name: 'Légende : échelle des notes' })).getByText('50')).toBeInTheDocument();
 });
@@ -50,7 +50,7 @@ test('matrice : fond selon la note, rouge-orangé en bas, ambre au milieu, vert 
   expect(high.style.color).toBe('rgb(255, 255, 255)');
 });
 
-test('matrice : un clic sur un en-tête trie par note décroissante (sans note en dernier), un second revient à l’ordre du classement', async () => {
+test('matrice : un clic sur un en-tête trie par note décroissante (sans note en dernier), puis croissante, puis l’ordre du classement', async () => {
   const user = userEvent.setup();
   render(<CategoryHeatmap models={[...MODELS, ECHO]} categories={RANKING.categories} />);
   const header = (name: string) => matrix().getByRole('columnheader', { name });
@@ -69,6 +69,13 @@ test('matrice : un clic sur un en-tête trie par note décroissante (sans note e
   expect(header('Qualité')).toHaveAttribute('aria-sort', 'descending');
   expect(header('Logique')).not.toHaveAttribute('aria-sort');
 
+  // Second clic : note croissante, flèche vers le haut.
+  await user.click(matrix().getByRole('button', { name: 'Qualité' }));
+  expect(header('Qualité')).toHaveAttribute('aria-sort', 'ascending');
+  expect(within(header('Qualité')).getByText('↑')).toBeInTheDocument();
+  expect(rowOrder()[rowOrder().length - 1]).toBe('Alpha');
+
+  // Troisième clic : retour à l'ordre du classement.
   await user.click(matrix().getByRole('button', { name: 'Qualité' }));
   expect(rowOrder()).toEqual(['Alpha', 'Bravo', 'Charlie', 'Echo']);
   expect(matrix().queryAllByRole('columnheader').filter((h) => h.hasAttribute('aria-sort'))).toHaveLength(0);

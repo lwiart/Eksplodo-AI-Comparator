@@ -172,8 +172,8 @@ test('réponse tronquée à 200 000 caractères', async () => {
   expect(out.text.length).toBe(200_000);
 });
 
-test('120 s sans fin → timeout réessayable', async () => {
-  expect(CALL_TIMEOUT_MS).toBe(120_000);
+test('10 minutes sans fin → timeout réessayable', async () => {
+  expect(CALL_TIMEOUT_MS).toBe(600_000);
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
   const clock = { t: 0 };
   const hanging: ProviderAdapter = {
@@ -187,9 +187,9 @@ test('120 s sans fin → timeout réessayable', async () => {
   const pending = measureCall(hanging, req, prices, { now: () => clock.t });
   let settled = false;
   void pending.then(() => (settled = true));
-  await vi.advanceTimersByTimeAsync(119_999);
+  await vi.advanceTimersByTimeAsync(599_999);
   expect(settled).toBe(false);
-  clock.t = 120_000;
+  clock.t = 600_000;
   await vi.advanceTimersByTimeAsync(1);
   const out = await pending;
   expect(out.status).toBe('timeout');
@@ -197,7 +197,7 @@ test('120 s sans fin → timeout réessayable', async () => {
   expect(out.retryable).toBe(true);
   expect(out.text).toBe('Début');
   expect(out.costUsd).toBeNull();
-  expect(out.totalMs).toBe(120_000);
+  expect(out.totalMs).toBe(600_000);
 });
 
 test('erreur au milieu du flux : texte gardé, erreur renvoyée masquée', async () => {

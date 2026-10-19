@@ -351,13 +351,42 @@ test('filtre de la matrice : tests de la catégorie et réponses du modèle seul
   expect(screen.queryByRole('article', { name: 'GPT Test, répétition 1' })).toBeNull();
   expect(screen.getByRole('status')).toHaveTextContent('Filtre : Claude Opus · Rédaction (2 tests)');
   const options = within(screen.getByLabelText('Test')).getAllByRole('option').map((o) => o.textContent);
-  expect(options).toEqual(['Résumer un CCTP', 'Lettre']);
+  expect(options).toEqual(['Tous les tests (2)', 'Résumer un CCTP', 'Lettre']);
   expect(screen.getByLabelText('Catégorie')).toHaveValue('Rédaction');
   expect(screen.getByLabelText('Modèle')).toHaveValue('m1');
   await user.selectOptions(screen.getByLabelText('Modèle'), 'm2');
   expect(onChange).toHaveBeenLastCalledWith({ modelId: 'm2', category: 'Rédaction' });
   await user.click(screen.getByRole('button', { name: 'Retirer le filtre' }));
   expect(onChange).toHaveBeenLastCalledWith({ modelId: null, category: null });
+});
+
+test('clic sur une note de la matrice : tous les tests de la catégorie, réponses du modèle en pleine largeur', async () => {
+  const tests = [
+    { runTestId: 'rt1', testName: 'Résumer un CCTP', category: 'Rédaction' },
+    { runTestId: 'rt2', testName: 'Extraire', category: 'Extraction' },
+    { runTestId: 'rt3', testName: 'Lettre', category: 'Rédaction' },
+  ];
+  answersBody = { test: TEST_INFO, answers: [answer({ modelId: 'm1' }), answer({ resultId: 'a2', modelId: 'm2', modelName: 'GPT Test' })] };
+  const models = [
+    { modelId: 'm1', name: 'Claude Opus' },
+    { modelId: 'm2', name: 'GPT Test' },
+  ];
+  const view = (focusKey: number) => (
+    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+      <MemoryRouter>
+        <SideBySide runId="r1" tests={tests} isAdmin={false} filter={{ modelId: 'm1', category: 'Rédaction' }} onFilterChange={vi.fn()} models={models} focusKey={focusKey} />
+      </MemoryRouter>
+    </QueryClientProvider>
+  );
+  render(view(1));
+  expect(screen.getByLabelText('Test')).toHaveValue('__tous__');
+  const blocks = await screen.findAllByRole('region');
+  const names = blocks.map((b) => b.getAttribute('aria-label')).filter((n) => n === 'Résumer un CCTP' || n === 'Lettre' || n === 'Extraire');
+  expect(names).toEqual(['Résumer un CCTP', 'Lettre']);
+  await waitFor(() => expect(screen.getAllByRole('article', { name: 'Claude Opus, répétition 1' })).toHaveLength(2));
+  const cards = screen.getAllByRole('article', { name: 'Claude Opus, répétition 1' });
+  expect(screen.queryByRole('article', { name: 'GPT Test, répétition 1' })).toBeNull();
+  expect(cards[0]?.parentElement).not.toHaveClass('md:grid-cols-2');
 });
 
 test('listes Catégorie et Modèle sans matrice : le composant filtre seul', async () => {

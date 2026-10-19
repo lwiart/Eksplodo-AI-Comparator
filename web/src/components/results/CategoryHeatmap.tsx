@@ -1,5 +1,6 @@
 import { useId, useMemo, useState } from 'react';
 import type { RankingModel } from '../../api/results';
+import { ariaSort, nextSort, sortBy, type SortState } from '../../lib/sort';
 import { DASH, score } from './format';
 
 /** Étapes de l'échelle de couleur (note sur 100 → fond de case), lisibles sous un texte blanc sur fond sombre comme sur papier. */
@@ -30,12 +31,6 @@ export function heatmapModels(models: RankingModel[], categories: string[]): Ran
 
 type Column = { key: string; label: string; category: string | null; value: (m: RankingModel) => number | null };
 
-/** Modèles triés par note décroissante dans la colonne (sans note : en fin) ; à égalité, l'ordre reçu est conservé. */
-export function sortByColumn(models: RankingModel[], value: (m: RankingModel) => number | null): RankingModel[] {
-  const v = (m: RankingModel) => value(m) ?? Number.NEGATIVE_INFINITY;
-  return [...models].sort((a, b) => v(b) - v(a));
-}
-
 const QUALITY_KEY = 'quality';
 
 /** Case choisie : un modèle et une catégorie (`null` : la colonne Qualité, toutes catégories). */
@@ -63,7 +58,8 @@ export function CategoryHeatmap({
   onSelect?: (selection: HeatmapSelection | null) => void;
 }) {
   const hintId = useId();
-  const [sortKey, setSortKey] = useState<string | null>(null);
+  // Tri : note décroissante, puis croissante, puis ordre du classement (sans note toujours en dernier).
+  const [sort, setSort] = useState<SortState<string>>(null);
   const columns: Column[] = useMemo(
     () => [
       ...categories.map((c) => ({ key: `category:${c}`, label: c, category: c, value: (m: RankingModel) => m.byCategory[c] ?? null })),
@@ -72,15 +68,15 @@ export function CategoryHeatmap({
     [categories],
   );
   const scored = useMemo(() => heatmapModels(models, categories), [models, categories]);
-  const active = columns.find((c) => c.key === sortKey);
-  const rows = useMemo(() => (active ? sortByColumn(scored, active.value) : scored), [scored, active]);
+  const active = columns.find((c) => c.key === sort?.key);
+  const rows = useMemo(() => (active && sort ? sortBy(scored, active.value, sort.dir) : scored), [scored, active, sort]);
 
   if (categories.length === 0 || scored.length === 0) return <p className="m-0 py-10 text-center text-sm text-mute">Pas encore de note par catégorie.</p>;
 
   return (
     <div data-testid="category-heatmap">
       <p id={hintId} className="no-print m-0 mb-2 text-xs text-mute">
-        Cliquez sur une catégorie ou sur « Qualité » pour trier les modèles ; un second clic revient à l'ordre du classement.
+        Cliquez sur une catégorie ou sur « Qualité » pour trier les modèles (note décroissante, puis croissante, puis ordre du classement).
         {onSelect ? ' Cliquez sur une note pour afficher plus bas les réponses de ce modèle dans cette catégorie.' : null}
       </p>
       {columns.length > 3 ? (
@@ -94,28 +90,26 @@ export function CategoryHeatmap({
                 Modèle
               </th>
               {columns.map((col) => {
-                const sorted = col.key === sortKey;
+                const dir = sort?.key === col.key ? sort.dir : null;
                 return (
                   <th
                     key={col.key}
                     scope="col"
-                    aria-sort={sorted ? 'descending' : undefined}
+                    aria-sort={ariaSort(sort, col.key)}
                     className={`heatmap-head min-w-[3.25rem] max-w-[6rem] p-0 align-bottom font-medium sm:min-w-[4.5rem] sm:max-w-[8rem] ${col.key === QUALITY_KEY ? 'heatmap-quality' : ''}`}
                   >
                     <button
                       type="button"
-                      onClick={() => setSortKey(sorted ? null : col.key)}
-                      title={sorted ? "Revenir à l'ordre du classement" : 'Trier par note décroissante'}
+                      onClick={() => setSort((s) => nextSort(s, col.key, 'desc'))}
+                      title={dir === null ? 'Trier par note décroissante' : dir === 'desc' ? 'Trier par note croissante' : "Revenir à l'ordre du classement"}
                       className={`w-full cursor-pointer rounded-md border-0 bg-transparent px-1 py-1.5 text-center text-[10.5px] leading-tight [overflow-wrap:break-word] hover:bg-blue/10 focus-visible:outline-2 focus-visible:outline-blue sm:px-1.5 sm:text-xs ${
-                        sorted ? 'font-semibold text-white' : 'font-medium text-ink'
+                        dir ? 'font-semibold text-white' : 'font-medium text-ink'
                       }`}
                     >
                       {col.label}
-                      {sorted ? (
-                        <span aria-hidden="true" className="ml-0.5">
-                          ↓
-                        </span>
-                      ) : null}
+                      <span aria-hidden="true" className={`ml-0.5 ${dir ? 'text-peach' : 'opacity-40'}`}>
+                        {dir === 'asc' ? '↑' : dir === 'desc' ? '↓' : '↕'}
+                      </span>
                     </button>
                   </th>
                 );

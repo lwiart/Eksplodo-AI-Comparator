@@ -1,5 +1,7 @@
-import { useId } from 'react';
+import { useId, useState } from 'react';
 import type { RankedRow } from '../../lib/ranking';
+import { ariaSort, nextSort, sortBy, type SortState } from '../../lib/sort';
+import { SortButton } from '../ui/SortButton';
 import { formatDuration } from '../tests/QuickTryPanel';
 import { Card } from '../ui/Card';
 import { InfoTip } from '../ui/InfoTip';
@@ -8,18 +10,54 @@ import { DASH, costPerAnswer, reliabilityPercent, score, tokensPerSecond } from 
 
 const TH = 'px-4 py-3 font-medium';
 
+type ColumnKey = 'rank' | 'model' | 'global' | 'quality' | 'ttft' | 'tps' | 'cost' | 'reliability';
+
+/** Valeur de tri de chaque colonne, et sens du premier clic (le meilleur d'abord). */
+const COLUMNS: Record<ColumnKey, { value: (r: RankedRow) => number | string | null; first: 'asc' | 'desc' }> = {
+  rank: { value: (r) => r.rank, first: 'asc' },
+  model: { value: (r) => r.model.name, first: 'asc' },
+  global: { value: (r) => r.global, first: 'desc' },
+  quality: { value: (r) => r.model.quality, first: 'desc' },
+  ttft: { value: (r) => r.model.raw.medianTtftMs, first: 'asc' },
+  tps: { value: (r) => r.model.raw.medianTokensPerS, first: 'desc' },
+  cost: { value: (r) => r.model.raw.meanCostUsd, first: 'asc' },
+  reliability: { value: (r) => r.model.reliability, first: 'desc' },
+};
+
 /**
- * En-tête de colonne avec une icône d'aide. Le nom accessible reste le seul intitulé (`aria-label`) :
+ * En-tête de colonne triable, avec une icône d'aide éventuelle. Le nom accessible reste le seul intitulé (`aria-label`) :
  * la bulle a son propre bouton et n'est pas relue à chaque cellule.
  */
-function HelpHeader({ title, help, helpLabel, className, align = 'left' }: { title: string; help: string; helpLabel: string; className: string; align?: 'left' | 'right' }) {
+function SortHeader({
+  title,
+  column,
+  sort,
+  onSort,
+  className,
+  help,
+  helpLabel,
+  align = 'left',
+}: {
+  title: string;
+  column: ColumnKey;
+  sort: SortState<ColumnKey>;
+  onSort(column: ColumnKey): void;
+  className: string;
+  help?: string;
+  helpLabel?: string;
+  align?: 'left' | 'right';
+}) {
   return (
-    <th scope="col" aria-label={title} className={className}>
-      <span className="inline-flex items-center gap-1.5">
-        {title}
-        <InfoTip label={helpLabel} align={align}>
-          {help}
-        </InfoTip>
+    <th scope="col" aria-label={title} aria-sort={ariaSort(sort, column)} className={className}>
+      <span className={`inline-flex items-center gap-1.5 ${align === 'right' ? 'justify-end' : ''}`}>
+        <SortButton dir={sort?.key === column ? sort.dir : null} onClick={() => onSort(column)} align={align}>
+          {title}
+        </SortButton>
+        {help && helpLabel ? (
+          <InfoTip label={helpLabel} align={align}>
+            {help}
+          </InfoTip>
+        ) : null}
       </span>
     </th>
   );
@@ -47,8 +85,13 @@ function PrintedDefinitions({ hideCosts }: { hideCosts: boolean }) {
  * Classement détaillé : rang, score global et mesures par modèle ; « — » pour une valeur nulle ; `hideCosts` retire la colonne coût.
  * Icônes d'aide sur les en-têtes ; à l'impression, le tableau se compacte (theme.css) et les définitions s'affichent dessous.
  */
-export function RankingTable({ rows, judgeName, hideCosts = false }: { rows: RankedRow[]; judgeName?: string | null; hideCosts?: boolean }) {
+export function RankingTable({ rows: ranked, judgeName, hideCosts = false }: { rows: RankedRow[]; judgeName?: string | null; hideCosts?: boolean }) {
   const headingId = useId();
+  // Tri au clic sur un en-tête : le meilleur d'abord, puis l'autre sens, puis l'ordre du classement.
+  const [sort, setSort] = useState<SortState<ColumnKey>>(null);
+  const onSort = (column: ColumnKey) => setSort((s) => nextSort(s, column, COLUMNS[column].first));
+  const rows = sort ? sortBy(ranked, COLUMNS[sort.key].value, sort.dir) : ranked;
+  const header = { sort, onSort };
   return (
     <Card className="p-0">
       <div className="px-4 pt-4">
@@ -63,14 +106,16 @@ export function RankingTable({ rows, judgeName, hideCosts = false }: { rows: Ran
         <table aria-labelledby={headingId} className="table-sticky-rank ranking-table w-full border-collapse text-sm">
           <thead>
             <tr className="text-left text-xs text-mute">
-              <th scope="col" className={`${TH} ranking-col-rank`}>Rang</th>
-              <th scope="col" className={`${TH} ranking-col-model`}>Modèle</th>
-              <HelpHeader title="Score global" helpLabel={DEFINITION_LABELS.global} help={DEFINITIONS.global} className={TH} />
-              <HelpHeader title="Qualité" helpLabel={DEFINITION_LABELS.quality} help={DEFINITIONS.quality} className={`${TH} text-right`} align="right" />
-              <HelpHeader title="Premier token médian" helpLabel="Premier token (vitesse)" help={DEFINITIONS.speed} className={`${TH} text-right`} align="right" />
-              <HelpHeader title="Débit médian" helpLabel="Débit (vitesse)" help={DEFINITIONS.speed} className={`${TH} text-right`} align="right" />
-              {hideCosts ? null : <HelpHeader title="Coût moyen" helpLabel={DEFINITION_LABELS.cost} help={DEFINITIONS.cost} className={`${TH} text-right`} align="right" />}
-              <HelpHeader title="Fiabilité" helpLabel={DEFINITION_LABELS.reliability} help={DEFINITIONS.reliability} className={`${TH} text-right`} align="right" />
+              <SortHeader title="Rang" column="rank" {...header} className={`${TH} ranking-col-rank`} />
+              <SortHeader title="Modèle" column="model" {...header} className={`${TH} ranking-col-model`} />
+              <SortHeader title="Score global" column="global" {...header} helpLabel={DEFINITION_LABELS.global} help={DEFINITIONS.global} className={TH} />
+              <SortHeader title="Qualité" column="quality" {...header} helpLabel={DEFINITION_LABELS.quality} help={DEFINITIONS.quality} className={`${TH} text-right`} align="right" />
+              <SortHeader title="Premier token médian" column="ttft" {...header} helpLabel="Premier token (vitesse)" help={DEFINITIONS.speed} className={`${TH} text-right`} align="right" />
+              <SortHeader title="Débit médian" column="tps" {...header} helpLabel="Débit (vitesse)" help={DEFINITIONS.speed} className={`${TH} text-right`} align="right" />
+              {hideCosts ? null : (
+                <SortHeader title="Coût moyen" column="cost" {...header} helpLabel={DEFINITION_LABELS.cost} help={DEFINITIONS.cost} className={`${TH} text-right`} align="right" />
+              )}
+              <SortHeader title="Fiabilité" column="reliability" {...header} helpLabel={DEFINITION_LABELS.reliability} help={DEFINITIONS.reliability} className={`${TH} text-right`} align="right" />
             </tr>
           </thead>
           <tbody>

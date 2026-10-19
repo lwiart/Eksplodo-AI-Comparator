@@ -28,7 +28,7 @@ export type CallOutcome = {
 
 export type ModelPrices = { inputPricePerM: number; outputPricePerM: number };
 
-export const CALL_TIMEOUT_MS = 120_000;
+export const CALL_TIMEOUT_MS = 600_000;
 export const MAX_RESPONSE_CHARS = 200_000;
 /** En deçà, la phase de génération est trop courte pour un débit significatif. */
 const MIN_GENERATION_MS = 100;

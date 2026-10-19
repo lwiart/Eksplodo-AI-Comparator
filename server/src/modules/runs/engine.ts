@@ -44,7 +44,7 @@ import { estimateInputTokens, maxCallCostUsd } from './estimate.js';
 import { RUN_EXECUTE, enqueueRunJob, withTxRetry } from './run-job.js';
 import type { TestSnapshot } from './snapshot.js';
 
-/** Durée d'une tranche : ni lancement ni nouvelle tentative au-delà (les appels en cours se terminent, ≤ 120 s). */
+/** Durée d'une tranche : ni lancement ni nouvelle tentative au-delà (les appels en cours se terminent, 10 minutes au plus). */
 export const SLICE_MS = 600_000;
 /** Nouvelles tentatives au plus par résultat (soit trois appels). */
 export const MAX_RETRIES = 2;

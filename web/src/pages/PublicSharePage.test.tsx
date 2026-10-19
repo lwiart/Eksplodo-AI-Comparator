@@ -311,6 +311,38 @@ test('classement détaillé avant la matrice ; clic sur une note : réponses fil
   expect(section.getByText('Lettre Alpha')).toBeInTheDocument();
 });
 
+test('clic sur une note : tous les tests de la catégorie, réponses en pleine largeur', async () => {
+  const user = userEvent.setup();
+  const responses = [
+    { testName: 'Lettre', category: 'Rédaction', userPrompt: 'Écris.', detail: DETAIL, answers: [
+      { modelKey: 'm1', repetition: 1, text: 'Lettre Alpha', finalScore: 90, judgeRationale: null },
+      { modelKey: 'm2', repetition: 1, text: 'Lettre Bravo', finalScore: 70, judgeRationale: null },
+    ] },
+    { testName: 'Énigme', category: 'Logique', userPrompt: 'Résous.', detail: DETAIL, answers: [{ modelKey: 'm2', repetition: 1, text: 'Énigme Bravo', finalScore: 80, judgeRationale: null }] },
+    { testName: 'Courriel', category: 'Rédaction', userPrompt: 'Rédige.', detail: DETAIL, answers: [
+      { modelKey: 'm1', repetition: 1, text: 'Courriel Alpha', finalScore: 60, judgeRationale: null },
+      { modelKey: 'm2', repetition: 1, text: 'Courriel Bravo', finalScore: 75, judgeRationale: null },
+    ] },
+  ];
+  mockFetch({ ...SHARE, responses });
+  renderPage();
+  const matrix = await screen.findByRole('table', { name: 'Qualité par catégorie de test' });
+  const region = screen.getByRole('region', { name: 'Réponses des modèles' });
+  expect(within(region).getByRole('heading', { level: 2 })).toHaveTextContent(/^Réponses$/);
+  await user.click(within(matrix).getByRole('button', { name: /^Bravo · Rédaction/ }));
+  const section = within(region);
+  expect(section.getByRole('combobox', { name: 'Test' })).toHaveValue('tous');
+  expect(within(section.getByLabelText('Test')).getAllByRole('option').map((o) => o.textContent)).toEqual(['Tous les tests (2)', 'Lettre', 'Courriel']);
+  expect(section.getByRole('region', { name: 'Lettre' })).toHaveTextContent('Lettre Bravo');
+  expect(section.getByRole('region', { name: 'Courriel' })).toHaveTextContent('Courriel Bravo');
+  expect(section.queryByText('Lettre Alpha')).toBeNull();
+  expect(section.queryByText('Énigme Bravo')).toBeNull();
+  expect(section.getByText('Lettre Bravo').closest('article')?.parentElement).not.toHaveClass('lg:grid-cols-2');
+  await user.selectOptions(section.getByRole('combobox', { name: 'Test' }), 'Courriel');
+  expect(section.queryByText('Lettre Bravo')).toBeNull();
+  expect(section.getByText('Courriel Bravo')).toBeInTheDocument();
+});
+
 test('réponses publiées : filtre Modèle et détail du test dans une fenêtre', async () => {
   const user = userEvent.setup();
   const responses = [

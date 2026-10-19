@@ -232,6 +232,77 @@ function ResultRescore({ runId, resultId, onQueued }: { runId: string; resultId:
   );
 }
 
+/** Valeur de la liste « Test » qui affiche tous les tests de la sélection, l'un sous l'autre. */
+const ALL_TESTS = '__tous__';
+
+/** Grille des réponses : pleine largeur avec un seul modèle (aussi large que la question), sinon en colonnes. */
+const answersGrid = (oneModel: boolean) => (oneModel ? 'grid gap-3' : 'grid gap-3 md:grid-cols-2 xl:grid-cols-3');
+
+/** Un test de la sélection en mode « Tous les tests » : titre cliquable (détail), pièces jointes et réponses filtrées. */
+function TestAnswersBlock({
+  runId,
+  runTestId,
+  testName,
+  modelId,
+  isAdmin,
+  pollMs,
+  onRefresh,
+}: {
+  runId: string;
+  runTestId: string;
+  testName: string;
+  modelId: string | null;
+  isAdmin: boolean;
+  pollMs: number | false;
+  onRefresh: () => Promise<unknown>;
+}) {
+  const [detailOpen, setDetailOpen] = useState(false);
+  const answers = useQuery({ queryKey: answersKey(runId, runTestId), queryFn: () => getAnswers(runId, runTestId), refetchInterval: pollMs });
+  const hiddenCount = answers.data?.answers.filter((a) => a.hiddenUntilScored).length ?? 0;
+  const visible = answers.data?.answers.filter((a) => !a.hiddenUntilScored && (modelId === null || a.modelId === modelId)) ?? [];
+  return (
+    <section aria-label={testName} className="flex flex-col gap-2 border-t border-line pt-3 first:border-t-0 first:pt-0">
+      <div className="flex flex-wrap items-baseline gap-x-3">
+        <button
+          type="button"
+          title="Voir le détail du test : prompts et résultat attendu"
+          onClick={() => setDetailOpen(true)}
+          className="cursor-pointer border-0 bg-transparent p-0 text-left font-display text-sm font-bold text-peach underline decoration-dotted underline-offset-2 hover:text-white"
+        >
+          {testName}
+        </button>
+        {answers.data ? <span className="font-mono text-[11px] text-mute">{answers.data.test.category}</span> : null}
+      </div>
+      {answers.data && detailOpen ? <TestDetailDialog test={answers.data.test} open={detailOpen} onOpenChange={setDetailOpen} /> : null}
+      {answers.isError ? (
+        <p role="alert" className="m-0 text-sm text-bad">
+          {messageForError(answers.error)}
+        </p>
+      ) : !answers.data ? (
+        <p className="m-0 text-sm text-mute">Chargement des réponses…</p>
+      ) : (
+        <>
+          <p className="m-0 rounded-xl border border-line bg-night-0/45 px-3.5 py-2.5 text-sm whitespace-pre-line text-ink">{answers.data.test.userPrompt}</p>
+          <div className={answersGrid(modelId !== null)}>
+            {hiddenCount > 0 ? (
+              <p className="m-0 text-sm text-mute">
+                {hiddenCount} réponse{hiddenCount > 1 ? 's' : ''} masquée{hiddenCount > 1 ? 's' : ''} :{' '}
+                <Link to={`/a-noter/${runTestId}`} className="font-semibold text-peach">
+                  noter cette question
+                </Link>
+              </p>
+            ) : null}
+            {visible.length === 0 && hiddenCount === 0 ? <p className="m-0 text-sm text-mute">Aucune réponse pour ce test.</p> : null}
+            {visible.map((a) => (
+              <AnswerCard key={a.resultId} answer={a} method={answers.data.test.scoringMethod} isAdmin={isAdmin} onOverride={onRefresh} />
+            ))}
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
+
 const TAB_LABELS: Record<Tab, string> = { side: 'Côte à côte', blind: 'À l’aveugle', spread: 'Écarts entre évaluateurs' };
 
 /**
@@ -273,11 +344,16 @@ export function SideBySide({
   const cardRef = useRef<HTMLDivElement>(null);
   const categories = [...new Set(tests.map((t) => t.category).filter((c): c is string => !!c))];
   const shown = current.category ? tests.filter((t) => t.category === current.category) : tests;
-  const runTestId = shown.some((t) => t.runTestId === selected) ? selected : (shown[0]?.runTestId ?? '');
+  // « Tous les tests » : toute la sélection (catégorie, modèle) l'une sous l'autre ; sinon un test à la fois.
+  const allMode = selected === ALL_TESTS && shown.length > 0;
+  const runTestId = allMode ? '' : shown.some((t) => t.runTestId === selected) ? selected : (shown[0]?.runTestId ?? '');
   const filterModel = models.find((m) => m.modelId === current.modelId);
   const filtered = current.modelId !== null || current.category !== null;
+  // Clic sur une note de la matrice : tous les tests de la catégorie (et du modèle) choisis, puis défilement jusqu'ici.
   useEffect(() => {
-    if (focusKey > 0) cardRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+    if (focusKey === 0) return;
+    setSelected(ALL_TESTS);
+    cardRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
   }, [focusKey]);
   const answers = useQuery({
     queryKey: answersKey(runId, runTestId),
@@ -307,7 +383,11 @@ export function SideBySide({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="m-0 font-display text-base font-bold text-white">
           Réponses côte à côte
-          {answers.data ? (
+          {allMode ? (
+            <small className="ml-2 font-mono text-[11px] font-medium text-mute">
+              {shown.length} test{shown.length > 1 ? 's' : ''}
+            </small>
+          ) : answers.data ? (
             <small className="ml-2 font-mono text-[11px] font-medium text-mute">
               test {testIndex + 1} / {shown.length} ·{' '}
               <button
@@ -338,7 +418,15 @@ export function SideBySide({
             onChange={(e) => setFilter({ ...current, category: e.target.value || null })}
           />
         ) : null}
-        <SelectField label="Test" value={runTestId} options={shown.map((t) => ({ value: t.runTestId, label: t.testName }))} onChange={(e) => setSelected(e.target.value)} />
+        <SelectField
+          label="Test"
+          value={allMode ? ALL_TESTS : runTestId}
+          options={[
+            ...(shown.length > 1 ? [{ value: ALL_TESTS, label: `Tous les tests (${shown.length})` }] : []),
+            ...shown.map((t) => ({ value: t.runTestId, label: t.testName })),
+          ]}
+          onChange={(e) => setSelected(e.target.value)}
+        />
         {models.length > 1 ? (
           <SelectField
             label="Modèle"
@@ -347,7 +435,7 @@ export function SideBySide({
             onChange={(e) => setFilter({ ...current, modelId: e.target.value || null })}
           />
         ) : null}
-        {answers.data ? (
+        {answers.data && !allMode ? (
           <Button variant="ghost" onClick={() => setDetailOpen(true)}>
             Détail du test
           </Button>
@@ -383,7 +471,22 @@ export function SideBySide({
       </div>
 
       <div role="tabpanel" aria-label={TAB_LABELS[tab]} className="flex flex-col gap-3">
-        {tab === 'side' ? (
+        {tab === 'side' && allMode ? (
+          <div className="flex flex-col gap-4">
+            {shown.map((t) => (
+              <TestAnswersBlock
+                key={t.runTestId}
+                runId={runId}
+                runTestId={t.runTestId}
+                testName={t.testName}
+                modelId={current.modelId}
+                isAdmin={isAdmin}
+                pollMs={pollMs}
+                onRefresh={refresh}
+              />
+            ))}
+          </div>
+        ) : tab === 'side' ? (
           <>
             {canRescore ? <RescorePanel key={runTestId} runId={runId} runTestId={runTestId} onQueued={refresh} /> : null}
             {answers.isError ? (
@@ -393,7 +496,7 @@ export function SideBySide({
             ) : !answers.data ? (
               <p className="text-sm text-mute">Chargement des réponses…</p>
             ) : (
-              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+              <div className={answersGrid(current.modelId !== null)}>
                 {answers.data.test.attachments.length > 0 ? (
                   <div className="md:col-span-2 xl:col-span-3">
                     <AttachmentGallery

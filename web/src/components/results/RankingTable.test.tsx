@@ -37,7 +37,8 @@ test('en-têtes : icône d’aide avec sa définition, nom accessible de la colo
     // Bulle masquée à l'impression : remplacée par le bloc « Définitions ».
     expect(help.closest('.no-print')).not.toBeNull();
   }
-  expect(within(screen.getByRole('columnheader', { name: 'Rang' })).queryByRole('button')).toBeNull();
+  // « Rang » n'a pas d'aide, seulement son bouton de tri.
+  expect(within(screen.getByRole('columnheader', { name: 'Rang' })).queryByRole('button', { name: /^Aide/ })).toBeNull();
 });
 
 test('bloc « Définitions » imprimable sous le tableau, avec chaque critère', () => {
@@ -60,4 +61,26 @@ test('hideCosts : ni aide ni définition du coût', () => {
   const block = screen.getByRole('region', { name: 'Définitions' });
   expect(within(block).queryByText(DEFINITIONS.cost)).toBeNull();
   expect(within(block).getByText(DEFINITIONS.quality)).toBeInTheDocument();
+});
+
+test('tri : chaque colonne, le meilleur d’abord, puis l’autre sens (flèche et aria-sort), puis l’ordre du classement', async () => {
+  const user = (await import('@testing-library/user-event')).default.setup();
+  render(<RankingTable rows={rows} />);
+  const order = () => screen.getAllByRole('rowheader').map((h) => h.textContent!.replace(/(Anthropic|OpenAI|Mistral|Autre|Fournisseur)$/, ''));
+  const initial = order();
+  const quality = screen.getByRole('columnheader', { name: 'Qualité' });
+  await user.click(within(quality).getByRole('button', { name: /^Qualité/ }));
+  expect(quality).toHaveAttribute('aria-sort', 'descending');
+  expect(within(quality).getByText('↓')).toBeInTheDocument();
+  const qualities = rows.map((r) => [r.model.name, r.model.quality ?? -1] as const);
+  expect(order()[0]).toBe([...qualities].sort((a, b) => b[1] - a[1])[0]![0]);
+  await user.click(within(quality).getByRole('button', { name: /^Qualité/ }));
+  expect(quality).toHaveAttribute('aria-sort', 'ascending');
+  expect(within(quality).getByText('↑')).toBeInTheDocument();
+  await user.click(within(quality).getByRole('button', { name: /^Qualité/ }));
+  expect(quality).not.toHaveAttribute('aria-sort');
+  expect(order()).toEqual(initial);
+  // Modèle : ordre alphabétique d'abord.
+  await user.click(within(screen.getByRole('columnheader', { name: 'Modèle' })).getByRole('button', { name: /^Modèle/ }));
+  expect(order()).toEqual([...initial].sort((a, b) => a.localeCompare(b, 'fr')));
 });
