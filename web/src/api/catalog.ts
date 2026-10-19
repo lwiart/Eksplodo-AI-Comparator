@@ -129,7 +129,8 @@ export function testProvider(id: string): Promise<ConnectionTest> {
 
 /** `supported` : `true` accepté, `false` refusé par le fournisseur, `null` indéterminé (clé, délai, indisponibilité). */
 export type CapabilityResult = { supported: boolean | null; message: string };
-export type CapabilityCheck = { vision: CapabilityResult; pdf: CapabilityResult };
+/** `contextWindow` : lue dans la liste des modèles du fournisseur (gratuite), `null` si elle n'y figure pas. */
+export type CapabilityCheck = { vision: CapabilityResult; pdf: CapabilityResult; contextWindow: number | null };
 
 /** Trois tout petits appels réels (texte seul, image, PDF) pour savoir ce que le modèle accepte. */
 export async function checkCapabilities(providerId: string, apiModelId: string): Promise<CapabilityCheck> {

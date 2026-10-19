@@ -17,6 +17,18 @@ function mapFinish(raw: string): FinishReason {
   return 'other';
 }
 
+/**
+ * Fenêtre de contexte publiée dans la liste des modèles, sous l'un des noms courants : `context_window` (Groq),
+ * `context_length` (Together, OpenRouter), `max_context_length` (Mistral), `max_model_len` (vLLM), `max_input_tokens`.
+ */
+function contextWindowOf(m: Json): number | null {
+  for (const key of ['context_window', 'context_length', 'max_context_length', 'max_model_len', 'max_input_tokens']) {
+    const n = num(m[key]);
+    if (n !== undefined && n > 0) return Math.round(n);
+  }
+  return null;
+}
+
 function hostOf(baseUrl: string): string | null {
   try {
     return new URL(baseUrl).hostname;
@@ -158,12 +170,12 @@ export function createOpenAiCompatibleAdapter(cfg: ProviderConfig): ProviderAdap
       if (!data) throw new ProviderError('invalid_response', { detail: 'Liste de modèles inattendue' });
       if (openRouter) return parseOpenRouterModels(json);
       return data
-        .flatMap((m) => (isRecord(m) && typeof m.id === 'string' && m.id !== '' ? [m.id] : []))
-        .sort()
-        .map((id) => ({
+        .flatMap((m) => (isRecord(m) && typeof m.id === 'string' && m.id !== '' ? [{ id: m.id, contextWindow: contextWindowOf(m) }] : []))
+        .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+        .map(({ id, contextWindow }) => ({
           id,
           name: id,
-          contextWindow: null,
+          contextWindow,
           inputPricePerM: null,
           outputPricePerM: null,
           supportsVision: null,

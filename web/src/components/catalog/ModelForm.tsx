@@ -186,13 +186,20 @@ function CapabilityCheckButton({ providerId, apiModelId, onResult }: { providerI
           Envoie au modèle trois très petits appels réels, avec la clé du fournisseur : un message sans pièce jointe (contrôle), une
           image de 32 × 32 pixels et un PDF d’une page. Si le fournisseur accepte la pièce jointe, la case est cochée ; s’il la
           refuse, elle est décochée et son message s’affiche. Si rien ne peut être conclu (clé refusée, délai dépassé, fournisseur
-          indisponible), les cases ne changent pas. Coût : quelques tokens ; durée : 20 secondes au plus.
+          indisponible), les cases ne changent pas. La fenêtre de contexte est lue dans la liste des modèles du fournisseur, sans coût, quand il
+          la publie. Coût : quelques tokens ; durée : 20 secondes au plus.
         </InfoTip>
       </div>
       {state.status === 'done' ? (
         <ul aria-label="Résultat de la vérification" className="m-0 flex list-none flex-col gap-0.5 p-0 text-xs [overflow-wrap:anywhere]">
           <li className={verdictTone(state.result.vision)}>Vision : {state.result.vision.message}</li>
           <li className={verdictTone(state.result.pdf)}>PDF : {state.result.pdf.message}</li>
+          <li className={state.result.contextWindow == null ? 'text-mute' : 'text-good'}>
+            Contexte :{' '}
+            {state.result.contextWindow == null
+              ? 'non publié par le fournisseur, la valeur saisie reste.'
+              : `${state.result.contextWindow.toLocaleString('fr-FR')} tokens (liste des modèles du fournisseur).`}
+          </li>
         </ul>
       ) : null}
       {state.status === 'failed' ? (
@@ -261,6 +268,7 @@ export function ModelForm({ value, onChange, idEditable = false, providerBaseUrl
               ...value,
               supportsVision: r.vision.supported ?? value.supportsVision,
               supportsPdf: r.pdf.supported ?? value.supportsPdf,
+              contextWindow: r.contextWindow == null ? value.contextWindow : String(r.contextWindow),
             })
           }
         />

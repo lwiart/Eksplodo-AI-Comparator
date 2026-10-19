@@ -11,7 +11,7 @@ export const BULK_CONCURRENCY = 3;
 type RowState =
   | { status: 'waiting' }
   | { status: 'running' }
-  | { status: 'done'; check: CapabilityCheck; vision: boolean; pdf: boolean; changed: boolean }
+  | { status: 'done'; check: CapabilityCheck; vision: boolean; pdf: boolean; context: number | null; changed: boolean }
   | { status: 'failed'; message: string };
 
 type Phase = 'ready' | 'running' | 'finished';
@@ -19,6 +19,22 @@ type Phase = 'ready' | 'running' | 'finished';
 const tone = (r: CapabilityResult) => (r.supported === true ? 'text-good' : r.supported === false ? 'text-bad' : 'text-mute');
 
 /** Case après vérification, avec l'ancienne valeur quand elle a changé. */
+const tokens = (n: number | null) => (n === null ? 'inconnu' : n.toLocaleString('fr-FR'));
+
+/** Fenêtre de contexte après vérification, avec l'ancienne valeur quand elle a changé. */
+function ContextCell({ before, after }: { before: number | null; after: number | null }) {
+  const changed = before !== after;
+  return (
+    <span
+      aria-label={changed ? `Contexte : ${tokens(after)} tokens, était ${tokens(before)}` : `Contexte : ${tokens(after)}${after === null ? '' : ' tokens'}`}
+      className={after === null ? 'text-mute' : 'text-ink'}
+    >
+      {after === null ? '–' : tokens(after)}
+      {changed && before !== null ? <span className="ml-1 text-[11px] text-mute line-through">{tokens(before)}</span> : null}
+    </span>
+  );
+}
+
 function Flag({ label, before, after, result }: { label: string; before: boolean; after: boolean; result: CapabilityResult }) {
   const mark = (on: boolean) => (on ? '✓' : '–');
   const text = before === after ? `${label} : ${after ? 'oui' : 'non'}` : `${label} : ${after ? 'oui' : 'non'}, était ${before ? 'oui' : 'non'}`;
@@ -50,9 +66,13 @@ export function CapabilitiesBulkDialog({ models, open, onOpenChange }: { models:
       const check = await checkCapabilities(m.providerId, m.apiModelId);
       const vision = check.vision.supported ?? m.supportsVision;
       const pdf = check.pdf.supported ?? m.supportsPdf;
-      const changed = vision !== m.supportsVision || pdf !== m.supportsPdf;
-      if (changed) await updateModel(m.id, { supportsVision: vision, supportsPdf: pdf });
-      setRow(m.id, { status: 'done', check, vision, pdf, changed });
+      // Fenêtre de contexte publiée par le fournisseur : elle remplace la valeur saisie ; absente, rien ne change.
+      const context = check.contextWindow ?? m.contextWindow ?? null;
+      const changed = vision !== m.supportsVision || pdf !== m.supportsPdf || context !== m.contextWindow;
+      if (changed) {
+        await updateModel(m.id, { supportsVision: vision, supportsPdf: pdf, ...(context === m.contextWindow ? {} : { contextWindow: context }) });
+      }
+      setRow(m.id, { status: 'done', check, vision, pdf, context, changed });
     } catch (err) {
       setRow(m.id, { status: 'failed', message: messageForError(err) });
     }
@@ -89,8 +109,8 @@ export function CapabilitiesBulkDialog({ models, open, onOpenChange }: { models:
       <p className="mt-0 mb-3 text-sm text-ink">
         {list.length} modèle{list.length > 1 ? 's' : ''} disponible{list.length > 1 ? 's' : ''} parmi ceux affichés. Pour chacun, trois très petits
         appels réels (un message sans pièce jointe, une image de 32 × 32 pixels, un PDF d’une page) : les cases Vision et PDF suivent la réponse du
-        fournisseur et sont enregistrées aussitôt. Un résultat indéterminé (clé refusée, délai dépassé, fournisseur indisponible) ne change rien.
-        Coût : quelques tokens par modèle.
+        fournisseur et sont enregistrées aussitôt. La fenêtre de contexte est lue dans la liste des modèles du fournisseur (sans coût) quand il la
+        publie. Un résultat indéterminé (clé refusée, délai dépassé, fournisseur indisponible) ne change rien. Coût : quelques tokens par modèle.
       </p>
 
       {list.length === 0 ? (
@@ -103,6 +123,7 @@ export function CapabilitiesBulkDialog({ models, open, onOpenChange }: { models:
                 <th className="px-3 py-2 font-medium">Modèle</th>
                 <th className="px-3 py-2 text-center font-medium">Vision</th>
                 <th className="px-3 py-2 text-center font-medium">PDF</th>
+                <th className="px-3 py-2 text-right font-medium">Contexte</th>
                 <th className="px-3 py-2 font-medium">Résultat</th>
               </tr>
             </thead>
@@ -123,6 +144,9 @@ export function CapabilitiesBulkDialog({ models, open, onOpenChange }: { models:
                         <td className="px-3 py-2 text-center">
                           <Flag label="PDF" before={m.supportsPdf} after={r.pdf} result={r.check.pdf} />
                         </td>
+                        <td className="px-3 py-2 text-right font-mono text-xs">
+                          <ContextCell before={m.contextWindow} after={r.context} />
+                        </td>
                         <td className="px-3 py-2 text-xs [overflow-wrap:anywhere]">
                           <span className={r.changed ? 'text-orange-soft' : 'text-mute'}>{r.changed ? 'Mis à jour.' : 'Inchangé.'}</span>
                           {[r.check.vision, r.check.pdf]
@@ -138,6 +162,7 @@ export function CapabilitiesBulkDialog({ models, open, onOpenChange }: { models:
                       <>
                         <td className="px-3 py-2 text-center text-mute">{m.supportsVision ? '✓' : '–'}</td>
                         <td className="px-3 py-2 text-center text-mute">{m.supportsPdf ? '✓' : '–'}</td>
+                        <td className="px-3 py-2 text-right font-mono text-xs text-mute">{m.contextWindow === null ? '–' : tokens(m.contextWindow)}</td>
                         <td className="px-3 py-2 text-xs">
                           {r?.status === 'running' ? (
                             <span className="text-ink">Vérification…</span>

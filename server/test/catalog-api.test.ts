@@ -196,6 +196,7 @@ describe('fournisseurs', () => {
 
   test('vérifier les capacités : texte et image acceptés, PDF refusé comme chez DeepSeek ; droits et saisie contrôlés', async () => {
     const f = fakeFetch({
+      [`GET ${BASE}/models`]: () => Response.json({ data: [{ id: 'deepseek-flash', context_length: 131_072 }, { id: 'autre', max_context_length: 32_000 }] }),
       [`POST ${BASE}/chat/completions`]: async (req) => {
         const body = await req.text();
         if (body.includes('file_data')) {
@@ -211,13 +212,40 @@ describe('fournisseurs', () => {
     expect(res.json().capabilities).toEqual({
       vision: { supported: true, message: 'Image acceptée par le modèle.' },
       pdf: { supported: false, message: 'PDF refusé : Requête refusée par le fournisseur : messages[0]: file must have a file_id or file_data' },
+      contextWindow: 131_072,
     });
-    expect(f.calls).toHaveLength(3);
+    expect(f.calls).toHaveLength(4); // trois petits appels et la liste des modèles (gratuite)
     expect(res.body).not.toContain(KEY);
     expect((await post(`/api/providers/${p.id}/check-capabilities`, { apiModelId: '  ' })).statusCode).toBe(400);
     expect((await post(`/api/providers/${p.id}/check-capabilities`, { apiModelId: 'm' }, user)).statusCode).toBe(403);
     const sansCle = await seedProvider(db, { name: 'Sans clé' });
     expect((await post(`/api/providers/${sansCle.id}/check-capabilities`, { apiModelId: 'm' })).statusCode).toBe(409);
+  });
+
+  test('vérifier les capacités : fenêtre de contexte inconnue quand la liste des modèles échoue ou ne la publie pas', async () => {
+    let listOk = false;
+    const f = fakeFetch({
+      [`GET ${BASE}/models`]: () => (listOk ? Response.json({ data: [{ id: 'm' }] }) : new Response('{}', { status: 500 })),
+      [`POST ${BASE}/chat/completions`]: () => sseResponse('openai/text.sse'),
+    });
+    const { post, db } = await setup({ fetch: f });
+    const p = await seedProvider(db, { apiKey: KEY });
+    const failed = await post(`/api/providers/${p.id}/check-capabilities`, { apiModelId: 'm' });
+    expect(failed.json().capabilities).toMatchObject({ vision: { supported: true }, contextWindow: null });
+    listOk = true;
+    const silent = await post(`/api/providers/${p.id}/check-capabilities`, { apiModelId: 'm' });
+    expect(silent.json().capabilities.contextWindow).toBeNull();
+  });
+
+  test('remote-models : fenêtre de contexte lue sous ses noms courants (Mistral, Groq, vLLM)', async () => {
+    const f = fakeFetch({
+      [`GET ${BASE}/models`]: () =>
+        Response.json({ data: [{ id: 'a', max_context_length: 128_000 }, { id: 'b', context_window: 8192 }, { id: 'c', max_model_len: 32_768 }, { id: 'd' }] }),
+    });
+    const { get, db } = await setup({ fetch: f });
+    const p = await seedProvider(db, { apiKey: KEY });
+    const res = await get(`/api/providers/${p.id}/remote-models`);
+    expect(res.json().models.map((m: any) => [m.id, m.contextWindow])).toEqual([['a', 128_000], ['b', 8192], ['c', 32_768], ['d', null]]);
   });
 
   test('remote-models : un identifiant répété par le fournisseur (Eden AI) n’apparaît qu’une fois', async () => {

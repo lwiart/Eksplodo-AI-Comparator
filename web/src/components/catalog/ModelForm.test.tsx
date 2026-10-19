@@ -104,6 +104,7 @@ test('« Vérifier les capacités » : cases suivant la réponse du fournisseur,
     capabilities: {
       vision: { supported: true, message: 'Image acceptée par le modèle.' },
       pdf: { supported: false, message: 'PDF refusé : file must have a file_id or file_data' },
+      contextWindow: 131_072,
     },
   });
   render(<Harness initial={{ ...emptyDraft(0), apiModelId: 'deepseek-flash', supportsPdf: true }} providerId="p1" />);
@@ -115,6 +116,9 @@ test('« Vérifier les capacités » : cases suivant la réponse du fournisseur,
   expect(result).toHaveTextContent('PDF : PDF refusé : file must have a file_id or file_data');
   expect(screen.getByRole('checkbox', { name: 'Vision (images)' })).toBeChecked();
   expect(screen.getByRole('checkbox', { name: 'PDF' })).not.toBeChecked();
+  // Fenêtre de contexte publiée par le fournisseur : le champ est rempli.
+  expect(result).toHaveTextContent('Contexte : 131 072 tokens');
+  expect(screen.getByLabelText('Contexte (tokens)')).toHaveValue('131072');
 
   // Indéterminé (clé refusée…) : les cases ne bougent pas.
   apiFetch.mockResolvedValueOnce({

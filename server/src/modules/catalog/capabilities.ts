@@ -5,7 +5,8 @@ import type { GenerateRequest, ProviderAdapter } from '../providers/types.js';
 
 /** `supported` : `true` accepté, `false` refusé par le fournisseur, `null` inconnu (clé, délai, indisponibilité…). */
 export type CapabilityResult = { supported: boolean | null; message: string };
-export type CapabilityCheck = { vision: CapabilityResult; pdf: CapabilityResult };
+/** `contextWindow` : fenêtre de contexte lue dans la liste des modèles du fournisseur (gratuite), `null` si absente. */
+export type CapabilityCheck = { vision: CapabilityResult; pdf: CapabilityResult; contextWindow: number | null };
 
 /** Délai de chaque appel : les trois partent ensemble, la réponse HTTP reste loin de la coupure de 60 s de l'hébergeur. */
 export const PROBE_TIMEOUT_MS = 20_000;
@@ -104,7 +105,22 @@ function verdict(result: Probe, kind: keyof typeof LABELS): CapabilityResult {
 }
 
 /**
- * Trois appels en parallèle : texte seul (contrôle), petite image, PDF d'une page. Si le texte seul échoue (clé, modèle
+ * Fenêtre de contexte du modèle d'après la liste des modèles du fournisseur (aucun token consommé). Liste illisible,
+ * modèle absent ou taille non publiée : `null`, la vérification des capacités n'en dépend pas.
+ */
+export async function findContextWindow(adapter: ProviderAdapter, apiModelId: string, timeoutMs = PROBE_TIMEOUT_MS): Promise<number | null> {
+  try {
+    const list = await adapter.listModels(AbortSignal.timeout(timeoutMs));
+    const id = apiModelId.replace(/^models\//, '');
+    return list.find((m) => m.id === id || m.id === apiModelId)?.contextWindow ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Trois appels en parallèle : texte seul (contrôle), petite image, PDF d'une page ; en même temps, la fenêtre de contexte
+ * est lue dans la liste des modèles. Si le texte seul échoue (clé, modèle
  * inconnu, fournisseur indisponible), rien ne peut être conclu : les deux capacités restent inconnues.
  */
 export async function checkCapabilities(adapter: ProviderAdapter, apiModelId: string, timeoutMs = PROBE_TIMEOUT_MS): Promise<CapabilityCheck> {
@@ -114,14 +130,15 @@ export async function checkCapabilities(adapter: ProviderAdapter, apiModelId: st
     attachments,
     maxTokens: PROBE_MAX_TOKENS,
   });
-  const [text, image, pdf] = await Promise.all([
+  const [contextWindow, text, image, pdf] = await Promise.all([
+    findContextWindow(adapter, apiModelId, timeoutMs),
     probe(adapter, request([]), timeoutMs),
     probe(adapter, request([{ mime: 'image/png', base64: SAMPLE_PNG.toString('base64'), filename: 'verification.png' }]), timeoutMs),
     probe(adapter, request([{ mime: 'application/pdf', base64: SAMPLE_PDF.toString('base64'), filename: 'verification.pdf' }]), timeoutMs),
   ]);
   if (!text.ok) {
     const message = `Indéterminé : l'appel sans pièce jointe a lui aussi échoué (${describe(text.error)}).`;
-    return { vision: { supported: null, message }, pdf: { supported: null, message } };
+    return { vision: { supported: null, message }, pdf: { supported: null, message }, contextWindow };
   }
-  return { vision: verdict(image, 'vision'), pdf: verdict(pdf, 'pdf') };
+  return { vision: verdict(image, 'vision'), pdf: verdict(pdf, 'pdf'), contextWindow };
 }
