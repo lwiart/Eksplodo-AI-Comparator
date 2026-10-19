@@ -35,6 +35,8 @@ const detailKey = (id: string | undefined) => [...TESTS_KEY, 'detail', id] as co
 const DEFAULT_TEMPERATURE = 0.2;
 const DEFAULT_MAX_TOKENS = 1000;
 const MAX_TOKENS_LIMIT = 16_000;
+/** Titre de section du bloc unique de l'éditeur. */
+const SECTION_TITLE = 'm-0 font-display text-base font-bold text-white';
 
 type Form = {
   name: string;
@@ -205,89 +207,104 @@ function EditorForm({ initial }: { initial: PublicTest | null }) {
           e.preventDefault();
           void saveNow();
         }}
-        className="grid items-start gap-4 min-[1000px]:grid-cols-[1.25fr_1fr]"
+        className="card-surface overflow-hidden"
       >
-        <Card className="flex flex-col gap-4">
-          <div className="grid gap-4 min-[600px]:grid-cols-[2fr_1fr]">
-            <Field label="Nom" value={form.name} error={errors.name} maxLength={200} onChange={(e) => set('name', e.target.value)} />
-            <Field
-              label="Catégorie"
-              list="test-categories"
-              value={form.category}
-              error={errors.category}
-              maxLength={100}
-              onChange={(e) => set('category', e.target.value)}
-            />
-            <datalist id="test-categories">
-              {meta.data?.categories.map((c) => (
-                <option key={c} value={c} />
-              ))}
-            </datalist>
-          </div>
-          <TextArea
-            label="Prompt système (facultatif)"
-            rows={3}
-            value={form.systemPrompt}
-            error={errors.systemPrompt}
-            onChange={(e) => set('systemPrompt', e.target.value)}
-          />
-          <TextArea
-            label="Prompt utilisateur"
-            rows={7}
-            value={form.userPrompt}
-            error={errors.userPrompt}
-            onChange={(e) => set('userPrompt', e.target.value)}
-          />
-          <div className="grid gap-4 min-[600px]:grid-cols-3">
-            <Field
-              label="Température"
-              inputMode="decimal"
-              value={form.temperature}
-              error={errors.temperature}
-              hint="Entre 0 et 2."
-              onChange={(e) => set('temperature', e.target.value)}
-            />
-            <Field
-              label="Max tokens"
-              inputMode="numeric"
-              value={form.maxTokens}
-              error={errors.maxTokens}
-              hint="16 000 au plus."
-              onChange={(e) => set('maxTokens', e.target.value)}
-            />
-            <Field label="Tags" value={form.tags} error={errors.tags} hint="Séparés par des virgules." onChange={(e) => set('tags', e.target.value)} />
-          </div>
-          {testId === null ? (
-            <p className="m-0 rounded-[14px] border-[1.5px] border-dashed border-line-strong p-3.5 text-[13px] text-mute">
-              Enregistrez le test pour joindre des fichiers.
-            </p>
-          ) : (
-            <AttachmentsField
-              testId={testId}
-              attachments={attachments}
-              onAdded={(a) => changeAttachments((list) => [...list, a])}
-              onRemoved={(id) => changeAttachments((list) => list.filter((x) => x.id !== id))}
-            />
-          )}
-        </Card>
-
-        <Card className="flex flex-col gap-4">
-          <h2 className="m-0 font-display text-lg font-bold text-white">Notation</h2>
-          <ScoringConfigForm value={form.scoring} errors={errors.scoring} onChange={(s) => set('scoring', s)} />
-          <div className="mt-2 flex flex-wrap items-center gap-3">
-            <div aria-live="polite" className="min-w-0 flex-1 text-sm">
-              {notice ? <span className="text-good">{notice}</span> : null}
-              {error ? (
-                <span role="alert" className="text-bad">
-                  {error}
-                </span>
-              ) : null}
+        <div className="grid min-[1000px]:grid-cols-[1.35fr_1fr]">
+          <section aria-labelledby="test-prompt" className="flex min-w-0 flex-col gap-4 p-5">
+            <h2 id="test-prompt" className={SECTION_TITLE}>
+              Prompt
+            </h2>
+            <div className="grid gap-4 min-[600px]:grid-cols-[2fr_1fr]">
+              <Field label="Nom" value={form.name} error={errors.name} maxLength={200} onChange={(e) => set('name', e.target.value)} />
+              <Field
+                label="Catégorie"
+                list="test-categories"
+                value={form.category}
+                error={errors.category}
+                maxLength={100}
+                onChange={(e) => set('category', e.target.value)}
+              />
+              <datalist id="test-categories">
+                {meta.data?.categories.map((c) => (
+                  <option key={c} value={c} />
+                ))}
+              </datalist>
             </div>
-            <Button type="submit" variant="primary" disabled={save.isPending}>
-              Enregistrer
-            </Button>
+            <TextArea
+              label="Prompt système (facultatif)"
+              rows={3}
+              value={form.systemPrompt}
+              error={errors.systemPrompt}
+              onChange={(e) => set('systemPrompt', e.target.value)}
+            />
+            <TextArea
+              label="Prompt utilisateur"
+              rows={8}
+              value={form.userPrompt}
+              error={errors.userPrompt}
+              onChange={(e) => set('userPrompt', e.target.value)}
+            />
+            {testId === null ? (
+              <p className="m-0 rounded-[14px] border-[1.5px] border-dashed border-line-strong p-3.5 text-[13px] text-mute">
+                Enregistrez le test pour joindre des fichiers.
+              </p>
+            ) : (
+              <AttachmentsField
+                testId={testId}
+                attachments={attachments}
+                onAdded={(a) => changeAttachments((list) => [...list, a])}
+                onRemoved={(id) => changeAttachments((list) => list.filter((x) => x.id !== id))}
+              />
+            )}
+          </section>
+
+          <div className="flex min-w-0 flex-col gap-6 border-t border-line p-5 min-[1000px]:border-t-0 min-[1000px]:border-l">
+            <section aria-labelledby="test-params" className="flex flex-col gap-4">
+              <h2 id="test-params" className={SECTION_TITLE}>
+                Paramètres
+              </h2>
+              <div className="grid gap-4 min-[480px]:grid-cols-2">
+                <Field
+                  label="Température"
+                  inputMode="decimal"
+                  value={form.temperature}
+                  error={errors.temperature}
+                  hint="Entre 0 et 2."
+                  onChange={(e) => set('temperature', e.target.value)}
+                />
+                <Field
+                  label="Max tokens"
+                  inputMode="numeric"
+                  value={form.maxTokens}
+                  error={errors.maxTokens}
+                  hint="16 000 au plus."
+                  onChange={(e) => set('maxTokens', e.target.value)}
+                />
+              </div>
+              <Field label="Tags" value={form.tags} error={errors.tags} hint="Séparés par des virgules." onChange={(e) => set('tags', e.target.value)} />
+            </section>
+            <section aria-labelledby="test-scoring" className="flex flex-col gap-4 border-t border-line pt-5">
+              <h2 id="test-scoring" className={SECTION_TITLE}>
+                Notation
+              </h2>
+              <ScoringConfigForm value={form.scoring} errors={errors.scoring} onChange={(s) => set('scoring', s)} />
+            </section>
           </div>
-        </Card>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-3 border-t border-line bg-night-0/30 px-5 py-3.5">
+          <div aria-live="polite" className="min-w-0 flex-1 text-sm">
+            {notice ? <span className="text-good">{notice}</span> : null}
+            {error ? (
+              <span role="alert" className="text-bad">
+                {error}
+              </span>
+            ) : null}
+          </div>
+          <Button type="submit" variant="primary" disabled={save.isPending}>
+            Enregistrer
+          </Button>
+        </div>
       </form>
 
       <div className="mt-4">

@@ -854,7 +854,7 @@
       "systemPrompt": null,
       "userPrompt": "Un client fidèle demande une remise de 30 % sur sa prochaine commande parce qu'un concurrent la propose. Notre marge ne permet pas plus de 10 %. Rédige l'e-mail de réponse (objet compris) : refuser les 30 % sans le froisser, proposer 10 % et un geste commercial non financier. 150 mots maximum.",
       "temperature": 0.5,
-      "maxTokens": 800,
+      "maxTokens": 2000,
       "scoringMethod": "judge",
       "scoringConfig": {
         "criteria": "Évaluer : objet présent et pertinent ; ton cordial et professionnel ; refus clair mais non sec des 30 % ; proposition des 10 % ; un geste non financier concret (livraison prioritaire, service, accompagnement…) ; reconnaissance de la fidélité du client ; 150 mots au plus ; pas de dénigrement du concurrent ; français impeccable."
@@ -872,7 +872,7 @@
       "systemPrompt": null,
       "userPrompt": "Écris une très courte nouvelle (200 mots environ) qui se passe dans un phare, avec une chute inattendue. Donne-lui un titre.",
       "temperature": 0.9,
-      "maxTokens": 800,
+      "maxTokens": 2000,
       "scoringMethod": "manual",
       "scoringConfig": {},
       "attachments": []
@@ -888,7 +888,7 @@
       "systemPrompt": null,
       "userPrompt": "Réécris ce paragraphe en langage clair, compréhensible par une personne qui lit mal le français (phrases courtes, mots simples, tutoiement interdit) :\n\n« Nonobstant les dispositions afférentes au dispositif susvisé, le bénéficiaire est tenu de procéder à la transmission des pièces justificatives idoines dans un délai de trente jours francs à compter de la notification de la décision, faute de quoi il sera réputé avoir renoncé au bénéfice de la prestation. »",
       "temperature": 0.3,
-      "maxTokens": 800,
+      "maxTokens": 2000,
       "scoringMethod": "judge",
       "scoringConfig": {
         "criteria": "Le sens doit être intégralement conservé : envoyer les documents justificatifs, délai de 30 jours après avoir reçu la décision, sinon perte de l'aide. Phrases courtes (environ 15 mots au plus), vocabulaire courant, vouvoiement ou forme impersonnelle, aucun jargon (« nonobstant », « idoines », « réputé »…). Pénaliser fortement toute perte ou déformation d'information.",
