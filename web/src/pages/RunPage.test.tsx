@@ -394,6 +394,9 @@ test('série terminée : tableau des métriques par modèle', async () => {
   expect(gpt.getAllByRole('cell').map((c) => c.textContent)).toEqual(['3', '0', '2 s', '20 tokens/s', '0,015 $', '—']);
   expect(screen.queryByRole('progressbar')).toBeNull();
   expect(screen.queryByTestId('live-flow-fallback')).toBeNull();
+  // La matrice reste affichée : erreurs et réponses tronquées repérables d'un coup d'œil.
+  const matrix = within(screen.getByRole('table', { name: 'Progression par test et par modèle' }));
+  expect(matrix.getByLabelText('Extraire, Claude Opus : 1 en erreur')).toBeInTheDocument();
 });
 
 test('série terminée : vue résultats (podium, pondération, classement) avant les métriques', async () => {

@@ -464,6 +464,8 @@ export function RunPage() {
                 tests={progress.data.matrix.map((m) => ({ runTestId: m.runTestId, testName: m.testName, category: m.category }))}
                 judgePending={progress.data.judgePending}
               />
+              {/* Série terminée : la matrice reste visible pour repérer d'un coup d'œil les erreurs et les réponses tronquées. */}
+              {progress.data.status === 'completed' ? <LiveMatrix matrix={progress.data.matrix} models={progress.data.models} /> : null}
               {progress.data.status === 'completed' ? <CompletedView runId={id} /> : null}
             </div>
           ) : (
