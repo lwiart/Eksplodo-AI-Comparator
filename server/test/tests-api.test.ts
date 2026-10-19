@@ -97,14 +97,14 @@ test('créer, lire, modifier un test ; valeurs par défaut 0,2 et 1 000', async 
   expect(actions).toEqual(expect.arrayContaining(['test_created', 'test_updated']));
 });
 
-test('max tokens 32 001 et température 2,1 refusés ; regex invalide refusée', async () => {
+test('max tokens 40 001 et température 2,1 refusés ; regex invalide refusée', async () => {
   const t = await setup();
-  for (const bad of [{ maxTokens: 32_001 }, { temperature: 2.1 }, { scoringConfig: { mode: 'regex', pattern: '(', flags: '' } }]) {
+  for (const bad of [{ maxTokens: 40_001 }, { temperature: 2.1 }, { scoringConfig: { mode: 'regex', pattern: '(', flags: '' } }]) {
     const res = await t.post('/api/tests', { ...base, ...bad });
     expect(res.statusCode).toBe(400);
     expect(res.json().error.code).toBe('validation');
   }
-  const ok = await t.post('/api/tests', { ...base, maxTokens: 32_000, temperature: 2 });
+  const ok = await t.post('/api/tests', { ...base, maxTokens: 40_000, temperature: 2 });
   expect(ok.statusCode).toBe(201);
 });
 

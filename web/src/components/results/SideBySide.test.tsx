@@ -318,7 +318,7 @@ test('réponse tronquée : message orange avec la cause et l’indication de rel
   const card = await screen.findByRole('article', { name: 'Claude Opus, répétition 1' });
   const message = within(card).getByText(/Réponse tronquée\./).closest('p')!;
   expect(message).toHaveTextContent('la limite de 1500 tokens a été atteinte pendant la réflexion');
-  expect(message).toHaveClass('text-peach');
+  expect(message).toHaveClass('text-truncated-text');
   expect(within(card).getByText(/Relancer les erreurs/)).toBeInTheDocument();
   const error = within(screen.getByRole('article', { name: 'GPT Test, répétition 1' })).getByText(/Requête refusée/);
   expect(error).toHaveClass('[overflow-wrap:anywhere]', 'text-bad');

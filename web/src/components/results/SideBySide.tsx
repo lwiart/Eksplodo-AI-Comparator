@@ -269,7 +269,7 @@ function AnswerCard({
         <p className="m-0 text-sm text-mute">{answer.status === 'running' ? 'Appel en cours…' : 'En attente de lancement.'}</p>
       ) : answer.status === 'truncated' ? (
         <div className="flex flex-col gap-1">
-          <p className="m-0 text-sm [overflow-wrap:anywhere] text-peach">
+          <p className="m-0 text-sm [overflow-wrap:anywhere] text-truncated-text">
             <b>Réponse tronquée.</b> {answer.errorMessage ?? 'Aucun texte : la limite de tokens a été atteinte pendant la réflexion.'}
           </p>
           <p className="m-0 text-xs text-mute">Elle n’entre pas dans la note. « Relancer les erreurs » la rejoue avec une marge de réflexion.</p>

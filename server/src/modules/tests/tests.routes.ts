@@ -28,7 +28,7 @@ const testBody = z
     systemPrompt: z.string().max(50_000).nullable().default(null),
     userPrompt: z.string().min(1).max(100_000),
     temperature: z.number().min(0).max(2).default(0.2),
-    maxTokens: z.number().int().min(1).max(32_000).default(1000),
+    maxTokens: z.number().int().min(1).max(40_000).default(1000),
     scoringMethod: z.enum(['judge', 'expected', 'manual']),
     scoringConfig: z.unknown(),
   })

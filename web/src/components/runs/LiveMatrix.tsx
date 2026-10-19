@@ -20,11 +20,12 @@ export function cellLabel(c: MatrixCell): string {
 }
 
 // Une case = les appels d'un test pour un modèle (toutes répétitions) : un segment par état, proportionnel au nombre.
+// Couleurs : réussi vert, en cours bleu, en erreur rouge, tronquée marron.
 const SEGMENTS: { key: keyof Omit<MatrixCell, 'modelId'>; className: string; legend: string }[] = [
   { key: 'done', className: 'bg-good', legend: 'Réussi' },
-  { key: 'running', className: 'bg-orange motion-safe:animate-pulse', legend: 'En cours' },
-  { key: 'failed', className: 'bg-bad', legend: 'Erreur' },
-  { key: 'truncated', className: 'bg-peach/70', legend: 'Tronquée (limite de tokens)' },
+  { key: 'running', className: 'bg-blue motion-safe:animate-pulse', legend: 'En cours' },
+  { key: 'failed', className: 'bg-run-error', legend: 'Erreur' },
+  { key: 'truncated', className: 'bg-truncated', legend: 'Tronquée (limite de tokens)' },
   { key: 'pending', className: 'bg-transparent', legend: 'À faire' },
   { key: 'unsupported', className: 'bg-mute/30', legend: 'Non supporté' },
 ];

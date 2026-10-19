@@ -150,7 +150,7 @@ export async function measureCall(
  */
 export const REASONING_MARGIN = 4000;
 /** Plafond de la limite envoyée (marge comprise), sauf si le test demande lui-même davantage. */
-export const MAX_REQUEST_TOKENS = 32_000;
+export const MAX_REQUEST_TOKENS = 40_000;
 
 /** Limite de tokens envoyée au fournisseur : celle du test, plus la marge de réflexion, dans la limite du plafond. */
 export function withReasoningMargin(maxTokens: number): number {

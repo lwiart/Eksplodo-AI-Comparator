@@ -10,7 +10,7 @@ const time = (iso: string) => new Date(iso).toLocaleTimeString('fr-FR', { timeZo
 function outcome(a: Activity): { text: string; tone: string } {
   if (a.status === 'done') return { text: a.totalMs === null ? 'Réponse reçue' : `Réponse en ${formatDuration(a.totalMs)}`, tone: 'text-ink' };
   if (a.status === 'timeout') return { text: 'Délai dépassé', tone: 'text-bad' };
-  if (a.status === 'truncated') return { text: 'Tronquée : limite de tokens atteinte', tone: 'text-peach' };
+  if (a.status === 'truncated') return { text: 'Tronquée : limite de tokens atteinte', tone: 'text-truncated-text' };
   return { text: 'Erreur', tone: 'text-bad' };
 }
 

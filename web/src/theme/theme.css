@@ -24,6 +24,10 @@
   --color-blue-deep: #0C659D;
   --color-good: #4FD1A5;
   --color-bad: #FF7A7A;
+  /* Exécutions (matrice de progression) : en erreur rouge franc, tronquée marron (fond et texte lisible). */
+  --color-run-error: #E5484D;
+  --color-truncated: #8B5A2B;
+  --color-truncated-text: #C9925F;
   --color-line: rgba(120, 190, 230, 0.14);
   --color-line-strong: rgba(120, 190, 230, 0.28);
   --font-display: Archivo, system-ui, sans-serif;
@@ -105,6 +109,7 @@ html[data-theme="light"] {
   --color-blue-deep: #0C659D;
   --color-good: #0F7F59;
   --color-bad: #C93636;
+  --color-truncated-text: #8B5A2B;
   --color-line: rgba(16, 64, 96, 0.14);
   --color-line-strong: rgba(16, 64, 96, 0.28);
 }
