@@ -461,7 +461,13 @@ export function RunPage() {
                 isAdmin={isAdmin}
                 show={progress.data.status === 'completed'}
                 active={ACTIVE.includes(progress.data.status)}
-                tests={progress.data.matrix.map((m) => ({ runTestId: m.runTestId, testName: m.testName, category: m.category }))}
+                tests={progress.data.matrix.map((m) => ({
+                  runTestId: m.runTestId,
+                  testName: m.testName,
+                  category: m.category,
+                  truncatedModelIds: m.cells.filter((c) => c.truncated > 0).map((c) => c.modelId),
+                  failedModelIds: m.cells.filter((c) => c.failed > 0).map((c) => c.modelId),
+                }))}
                 judgePending={progress.data.judgePending}
               />
               {/* Série terminée : la matrice reste visible pour repérer d'un coup d'œil les erreurs et les réponses tronquées. */}

@@ -462,3 +462,34 @@ test('Utilisateur : pas de case « Relancer » ; réponse en attente affichée c
   expect(within(card).queryByText(/0,021/)).toBeNull();
   expect(screen.queryByRole('checkbox', { name: /Relancer/ })).toBeNull();
 });
+
+test('filtre « Statut » : tronquées seulement, tous les tests concernés l’un sous l’autre', async () => {
+  const user = userEvent.setup();
+  const tests = [
+    { runTestId: 'rt1', testName: 'Résumer un CCTP', category: 'Rédaction', truncatedModelIds: ['m2'], failedModelIds: [] },
+    { runTestId: 'rt2', testName: 'Extraire', category: 'Extraction', truncatedModelIds: [], failedModelIds: ['m1'] },
+    { runTestId: 'rt3', testName: 'Lettre', category: 'Rédaction', truncatedModelIds: ['m2'], failedModelIds: [] },
+  ];
+  answersBody = {
+    test: TEST_INFO,
+    answers: [answer({ modelId: 'm1' }), answer({ resultId: 'a2', modelId: 'm2', modelName: 'GPT Test', status: 'truncated', responseText: null, errorMessage: 'Aucun texte' })],
+  };
+  render(
+    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+      <MemoryRouter>
+        <SideBySide runId="r1" tests={tests} isAdmin={false} models={[{ modelId: 'm1', name: 'Claude Opus' }, { modelId: 'm2', name: 'GPT Test' }]} />
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+  await screen.findByRole('article', { name: 'Claude Opus, répétition 1' });
+  const status = screen.getByLabelText('Statut');
+  expect(within(status).getAllByRole('option').map((o) => o.textContent)).toEqual(['Toutes les réponses', 'Tronquées (2 tests)', 'En erreur (1 test)']);
+  await user.selectOptions(status, 'truncated');
+  expect(screen.getByLabelText('Test')).toHaveValue('__tous__');
+  expect(within(screen.getByLabelText('Test')).getAllByRole('option').map((o) => o.textContent)).toEqual(['Tous les tests (2)', 'Résumer un CCTP', 'Lettre']);
+  await waitFor(() => expect(screen.getAllByRole('article', { name: 'GPT Test, répétition 1' })).toHaveLength(2));
+  expect(screen.queryByRole('article', { name: 'Claude Opus, répétition 1' })).toBeNull();
+  expect(screen.getByRole('status')).toHaveTextContent('· réponses tronquées (2 tests)');
+  await user.click(screen.getByRole('button', { name: 'Retirer le filtre' }));
+  expect(status).toHaveValue('all');
+});

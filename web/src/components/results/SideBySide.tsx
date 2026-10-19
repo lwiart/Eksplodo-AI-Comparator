@@ -117,7 +117,29 @@ function RerunBar({ runId, onDone }: { runId: string; onDone: () => Promise<unkn
   );
 }
 
-export type SideBySideTest = { runTestId: string; testName: string; category?: string };
+export type SideBySideTest = {
+  runTestId: string;
+  testName: string;
+  category?: string;
+  /** Modèles ayant au moins une réponse tronquée / en erreur sur ce test (matrice de progression). */
+  truncatedModelIds?: string[];
+  failedModelIds?: string[];
+};
+
+/** Filtre « Statut » des réponses : toutes, seulement les tronquées, seulement les erreurs (y compris délais dépassés). */
+type StatusFilter = 'all' | 'truncated' | 'failed';
+
+const STATUS_SUFFIX: Record<StatusFilter, string> = { all: '', truncated: ' · réponses tronquées', failed: ' · réponses en erreur' };
+
+const matchesStatus = (a: Answer, status: StatusFilter) =>
+  status === 'all' || (status === 'truncated' ? a.status === 'truncated' : a.status === 'error' || a.status === 'timeout');
+
+/** Test retenu par le filtre « Statut » : un modèle choisi (ou n'importe lequel) a une réponse de ce statut. */
+function testMatchesStatus(t: SideBySideTest, status: StatusFilter, modelId: string | null): boolean {
+  if (status === 'all') return true;
+  const ids = (status === 'truncated' ? t.truncatedModelIds : t.failedModelIds) ?? [];
+  return modelId === null ? ids.length > 0 : ids.includes(modelId);
+}
 
 export { NO_FILTER, type AnswersFilter } from './answers-filter';
 
@@ -265,7 +287,7 @@ function AnswerCard({
         </div>
       )}
       {answer.judgeRationale ? (
-        <p className="m-0 border-l-2 border-orange pl-2 text-[11.5px] text-mute">
+        <p className="m-0 border-l-2 border-orange pl-2.5 text-[13px] leading-relaxed text-ink/80">
           {RATIONALE_LABEL[method]} : {answer.judgeRationale}
         </p>
       ) : null}
@@ -337,6 +359,7 @@ function TestAnswersBlock({
   runTestId,
   testName,
   modelId,
+  status,
   isAdmin,
   pollMs,
   onRefresh,
@@ -345,6 +368,7 @@ function TestAnswersBlock({
   runTestId: string;
   testName: string;
   modelId: string | null;
+  status: StatusFilter;
   isAdmin: boolean;
   pollMs: number | false;
   onRefresh: () => Promise<unknown>;
@@ -352,7 +376,8 @@ function TestAnswersBlock({
   const [detailOpen, setDetailOpen] = useState(false);
   const answers = useQuery({ queryKey: answersKey(runId, runTestId), queryFn: () => getAnswers(runId, runTestId), refetchInterval: pollMs });
   const hiddenCount = answers.data?.answers.filter((a) => a.hiddenUntilScored).length ?? 0;
-  const visible = answers.data?.answers.filter((a) => !a.hiddenUntilScored && (modelId === null || a.modelId === modelId)) ?? [];
+  const visible =
+    answers.data?.answers.filter((a) => !a.hiddenUntilScored && (modelId === null || a.modelId === modelId) && matchesStatus(a, status)) ?? [];
   return (
     <section aria-label={testName} className="flex flex-col gap-2 border-t border-line pt-3 first:border-t-0 first:pt-0">
       <div className="flex flex-wrap items-baseline gap-x-3">
@@ -453,12 +478,16 @@ export function SideBySide({
       }
     : null;
   const categories = [...new Set(tests.map((t) => t.category).filter((c): c is string => !!c))];
-  const shown = current.category ? tests.filter((t) => t.category === current.category) : tests;
+  const [status, setStatus] = useState<StatusFilter>('all');
+  const inCategory = current.category ? tests.filter((t) => t.category === current.category) : tests;
+  const shown = inCategory.filter((t) => testMatchesStatus(t, status, current.modelId));
+  const statusCount = (st: StatusFilter) => inCategory.filter((t) => testMatchesStatus(t, st, current.modelId)).length;
+  const hasStatusData = tests.some((t) => t.truncatedModelIds !== undefined || t.failedModelIds !== undefined);
   // « Tous les tests » : toute la sélection (catégorie, modèle) l'une sous l'autre ; sinon un test à la fois.
   const allMode = selected === ALL_TESTS && shown.length > 0;
   const runTestId = allMode ? '' : shown.some((t) => t.runTestId === selected) ? selected : (shown[0]?.runTestId ?? '');
   const filterModel = models.find((m) => m.modelId === current.modelId);
-  const filtered = current.modelId !== null || current.category !== null;
+  const filtered = current.modelId !== null || current.category !== null || status !== 'all';
   // Clic sur une note de la matrice : tous les tests de la catégorie (et du modèle) choisis, puis défilement jusqu'ici.
   useEffect(() => {
     if (focusKey === 0) return;
@@ -473,7 +502,10 @@ export function SideBySide({
   });
   const tabs: Tab[] = isAdmin ? ['side', 'blind', 'spread'] : ['side', 'blind'];
   const hiddenCount = answers.data?.answers.filter((a) => a.hiddenUntilScored).length ?? 0;
-  const visible = answers.data?.answers.filter((a) => !a.hiddenUntilScored && (current.modelId === null || a.modelId === current.modelId)) ?? [];
+  const visible =
+    answers.data?.answers.filter(
+      (a) => !a.hiddenUntilScored && (current.modelId === null || a.modelId === current.modelId) && matchesStatus(a, status),
+    ) ?? [];
   const method = answers.data?.test.scoringMethod;
   // Relance du juge proposée seulement sur un test noté par le juge (le serveur refuse les autres : `not_rescorable`).
   const canRescore = isAdmin && method === 'judge';
@@ -546,6 +578,23 @@ export function SideBySide({
             onChange={(e) => setFilter({ ...current, modelId: e.target.value || null })}
           />
         ) : null}
+        {hasStatusData ? (
+          <SelectField
+            label="Statut"
+            value={status}
+            options={[
+              { value: 'all', label: 'Toutes les réponses' },
+              { value: 'truncated', label: `Tronquées (${statusCount('truncated')} test${statusCount('truncated') > 1 ? 's' : ''})` },
+              { value: 'failed', label: `En erreur (${statusCount('failed')} test${statusCount('failed') > 1 ? 's' : ''})` },
+            ]}
+            onChange={(e) => {
+              const next = e.target.value as StatusFilter;
+              setStatus(next);
+              // Tronquées ou en erreur : tous les tests concernés l'un sous l'autre.
+              if (next !== 'all') setSelected(ALL_TESTS);
+            }}
+          />
+        ) : null}
         {answers.data && !allMode ? (
           <Button variant="ghost" onClick={() => setDetailOpen(true)}>
             Détail du test
@@ -555,9 +604,14 @@ export function SideBySide({
       {filtered ? (
         <div role="status" className="flex flex-wrap items-center gap-2 rounded-2xl border border-orange/50 bg-orange/10 px-3 py-2 text-sm text-white">
           <span>
-            Filtre : <b>{filterModel?.name ?? 'tous les modèles'}</b> · {current.category ?? 'toutes les catégories'} ({shown.length} test{shown.length > 1 ? 's' : ''})
+            Filtre : <b>{filterModel?.name ?? 'tous les modèles'}</b> · {current.category ?? 'toutes les catégories'}
+            {STATUS_SUFFIX[status]} ({shown.length} test{shown.length > 1 ? 's' : ''})
           </span>
-          <Button variant="ghost" className="ml-auto px-3 py-1 text-xs" onClick={() => setFilter(NO_FILTER)}>
+          <Button variant="ghost" className="ml-auto px-3 py-1 text-xs" onClick={() => {
+              setFilter(NO_FILTER);
+              setStatus('all');
+            }}
+          >
             Retirer le filtre
           </Button>
         </div>
@@ -592,6 +646,7 @@ export function SideBySide({
                 runTestId={t.runTestId}
                 testName={t.testName}
                 modelId={current.modelId}
+                status={status}
                 isAdmin={isAdmin}
                 pollMs={pollMs}
                 onRefresh={refresh}

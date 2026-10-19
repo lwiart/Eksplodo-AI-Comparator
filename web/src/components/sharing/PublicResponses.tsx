@@ -63,7 +63,7 @@ function PublicTestBlock({ test, modelId, byKey }: { test: PublicResponse; model
                 <span className="font-mono text-xs text-peach">{a.finalScore === null ? DASH : `${score(a.finalScore)} / 100`}</span>
               </header>
               <div className="mt-2 text-sm break-words">{a.text ? <Markdown text={a.text} relativeLinksAsText /> : <p className="m-0 text-mute">Pas de texte.</p>}</div>
-              {a.judgeRationale ? <p className="mt-3 mb-0 border-t border-line pt-2 text-xs text-mute">{a.judgeRationale}</p> : null}
+              {a.judgeRationale ? <p className="mt-3 mb-0 border-t border-line pt-2 text-[13px] leading-relaxed text-ink/80">{a.judgeRationale}</p> : null}
             </article>
           );
         })}
