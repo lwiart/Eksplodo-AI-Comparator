@@ -70,12 +70,11 @@ function PickAllButton({ answers }: { answers: Answer[] }) {
   );
 }
 
-/** Barre de relance des réponses cochées : limite de tokens actuelle des tests reprise par défaut. */
+/** Barre de relance des réponses cochées : la limite de tokens actuelle de chaque test est toujours reprise. */
 function RerunBar({ runId, onDone }: { runId: string; onDone: () => Promise<unknown> }) {
   const selection = useContext(RerunSelectionContext);
-  const [refreshMaxTokens, setRefreshMaxTokens] = useState(true);
   const rerun = useMutation({
-    mutationFn: () => rerunResults(runId, [...selection!.picked], refreshMaxTokens),
+    mutationFn: () => rerunResults(runId, [...selection!.picked]),
     onSuccess: async () => {
       selection!.pickAll([]);
       await onDone();
@@ -92,10 +91,6 @@ function RerunBar({ runId, onDone }: { runId: string; onDone: () => Promise<unkn
       <b>
         {n} réponse{n > 1 ? 's' : ''} à relancer
       </b>
-      <label className="flex cursor-pointer items-center gap-2 text-[13px] text-ink">
-        <input type="checkbox" checked={refreshMaxTokens} onChange={(e) => setRefreshMaxTokens(e.target.checked)} className="accent-orange" />
-        Reprendre la limite de tokens actuelle des tests
-      </label>
       <span className="ml-auto flex gap-2">
         <Button variant="ghost" disabled={rerun.isPending} onClick={() => selection.pickAll([])}>
           Vider
@@ -106,7 +101,8 @@ function RerunBar({ runId, onDone }: { runId: string; onDone: () => Promise<unkn
         </Button>
       </span>
       <p className="m-0 w-full text-xs text-mute">
-        Les réponses et notes de la sélection sont effacées puis rejouées (appels facturés). Les autres réponses ne changent pas.
+        Les réponses et notes de la sélection sont effacées puis rejouées avec la limite de tokens actuelle de chaque test (appels
+        facturés). Les autres réponses ne changent pas.
       </p>
       {rerun.isError ? (
         <p role="alert" className="m-0 w-full text-sm text-bad">

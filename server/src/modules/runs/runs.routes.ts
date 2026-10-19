@@ -54,7 +54,7 @@ const rescoreBody = z
 const rerunBody = z
   .object({
     resultIds: z.array(z.string().uuid()).min(1).max(5_000).refine(unique, 'Un résultat ne peut figurer qu’une fois'),
-    refreshMaxTokens: z.boolean().default(false),
+    refreshMaxTokens: z.boolean().default(true),
   })
   .strict();
 const patchBody = z

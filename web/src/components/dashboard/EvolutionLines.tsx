@@ -76,7 +76,7 @@ function Dot({
 function DotDetails({ row, name, color, value }: { row: Row; name: string; color: string; value: number | string | null }) {
   return (
     <>
-      <div className="mb-1 font-semibold text-white">{`${row.name} · ${row.date} · juge : ${row.judge}`}</div>
+      <div className="mb-1 font-semibold text-[#fff]">{`${row.name} · ${row.date} · juge : ${row.judge}`}</div>
       <div className="flex items-center gap-1.5 text-ink">
         <span aria-hidden="true" className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: color }} />
         {`${name} : ${typeof value === 'number' ? score(value) : DASH}`}

@@ -13,6 +13,7 @@ import { Field } from '../components/ui/Field';
 import { SelectField } from '../components/ui/SelectField';
 import { duration, parseBudget, plural, usd } from '../lib/format';
 import { logoFor } from '../lib/providers';
+import { Breadcrumb } from '../components/ui/Breadcrumb';
 
 type Source = 'suite' | 'custom';
 type Step = 1 | 2 | 3 | 4;
@@ -319,7 +320,7 @@ export function LaunchRunPage() {
 
   return (
     <div className="mx-auto max-w-[1100px]">
-      <div className="mb-1 font-mono text-xs text-mute">Séries / Nouvelle</div>
+      <Breadcrumb items={[{ label: 'Séries', to: '/series' }, { label: 'Nouvelle série' }]} />
       <h1 className="m-0 font-display text-[30px] leading-[1.1] font-extrabold tracking-[-0.01em] text-white">Lancer une série</h1>
       <p className="mt-2 mb-5 max-w-prose text-sm text-mute">Choisissez des tests, des modèles et le juge. Le coût maximal est estimé avant le lancement.</p>
 

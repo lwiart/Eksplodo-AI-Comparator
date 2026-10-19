@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { messageForError } from '../../api/messages';
 import {
   TESTS_KEY,
@@ -29,6 +29,7 @@ import { Card } from '../../components/ui/Card';
 import { Chip } from '../../components/ui/Chip';
 import { Field } from '../../components/ui/Field';
 import { TextArea } from '../../components/ui/TextArea';
+import { Breadcrumb } from '../../components/ui/Breadcrumb';
 
 const detailKey = (id: string | undefined) => [...TESTS_KEY, 'detail', id] as const;
 
@@ -189,10 +190,8 @@ function EditorForm({ initial }: { initial: PublicTest | null }) {
   return (
     <div className="mx-auto max-w-[1100px]">
       <header className="mb-5">
-        <Link to="/admin/tests" className="text-[13px] text-sky no-underline hover:underline">
-          Tests
-        </Link>
-        <div className="mt-1 flex flex-wrap items-center gap-3">
+        <Breadcrumb items={[{ label: 'Tests', to: '/admin/tests' }, { label: initial ? initial.name : 'Nouveau test' }]} />
+        <div className="flex flex-wrap items-center gap-3">
           <h1 className="m-0 font-display text-[30px] leading-[1.1] font-extrabold tracking-[-0.01em] text-white">
             {initial ? initial.name : 'Nouveau test'}
           </h1>

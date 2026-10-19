@@ -9,6 +9,7 @@ import { AttachmentGallery } from '../components/ui/AttachmentGallery';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { Chip } from '../components/ui/Chip';
+import { Breadcrumb } from '../components/ui/Breadcrumb';
 
 /** Notation à l'aveugle d'une question : réponses A, B, C… puis, après enregistrement, révélation des modèles. */
 export function BlindScoringPage() {
@@ -19,9 +20,9 @@ export function BlindScoringPage() {
 
   return (
     <div className="mx-auto max-w-[1200px]">
-      <Link to="/a-noter" className="text-xs text-mute no-underline hover:text-white">
-        ← Retour à la liste
-      </Link>
+      <Breadcrumb
+        items={[{ label: 'À noter', to: '/a-noter' }, ...(question.data ? [{ label: question.data.runName }, { label: question.data.testName }] : [{ label: 'Notation à l’aveugle' }])]}
+      />
       {question.isError ? (
         <p role="alert" className="mt-4 text-sm text-bad">
           {messageForScoreError(question.error)}
@@ -86,11 +87,8 @@ function QuestionForm({
 
   return (
     <>
-      <header className="mt-3 mb-4">
-        <p className="m-0 font-mono text-[11px] text-mute">
-          {question.runName} / {question.testName}
-        </p>
-        <h1 className="mt-1 mb-0 font-display text-[30px] leading-[1.1] font-extrabold tracking-[-0.01em] text-white">
+      <header className="mb-4">
+        <h1 className="m-0 font-display text-[30px] leading-[1.1] font-extrabold tracking-[-0.01em] text-white">
           Notation à l’aveugle
         </h1>
         <p className="mt-2 mb-0 max-w-prose text-sm text-mute">

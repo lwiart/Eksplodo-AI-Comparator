@@ -159,6 +159,10 @@ test('édition : fil d’Ariane « Suites / nom », « Suites » referme l’éd
   await user.click(await screen.findByRole('button', { name: 'Modifier Marchés publics' }));
   const crumbs = screen.getByRole('navigation', { name: 'Fil d’Ariane' });
   expect(crumbs).toHaveTextContent('Suites / Marchés publics');
+  // Édition : seule la suite éditée, ni la liste ni « Nouvelle suite ».
+  expect(screen.getByRole('heading', { level: 1, name: 'Marchés publics' })).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Modifier Marchés publics' })).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Nouvelle suite' })).toBeNull();
   await user.click(within(crumbs).getByRole('button', { name: 'Suites' }));
   expect(screen.queryByRole('navigation', { name: 'Fil d’Ariane' })).toBeNull();
   expect(screen.queryByLabelText('Nom')).toBeNull();

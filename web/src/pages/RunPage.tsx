@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { lazy, Suspense, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import { MODELS_KEY, listModels } from '../api/catalog';
 import { messageForError } from '../api/messages';
 import { answersPrefix, getRanking, rankingKey } from '../api/results';
@@ -17,10 +17,11 @@ import { RunMetricsTable } from '../components/runs/RunMetricsTable';
 import { RunStatusChip } from '../components/runs/RunStatusChip';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
-import { RUN_STATUS_LABELS, duration, finishedCalls, plural, usd } from '../lib/format';
+import { duration, finishedCalls, plural, usd } from '../lib/format';
 import { LiveFlowFallback } from '../three/LiveFlowFallback';
 import { ThreeStage } from '../three/ThreeStage';
 import { liveFlowScene, type LiveFlowData } from '../three/live-flow-scene';
+import { Breadcrumb } from '../components/ui/Breadcrumb';
 
 /** Intervalle d'interrogation : aucune requête HTTP n'attend la fin d'un appel (limite de 60 s du proxy). */
 const POLL_MS = 2000;
@@ -410,12 +411,7 @@ export function RunPage() {
 
   return (
     <div className="mx-auto max-w-[1100px]">
-      <div className="mb-1 font-mono text-xs text-mute">
-        <Link to="/series" className="text-mute no-underline hover:text-white">
-          Séries
-        </Link>
-        {status ? ` / ${RUN_STATUS_LABELS[status]}` : ''}
-      </div>
+      <Breadcrumb items={[{ label: 'Séries', to: '/series' }, ...(run.data ? [{ label: run.data.name }] : [])]} />
 
       {error ? (
         <p role="alert" className="text-sm text-bad">

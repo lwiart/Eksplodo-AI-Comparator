@@ -14,6 +14,7 @@ import {
   type PublicSuiteTest,
   type PublicTest,
 } from '../../api/tests';
+import { Breadcrumb } from '../../components/ui/Breadcrumb';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { Chip } from '../../components/ui/Chip';
@@ -258,6 +259,28 @@ export function SuitesPage() {
     setDraft(next);
   };
 
+  // Édition : seule la suite éditée s'affiche ; la liste des suites reste sur l'accueil des suites.
+  if (draft) {
+    const title = draft.id === null ? 'Nouvelle suite' : draft.name.trim() || 'Suite sans nom';
+    return (
+      <div className="mx-auto max-w-[1100px]">
+        {/* L'éditeur s'ouvre sur la page des suites : « Suites » le referme et ramène à la liste. */}
+        <Breadcrumb items={[{ label: 'Suites', onClick: () => setDraft(null) }, { label: title }]} />
+        <header className="mb-5">
+          <h1 className="m-0 font-display text-[30px] leading-[1.1] font-extrabold tracking-[-0.01em] [overflow-wrap:anywhere] text-white">{title}</h1>
+        </header>
+        <SuiteEditor
+          draft={draft}
+          onChange={setDraft}
+          onCancel={() => setDraft(null)}
+          onSave={() => save.mutate(draft)}
+          saving={save.isPending}
+          error={saveError}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="mx-auto max-w-[1100px]">
       <header className="mb-5 flex flex-wrap items-end justify-between gap-3">
@@ -271,30 +294,6 @@ export function SuitesPage() {
           Nouvelle suite
         </Button>
       </header>
-
-      {draft ? (
-        <nav aria-label="Fil d’Ariane" className="mb-2 font-mono text-xs text-mute">
-          {/* L'éditeur s'ouvre sur la page des suites : « Suites » le referme et ramène à la liste. */}
-          <button
-            type="button"
-            onClick={() => setDraft(null)}
-            className="cursor-pointer border-0 bg-transparent p-0 font-mono text-xs text-mute hover:text-white"
-          >
-            Suites
-          </button>
-          {` / ${draft.id === null ? 'Nouvelle suite' : draft.name.trim() || 'Suite sans nom'}`}
-        </nav>
-      ) : null}
-      {draft ? (
-        <SuiteEditor
-          draft={draft}
-          onChange={setDraft}
-          onCancel={() => setDraft(null)}
-          onSave={() => save.mutate(draft)}
-          saving={save.isPending}
-          error={saveError}
-        />
-      ) : null}
 
       <div aria-live="polite" className="mb-3 min-h-5 text-sm">
         {notice ? <span className="text-good">{notice}</span> : null}

@@ -12,6 +12,7 @@ import { ModelForm, draftFromModel, hasValidPrices, parsePrice, type ModelDraft 
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { Chip } from '../components/ui/Chip';
+import { Breadcrumb } from '../components/ui/Breadcrumb';
 
 type Model = PublicModel & { provider: PublicProvider };
 
@@ -287,11 +288,7 @@ export function ModelPage() {
 
   return (
     <div className="mx-auto max-w-[1100px]">
-      <p className="m-0 mb-3 text-sm">
-        <Link to="/modeles" className="text-sky no-underline hover:underline">
-          Modèles
-        </Link>
-      </p>
+      <Breadcrumb items={[{ label: 'Modèles', to: '/modeles' }, ...(model.data ? [{ label: model.data.displayName }] : [])]} />
       {model.isError ? (
         notFound ? (
           <Card className="py-10 text-center">

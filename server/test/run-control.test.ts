@@ -928,7 +928,8 @@ test('relance de résultats choisis : réponse et notes effacées, limite du tes
 
   expect((await t.post(`/api/runs/${runId}/rerun`, { resultIds: [target.id] }, t.user)).statusCode).toBe(403);
   expect((await t.post(`/api/runs/${runId}/rerun`, { resultIds: [randomUUID()] })).statusCode).toBe(404);
-  const res = await t.post(`/api/runs/${runId}/rerun`, { resultIds: [target.id], refreshMaxTokens: true });
+  // Limite actuelle du test reprise par défaut.
+  const res = await t.post(`/api/runs/${runId}/rerun`, { resultIds: [target.id] });
   expect(res.statusCode).toBe(200);
   expect(res.json()).toMatchObject({ rerun: 1, run: { status: 'queued' } });
   const reset = (await t.resultRows(runId)).find((r) => r.id === target.id)!;
@@ -945,7 +946,7 @@ test('relance de résultats choisis : réponse et notes effacées, limite du tes
   expect(await t.runRow(runId)).toMatchObject({ status: 'completed' });
 });
 
-test('relance choisie sans « limite actuelle » : la limite figée de la série est gardée', async () => {
+test('relance choisie avec refreshMaxTokens: false : la limite figée de la série est gardée', async () => {
   const t = await setup();
   const runId = await t.createRun(['Un']);
   await t.drain();
@@ -953,7 +954,7 @@ test('relance choisie sans « limite actuelle » : la limite figée de la série
   const [rt] = await t.db.select().from(runTests).where(eq(runTests.runId, runId));
   const frozen = rt!.snapshot.maxTokens;
   await t.db.update(tests).set({ maxTokens: frozen + 500 }).where(eq(tests.id, rt!.snapshot.testId));
-  expect((await t.post(`/api/runs/${runId}/rerun`, { resultIds: [row!.id] })).statusCode).toBe(200);
+  expect((await t.post(`/api/runs/${runId}/rerun`, { resultIds: [row!.id], refreshMaxTokens: false })).statusCode).toBe(200);
   const [after] = await t.db.select().from(runTests).where(eq(runTests.runId, runId));
   expect(after!.snapshot.maxTokens).toBe(frozen);
 });

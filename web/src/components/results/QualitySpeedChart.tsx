@@ -21,7 +21,7 @@ export function scatterPoints(models: RankingModel[]): ScatterPoint[] {
 function PointDetails({ p }: { p: ScatterPoint }) {
   return (
     <>
-      <div className="flex items-center gap-2 font-semibold whitespace-nowrap text-white">
+      <div className="flex items-center gap-2 font-semibold whitespace-nowrap text-[#fff]">
         <span aria-hidden="true" className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: p.color }} />
         {p.name}
       </div>
