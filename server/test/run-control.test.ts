@@ -7,6 +7,7 @@ import { auditLog } from '../src/db/schema/core.js';
 import { errorEvents } from '../src/db/schema/errors.js';
 import { jobs } from '../src/db/schema/jobs.js';
 import { results, runTests, runs } from '../src/db/schema/runs.js';
+import { tests } from '../src/db/schema/tests.js';
 import { enqueue, type JobHandlers } from '../src/modules/jobs/queue.js';
 import { startSchedulerLoop } from '../src/modules/jobs/scheduler-loop.js';
 import type { ScheduleEntry } from '../src/modules/jobs/scheduler.js';
@@ -881,4 +882,78 @@ test('« Relancer les erreurs » remet aussi en file les réponses tronquées', 
   expect(retried.statusCode).toBe(200);
   const row = (await t.resultRows(runId)).find((r) => r.modelId === m1)!;
   expect(row).toMatchObject({ status: 'pending', attempts: 0, errorCode: null, errorMessage: null });
+});
+
+test('« Annuler les tests en attente » : série en pause terminée, appels annulés rejouables', async () => {
+  const t = await setup({ models: 2 });
+  const runId = await t.createRun(['Un', 'Deux']);
+  expect((await t.post(`/api/runs/${runId}/pause`)).statusCode).toBe(200);
+  expect((await t.post(`/api/runs/${runId}/cancel-pending`, {}, t.user)).statusCode).toBe(403);
+  const res = await t.post(`/api/runs/${runId}/cancel-pending`);
+  expect(res.statusCode).toBe(200);
+  expect(res.json()).toMatchObject({ cancelled: 4, run: { status: 'completed' } });
+  const rows = await t.resultRows(runId);
+  expect(rows.every((r) => r.status === 'error' && r.errorCode === 'cancelled')).toBe(true);
+  expect(await t.auditActions()).toContain('run_pending_cancelled');
+  // Rien à annuler : aucune écriture.
+  expect((await t.post(`/api/runs/${runId}/cancel-pending`)).json()).toMatchObject({ cancelled: 0 });
+  // « Relancer les erreurs » rejoue les appels annulés.
+  expect((await t.post(`/api/runs/${runId}/retry-errors`)).json().run.status).toBe('queued');
+  await t.drain();
+  expect((await t.resultRows(runId)).every((r) => r.status === 'done')).toBe(true);
+});
+
+test('« Annuler les tests en attente » sur une série en file : aucun appel, la série se termine', async () => {
+  const t = await setup({ models: 2 });
+  const runId = await t.createRun(['Un']);
+  const calls: string[] = [];
+  const registry = gatedRegistry(Promise.resolve(), () => {}, calls);
+  expect((await t.post(`/api/runs/${runId}/cancel-pending`)).json()).toMatchObject({ cancelled: 2, run: { status: 'queued' } });
+  await t.drain(registry);
+  expect(calls).toHaveLength(0);
+  expect(await t.runRow(runId)).toMatchObject({ status: 'completed', activeJobId: null });
+});
+
+test('relance de résultats choisis : réponse et notes effacées, limite du test actuel reprise, autres résultats intacts', async () => {
+  const t = await setup({ models: 2 });
+  const [m0, m1] = t.modelIds as [string, string];
+  const runId = await t.createRun(['Un'], { modelIds: [m0, m1] });
+  await t.drain();
+  const before = await t.resultRows(runId);
+  const target = before.find((r) => r.modelId === m0)!;
+  const other = before.find((r) => r.modelId === m1)!;
+  await t.db.update(results).set({ overrideScore: 12, scoreStatus: 'done' }).where(eq(results.id, target.id));
+  const [rt] = await t.db.select().from(runTests).where(eq(runTests.runId, runId));
+  await t.db.update(tests).set({ maxTokens: 3000 }).where(eq(tests.id, rt!.snapshot.testId));
+
+  expect((await t.post(`/api/runs/${runId}/rerun`, { resultIds: [target.id] }, t.user)).statusCode).toBe(403);
+  expect((await t.post(`/api/runs/${runId}/rerun`, { resultIds: [randomUUID()] })).statusCode).toBe(404);
+  const res = await t.post(`/api/runs/${runId}/rerun`, { resultIds: [target.id], refreshMaxTokens: true });
+  expect(res.statusCode).toBe(200);
+  expect(res.json()).toMatchObject({ rerun: 1, run: { status: 'queued' } });
+  const reset = (await t.resultRows(runId)).find((r) => r.id === target.id)!;
+  expect(reset).toMatchObject({ status: 'pending', attempts: 0, responseText: null, overrideScore: null, scoreStatus: 'awaiting_manual' });
+  expect((await t.resultRows(runId)).find((r) => r.id === other.id)).toMatchObject({ status: 'done', responseText: other.responseText });
+  const [after] = await t.db.select().from(runTests).where(eq(runTests.runId, runId));
+  expect(after!.snapshot.maxTokens).toBe(3000);
+  expect(await t.auditActions()).toContain('run_results_rerun');
+  // Un résultat en attente ne peut pas être relancé à nouveau.
+  expect((await t.post(`/api/runs/${runId}/rerun`, { resultIds: [target.id] })).statusCode).toBe(409);
+
+  await t.drain();
+  expect((await t.resultRows(runId)).find((r) => r.id === target.id)).toMatchObject({ status: 'done', attempts: 1 });
+  expect(await t.runRow(runId)).toMatchObject({ status: 'completed' });
+});
+
+test('relance choisie sans « limite actuelle » : la limite figée de la série est gardée', async () => {
+  const t = await setup();
+  const runId = await t.createRun(['Un']);
+  await t.drain();
+  const [row] = await t.resultRows(runId);
+  const [rt] = await t.db.select().from(runTests).where(eq(runTests.runId, runId));
+  const frozen = rt!.snapshot.maxTokens;
+  await t.db.update(tests).set({ maxTokens: frozen + 500 }).where(eq(tests.id, rt!.snapshot.testId));
+  expect((await t.post(`/api/runs/${runId}/rerun`, { resultIds: [row!.id] })).statusCode).toBe(200);
+  const [after] = await t.db.select().from(runTests).where(eq(runTests.runId, runId));
+  expect(after!.snapshot.maxTokens).toBe(frozen);
 });

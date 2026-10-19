@@ -51,6 +51,12 @@ const rescoreBody = z
   .strict()
   .refine((b) => b.scope !== 'test' || b.runTestId !== undefined, { message: 'runTestId requis pour recalculer un test', path: ['runTestId'] })
   .refine((b) => b.scope !== 'result' || b.resultId !== undefined, { message: 'resultId requis pour recalculer un résultat', path: ['resultId'] });
+const rerunBody = z
+  .object({
+    resultIds: z.array(z.string().uuid()).min(1).max(5_000).refine(unique, 'Un résultat ne peut figurer qu’une fois'),
+    refreshMaxTokens: z.boolean().default(false),
+  })
+  .strict();
 const patchBody = z
   .object({ name: runName.optional(), budgetUsd, weights })
   .strict()
@@ -92,6 +98,18 @@ export function registerRunsRoutes(app: FastifyInstance, service: RunsService): 
   app.post('/api/runs/:id/retry-errors', admin, async (req) => {
     const { id } = idParams.parse(req.params);
     return { run: await service.retryErrors(req.actor!, id) };
+  });
+
+  app.post('/api/runs/:id/cancel-pending', admin, async (req) => {
+    const { id } = idParams.parse(req.params);
+    const { cancelled, ...run } = await service.cancelPending(req.actor!, id);
+    return { run, cancelled };
+  });
+
+  app.post('/api/runs/:id/rerun', admin, async (req) => {
+    const { id } = idParams.parse(req.params);
+    const { rerun, ...run } = await service.rerunResults(req.actor!, id, rerunBody.parse(req.body));
+    return { run, rerun };
   });
 
   app.post('/api/runs/:id/models', admin, async (req) => {

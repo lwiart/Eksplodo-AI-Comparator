@@ -436,3 +436,29 @@ test('nom du test cliquable : détail avec consigne système, prompt et résulta
   expect(dialog.getByText('1 200 tokens')).toBeInTheDocument();
   expect(dialog.getByText('marchés')).toBeInTheDocument();
 });
+
+test('Admin : réponses cochées puis « Relancer la sélection » avec la limite de tokens actuelle', async () => {
+  const user = userEvent.setup();
+  renderBlock(true);
+  await screen.findByRole('article', { name: 'Claude Opus, répétition 1' });
+  expect(screen.queryByRole('region', { name: 'Relance des réponses cochées' })).toBeNull();
+  await user.click(screen.getByRole('checkbox', { name: 'Relancer Claude Opus, répétition 1' }));
+  const bar = within(screen.getByRole('region', { name: 'Relance des réponses cochées' }));
+  expect(bar.getByText('1 réponse à relancer')).toBeInTheDocument();
+  expect(bar.getByRole('checkbox', { name: 'Reprendre la limite de tokens actuelle des tests' })).toBeChecked();
+  await user.click(screen.getByRole('button', { name: 'Cocher ces réponses pour les relancer' }));
+  expect(bar.getByText('2 réponses à relancer')).toBeInTheDocument();
+  await user.click(bar.getByRole('button', { name: /Relancer la sélection/ }));
+  expect(apiFetch).toHaveBeenCalledWith('/api/runs/r1/rerun', { method: 'POST', body: { resultIds: ['a1', 'a2'], refreshMaxTokens: true } });
+  await waitFor(() => expect(screen.queryByRole('region', { name: 'Relance des réponses cochées' })).toBeNull());
+});
+
+test('Utilisateur : pas de case « Relancer » ; réponse en attente affichée comme telle, sans coût', async () => {
+  answersBody = { test: TEST_INFO, answers: [answer({ status: 'pending', responseText: null, finalScore: null, autoScore: null, judgeRationale: null, ttftMs: null, tokensPerS: null })] };
+  renderBlock(false);
+  const card = await screen.findByRole('article', { name: 'Claude Opus, répétition 1' });
+  expect(within(card).getByText('En attente de lancement.')).toBeInTheDocument();
+  expect(within(card).queryByText('Pas de réponse pour ce résultat.')).toBeNull();
+  expect(within(card).queryByText(/0,021/)).toBeNull();
+  expect(screen.queryByRole('checkbox', { name: /Relancer/ })).toBeNull();
+});

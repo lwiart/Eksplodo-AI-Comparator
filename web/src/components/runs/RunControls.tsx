@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { MODELS_KEY, listModels } from '../../api/catalog';
 import { messageForError } from '../../api/messages';
-import { RUNS_KEY, addRunModels, pauseRun, resumeRun, retryRunErrors, updateRun, type RunProgress } from '../../api/runs';
+import { RUNS_KEY, addRunModels, cancelPendingRun, pauseRun, resumeRun, retryRunErrors, updateRun, type RunProgress } from '../../api/runs';
 import { budgetUsd, parseBudget, usd } from '../../lib/format';
 import { Button } from '../ui/Button';
 import { Dialog } from '../ui/Dialog';
@@ -134,7 +134,9 @@ export function RunControls({ runId, progress }: { runId: string; progress: RunP
   const budgetPause = status === 'paused' && pauseReason === 'budget';
   // Après une pause budget, la reprise passe par la relève du plafond (sinon le moteur s'arrêterait aussitôt).
   const canResume = status === 'interrupted' || (status === 'paused' && !budgetPause);
-  const errors = counts.error + counts.timeout;
+  // Les réponses tronquées sont rejouées aussi (avec une marge de réflexion).
+  const errors = counts.error + counts.timeout + counts.truncated;
+  const canCancel = counts.pending > 0 && status !== 'completed';
 
   const newBudget = parseBudget(budget);
   const minimum = minimumBudget(progress);
@@ -193,6 +195,16 @@ export function RunControls({ runId, progress }: { runId: string; progress: RunP
           <Button variant="primary" disabled={busy} onClick={() => action.mutate(() => resumeRun(runId))}>
             <span aria-hidden="true">▶</span>
             Reprendre
+          </Button>
+        ) : null}
+        {canCancel ? (
+          <Button
+            disabled={busy}
+            title="Les appels pas encore lancés passent en erreur « annulé » ; ceux en cours se terminent. « Relancer les erreurs » les rejoue."
+            onClick={() => action.mutate(() => cancelPendingRun(runId))}
+          >
+            <span aria-hidden="true">✕</span>
+            Annuler les tests en attente ({counts.pending})
           </Button>
         ) : null}
         {errors > 0 ? (

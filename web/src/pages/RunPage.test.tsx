@@ -357,6 +357,13 @@ test('Admin : mettre en pause, relancer les erreurs, ajouter un modèle disponib
   expect(again.getByRole('button', { name: 'Ajouter à la série' })).toBeDisabled();
 });
 
+test('Admin : annuler les tests en attente (appels pas encore lancés)', async () => {
+  const user = userEvent.setup();
+  renderPage();
+  await user.click(await screen.findByRole('button', { name: 'Annuler les tests en attente (2)' }));
+  expect(apiFetch).toHaveBeenCalledWith('/api/runs/r1/cancel-pending', { method: 'POST' });
+});
+
 test('Utilisateur : aucun bouton de contrôle', async () => {
   renderPage('user', { ...PROGRESS, status: 'paused', pauseReason: 'budget', running: [] });
   await screen.findByRole('progressbar', { name: 'Avancement' });

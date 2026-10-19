@@ -1,9 +1,9 @@
 import { randomUUID } from 'node:crypto';
-import { and, asc, eq, inArray, isNull } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import type { AppConfig } from '../../config/config.js';
 import type { Db } from '../../db/client.js';
 import { models, providers } from '../../db/schema/catalog.js';
-import { results, runModels, runTests, runs, type RunWeights } from '../../db/schema/runs.js';
+import { manualScores, results, runModels, runTests, runs, type RunWeights } from '../../db/schema/runs.js';
 import { suiteTests, suites, testAttachments, tests } from '../../db/schema/tests.js';
 import { ConflictError, NotFoundError, ValidationError } from '../../errors.js';
 import type { Clock } from '../../lib/clock.js';
@@ -180,6 +180,17 @@ const modelUnavailable = () =>
 const judgeRequired = () => new ValidationError('judge_required', 'Un modèle juge est requis : la sélection contient des tests notés par le juge');
 const runNotActive = () => new ConflictError('run_not_active', 'La série n\'est pas en cours : rien à mettre en pause');
 const runNotPaused = () => new ConflictError('run_not_paused', 'La série n\'est ni en pause ni interrompue');
+/** Message d'un appel annulé avant son lancement (« Annuler les tests en attente »). */
+export const CANCELLED_MESSAGE = 'Annulé avant le lancement. « Relancer les erreurs » le rejoue.';
+/** Statuts qu'une relance choisie peut remettre en attente (terminés, hors combinaisons non supportées). */
+const RERUNNABLE: ResultStatus[] = ['done', 'error', 'timeout', 'truncated'];
+
+function groupBy<T, K>(items: T[], key: (item: T) => K): Map<K, T[]> {
+  const out = new Map<K, T[]>();
+  for (const item of items) out.set(key(item), [...(out.get(key(item)) ?? []), item]);
+  return out;
+}
+
 const runTooLarge = () => new ValidationError('run_too_large', 'Série trop grande : 5 000 appels au plus');
 const budgetExceeded = () =>
   new ConflictError(
@@ -555,6 +566,97 @@ export function createRunsService(deps: RunsServiceDeps) {
         await auditRun(tx, actor, 'run_errors_retried', id, { count });
       });
       return summaryOf(id);
+    },
+
+    /**
+     * Annule les appels pas encore lancés (`pending`) : ils passent en erreur « annulé », rejouables plus tard avec
+     * « Relancer les erreurs ». Les appels en cours se terminent. Série arrêtée sans plus rien à faire : terminée.
+     */
+    async cancelPending(actor: Actor, id: string): Promise<RunSummary & { cancelled: number }> {
+      const now = deps.clock();
+      const cancelled = await withLockedRun(id, async (tx, run) => {
+        const count = affectedRows(
+          await tx
+            .update(results)
+            .set({ status: 'error', errorCode: 'cancelled', errorMessage: CANCELLED_MESSAGE, completedAt: now })
+            .where(and(eq(results.runId, id), eq(results.status, 'pending'))),
+        );
+        if (count === 0) return 0;
+        if (run.status === 'paused' || run.status === 'interrupted') {
+          const [left] = await tx
+            .select({ n: sql<number>`COUNT(*)` })
+            .from(results)
+            .where(and(eq(results.runId, id), inArray(results.status, ['pending', 'running'])));
+          if (Number(left?.n ?? 0) === 0 && (await countPendingJudgements(tx, id)) === 0) {
+            await tx.update(runs).set({ status: 'completed', pauseReason: null, completedAt: now, activeJobId: null }).where(eq(runs.id, id));
+          }
+        }
+        await auditRun(tx, actor, 'run_pending_cancelled', id, { count });
+        return count;
+      });
+      return { ...(await summaryOf(id)), cancelled };
+    },
+
+    /**
+     * Relance des résultats choisis, même réussis (réponse tronquée, mauvaise note due à une limite trop basse) : réponse,
+     * notes (juge, correction, notes manuelles) effacées, puis reprise de la série. Avec `refreshMaxTokens`, la limite de
+     * sortie figée de ces tests reprend celle du test actuel.
+     */
+    async rerunResults(
+      actor: Actor,
+      id: string,
+      input: { resultIds: string[]; refreshMaxTokens: boolean },
+    ): Promise<RunSummary & { rerun: number }> {
+      const rerun = await withLockedRun(id, async (tx, run) => {
+        const chosen = await tx
+          .select({ id: results.id, status: results.status, runTestId: results.runTestId, snapshot: runTests.snapshot })
+          .from(results)
+          .innerJoin(runTests, eq(runTests.id, results.runTestId))
+          .where(and(eq(results.runId, id), inArray(results.id, input.resultIds)));
+        if (chosen.length !== input.resultIds.length) throw new NotFoundError('Résultat introuvable dans cette série');
+        const blocked = chosen.filter((r) => !RERUNNABLE.includes(r.status));
+        if (blocked.length > 0) {
+          throw new ConflictError('not_rerunnable', 'Seuls les résultats terminés (réussis, en erreur ou tronqués) peuvent être relancés');
+        }
+        const snapshots = new Map(chosen.map((r) => [r.runTestId, r.snapshot]));
+        if (input.refreshMaxTokens) {
+          const live = await tx
+            .select({ id: tests.id, maxTokens: tests.maxTokens })
+            .from(tests)
+            .where(inArray(tests.id, [...new Set([...snapshots.values()].map((s) => s.testId))]));
+          const limitOf = new Map(live.map((t) => [t.id, t.maxTokens]));
+          for (const [runTestId, snapshot] of snapshots) {
+            const maxTokens = limitOf.get(snapshot.testId);
+            if (maxTokens === undefined || maxTokens === snapshot.maxTokens) continue;
+            await tx.update(runTests).set({ snapshot: { ...snapshot, maxTokens } }).where(eq(runTests.id, runTestId));
+          }
+        }
+        for (const [scoring, ids] of groupBy(chosen, (r) => snapshots.get(r.runTestId)!.scoringMethod)) {
+          await tx
+            .update(results)
+            .set({
+              status: 'pending',
+              attempts: 0,
+              responseText: null,
+              finishReason: null,
+              errorCode: null,
+              errorMessage: null,
+              completedAt: null,
+              scoreStatus: scoring === 'manual' ? 'awaiting_manual' : 'pending',
+              autoScore: null,
+              judgeRationale: null,
+              judgeClaimedBy: null,
+              overrideScore: null,
+              overrideBy: null,
+            })
+            .where(inArray(results.id, ids.map((r) => r.id)));
+        }
+        await tx.delete(manualScores).where(inArray(manualScores.resultId, input.resultIds));
+        await requeue(tx, run, deps.clock());
+        await auditRun(tx, actor, 'run_results_rerun', id, { count: chosen.length, refreshMaxTokens: input.refreshMaxTokens });
+        return chosen.length;
+      });
+      return { ...(await summaryOf(id)), rerun };
     },
 
     /**

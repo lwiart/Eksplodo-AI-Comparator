@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useRef, useState } from 'react';
+import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { MODELS_KEY, listModels } from '../../api/catalog';
 import { messageForError } from '../../api/messages';
@@ -15,7 +15,7 @@ import {
   type RescoreBody,
   type ScoringMethod,
 } from '../../api/results';
-import { RUNS_KEY } from '../../api/runs';
+import { RUNS_KEY, rerunResults } from '../../api/runs';
 import { AttachmentGallery } from '../ui/AttachmentGallery';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
@@ -28,6 +28,94 @@ import { NO_FILTER, type AnswersFilter } from './answers-filter';
 import { TestDetailDialog } from './TestDetailDialog';
 
 type Tab = 'side' | 'blind' | 'spread';
+
+/** Réponses qu'une relance choisie peut remettre en attente (terminées, hors combinaisons non supportées). */
+const RERUNNABLE = new Set<Answer['status']>(['done', 'error', 'timeout', 'truncated']);
+
+/** Sélection des réponses à relancer (Admin) ; absente pour les autres rôles. */
+type RerunSelection = { picked: Set<string>; toggle(resultId: string): void; pickAll(resultIds: string[]): void };
+const RerunSelectionContext = createContext<RerunSelection | null>(null);
+
+/** Case « Relancer » d'une réponse terminée, quand la sélection est disponible (Admin). */
+function RerunToggle({ answer }: { answer: Answer }) {
+  const selection = useContext(RerunSelectionContext);
+  if (!selection || !RERUNNABLE.has(answer.status)) return null;
+  return (
+    <label className="flex cursor-pointer items-center gap-1 font-mono text-[10.5px] text-mute hover:text-white">
+      <input
+        type="checkbox"
+        checked={selection.picked.has(answer.resultId)}
+        onChange={() => selection.toggle(answer.resultId)}
+        aria-label={`Relancer ${answer.modelName}, répétition ${answer.repetition}`}
+        className="accent-orange"
+      />
+      Relancer
+    </label>
+  );
+}
+
+/** « Cocher ces réponses » : les réponses terminées affichées pour ce test. */
+function PickAllButton({ answers }: { answers: Answer[] }) {
+  const selection = useContext(RerunSelectionContext);
+  const ids = answers.filter((a) => RERUNNABLE.has(a.status)).map((a) => a.resultId);
+  if (!selection || ids.length === 0) return null;
+  return (
+    <button
+      type="button"
+      onClick={() => selection.pickAll(ids)}
+      className="cursor-pointer border-0 bg-transparent p-0 font-mono text-[11px] text-sky underline decoration-dotted underline-offset-2 hover:text-white"
+    >
+      Cocher ces réponses pour les relancer
+    </button>
+  );
+}
+
+/** Barre de relance des réponses cochées : limite de tokens actuelle des tests reprise par défaut. */
+function RerunBar({ runId, onDone }: { runId: string; onDone: () => Promise<unknown> }) {
+  const selection = useContext(RerunSelectionContext);
+  const [refreshMaxTokens, setRefreshMaxTokens] = useState(true);
+  const rerun = useMutation({
+    mutationFn: () => rerunResults(runId, [...selection!.picked], refreshMaxTokens),
+    onSuccess: async () => {
+      selection!.pickAll([]);
+      await onDone();
+    },
+  });
+  if (!selection || (selection.picked.size === 0 && !rerun.isError)) return null;
+  const n = selection.picked.size;
+  return (
+    <div
+      role="region"
+      aria-label="Relance des réponses cochées"
+      className="sticky top-2 z-10 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl border border-orange/50 bg-night-1/95 px-3.5 py-2.5 text-sm text-white shadow-lg backdrop-blur"
+    >
+      <b>
+        {n} réponse{n > 1 ? 's' : ''} à relancer
+      </b>
+      <label className="flex cursor-pointer items-center gap-2 text-[13px] text-ink">
+        <input type="checkbox" checked={refreshMaxTokens} onChange={(e) => setRefreshMaxTokens(e.target.checked)} className="accent-orange" />
+        Reprendre la limite de tokens actuelle des tests
+      </label>
+      <span className="ml-auto flex gap-2">
+        <Button variant="ghost" disabled={rerun.isPending} onClick={() => selection.pickAll([])}>
+          Vider
+        </Button>
+        <Button variant="primary" disabled={rerun.isPending || n === 0} onClick={() => rerun.mutate()}>
+          <span aria-hidden="true">⟳</span>
+          Relancer la sélection
+        </Button>
+      </span>
+      <p className="m-0 w-full text-xs text-mute">
+        Les réponses et notes de la sélection sont effacées puis rejouées (appels facturés). Les autres réponses ne changent pas.
+      </p>
+      {rerun.isError ? (
+        <p role="alert" className="m-0 w-full text-sm text-bad">
+          {messageForError(rerun.error)}
+        </p>
+      ) : null}
+    </div>
+  );
+}
 
 export type SideBySideTest = { runTestId: string; testName: string; category?: string };
 
@@ -149,14 +237,19 @@ function AnswerCard({
         <i aria-hidden className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: answer.color, boxShadow: `0 0 10px ${answer.color}` }} />
         <b className="font-display text-[13px] text-white">{answer.modelName}</b>
         <span className="font-mono text-[10.5px] text-mute">rép. {answer.repetition}</span>
-        <span className="ml-auto flex flex-col items-end">
+        <span className="ml-auto">
+          <RerunToggle answer={answer} />
+        </span>
+        <span className="flex flex-col items-end">
           <span aria-label="Note finale" className="font-display text-[15px] font-extrabold text-peach">
             {score(answer.finalScore)}
           </span>
           <ScoreDetail a={answer} />
         </span>
       </header>
-      {answer.status === 'truncated' ? (
+      {answer.status === 'pending' || answer.status === 'running' ? (
+        <p className="m-0 text-sm text-mute">{answer.status === 'running' ? 'Appel en cours…' : 'En attente de lancement.'}</p>
+      ) : answer.status === 'truncated' ? (
         <div className="flex flex-col gap-1">
           <p className="m-0 text-sm [overflow-wrap:anywhere] text-peach">
             <b>Réponse tronquée.</b> {answer.errorMessage ?? 'Aucun texte : la limite de tokens a été atteinte pendant la réflexion.'}
@@ -179,7 +272,7 @@ function AnswerCard({
       <footer className="flex flex-wrap gap-x-3 gap-y-1 border-t border-line pt-2 font-mono text-[10.5px] text-mute">
         <Metric label="1er token" value={answer.ttftMs === null ? DASH : `${answer.ttftMs.toLocaleString('fr-FR')} ms`} />
         <Metric label="Débit" value={tokensPerSecond(answer.tokensPerS)} />
-        <Metric label="Coût" value={costPerAnswer(answer.costUsd)} />
+        <Metric label="Coût" value={answer.status === 'pending' || answer.status === 'running' ? DASH : costPerAnswer(answer.costUsd)} />
       </footer>
       {isAdmin && !failed ? <OverrideEditor answer={answer} onSaved={onOverride} /> : null}
     </article>
@@ -272,6 +365,9 @@ function TestAnswersBlock({
           {testName}
         </button>
         {answers.data ? <span className="font-mono text-[11px] text-mute">{answers.data.test.category}</span> : null}
+        <span className="ml-auto">
+          <PickAllButton answers={visible} />
+        </span>
       </div>
       {answers.data && detailOpen ? <TestDetailDialog test={answers.data.test} open={detailOpen} onOpenChange={setDetailOpen} /> : null}
       {answers.isError ? (
@@ -342,6 +438,20 @@ export function SideBySide({
   const current = filter ?? ownFilter;
   const setFilter = onFilterChange ?? setOwnFilter;
   const cardRef = useRef<HTMLDivElement>(null);
+  // Réponses cochées pour une relance (Admin), gardées d'un test à l'autre.
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const selection: RerunSelection | null = isAdmin
+    ? {
+        picked,
+        toggle: (id) =>
+          setPicked((prev) => {
+            const next = new Set(prev);
+            if (!next.delete(id)) next.add(id);
+            return next;
+          }),
+        pickAll: (ids) => setPicked((prev) => (ids.length === 0 ? new Set() : new Set([...prev, ...ids]))),
+      }
+    : null;
   const categories = [...new Set(tests.map((t) => t.category).filter((c): c is string => !!c))];
   const shown = current.category ? tests.filter((t) => t.category === current.category) : tests;
   // « Tous les tests » : toute la sélection (catégorie, modèle) l'une sous l'autre ; sinon un test à la fois.
@@ -379,7 +489,8 @@ export function SideBySide({
 
   if (tests.length === 0) return null;
   return (
-    <Card ref={cardRef} className="flex scroll-mt-4 flex-col gap-4">
+    <RerunSelectionContext.Provider value={selection}>
+      <Card ref={cardRef} className="flex scroll-mt-4 flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="m-0 font-display text-base font-bold text-white">
           Réponses côte à côte
@@ -471,6 +582,7 @@ export function SideBySide({
       </div>
 
       <div role="tabpanel" aria-label={TAB_LABELS[tab]} className="flex flex-col gap-3">
+        {tab === 'side' ? <RerunBar runId={runId} onDone={refresh} /> : null}
         {tab === 'side' && allMode ? (
           <div className="flex flex-col gap-4">
             {shown.map((t) => (
@@ -489,6 +601,9 @@ export function SideBySide({
         ) : tab === 'side' ? (
           <>
             {canRescore ? <RescorePanel key={runTestId} runId={runId} runTestId={runTestId} onQueued={refresh} /> : null}
+            <div className="flex justify-end empty:hidden">
+              <PickAllButton answers={visible} />
+            </div>
             {answers.isError ? (
               <p role="alert" className="text-sm text-bad">
                 {messageForError(answers.error)}
@@ -547,6 +662,7 @@ export function SideBySide({
           <RaterSpread runId={runId} runTestId={runTestId} />
         )}
       </div>
-    </Card>
+      </Card>
+    </RerunSelectionContext.Provider>
   );
 }

@@ -171,6 +171,16 @@ export async function retryRunErrors(id: string): Promise<RunSummary> {
   return (await apiFetch<{ run: RunSummary }>(`/api/runs/${enc(id)}/retry-errors`, { method: 'POST' })).run;
 }
 
+/** Annule les appels pas encore lancés (en erreur « annulé », rejouables avec « Relancer les erreurs »). */
+export async function cancelPendingRun(id: string): Promise<{ run: RunSummary; cancelled: number }> {
+  return apiFetch<{ run: RunSummary; cancelled: number }>(`/api/runs/${enc(id)}/cancel-pending`, { method: 'POST' });
+}
+
+/** Relance de résultats choisis, même réussis ; `refreshMaxTokens` reprend la limite de sortie actuelle de leurs tests. */
+export async function rerunResults(id: string, resultIds: string[], refreshMaxTokens: boolean): Promise<{ run: RunSummary; rerun: number }> {
+  return apiFetch<{ run: RunSummary; rerun: number }>(`/api/runs/${enc(id)}/rerun`, { method: 'POST', body: { resultIds, refreshMaxTokens } });
+}
+
 export async function addRunModels(id: string, modelIds: string[]): Promise<RunSummary> {
   return (await apiFetch<{ run: RunSummary }>(`/api/runs/${enc(id)}/models`, { method: 'POST', body: { modelIds } })).run;
 }
