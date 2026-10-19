@@ -21,3 +21,29 @@ export function setAnimationsPreference(on: boolean): void {
 export function applyAnimationsPreference(on: boolean): void {
   document.documentElement.dataset.animations = on ? 'on' : 'off';
 }
+
+const THEME_KEY = 'aic.theme';
+
+export type Theme = 'dark' | 'light';
+
+/** Thème de l'interface : sombre par défaut ; le stockage peut être indisponible (navigation privée…). */
+export function getThemePreference(): Theme {
+  try {
+    return localStorage.getItem(THEME_KEY) === 'light' ? 'light' : 'dark';
+  } catch {
+    return 'dark';
+  }
+}
+
+export function setThemePreference(theme: Theme): void {
+  try {
+    localStorage.setItem(THEME_KEY, theme);
+  } catch {
+    // Préférence non mémorisée : le thème choisi vaut jusqu'au rechargement.
+  }
+}
+
+/** Reflète le thème sur <html data-theme> (lu par theme.css). */
+export function applyThemePreference(theme: Theme): void {
+  document.documentElement.dataset.theme = theme;
+}

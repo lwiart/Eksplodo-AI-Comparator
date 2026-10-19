@@ -9,7 +9,14 @@ import { messageForError } from '../api/messages';
 import { TODO_KEY, countToScore, getTodo } from '../api/scoring';
 import { ROLE_LABELS, useAuth, type PublicUser } from '../auth/AuthProvider';
 import { InfoTip } from '../components/ui/InfoTip';
-import { applyAnimationsPreference, getAnimationsPreference, setAnimationsPreference } from './preferences';
+import {
+  applyAnimationsPreference,
+  applyThemePreference,
+  getAnimationsPreference,
+  getThemePreference,
+  setAnimationsPreference,
+  setThemePreference,
+} from './preferences';
 
 /** `pinned` : entrée gardée en tête de sa section, hors du tri alphabétique ; `help` : courte description (icône « ? »). */
 type NavItem = { to: string; label: string; icon: string; help: string; end?: boolean; pinned?: boolean; badge?: number; badgeLabel?: string };
@@ -108,6 +115,7 @@ function NavSection({ title, items, onNavigate }: { title: string; items: NavIte
 function AccountMenu({ user, onNavigate }: { user: PublicUser; onNavigate?: () => void }) {
   const { logout } = useAuth();
   const [animations, setAnimations] = useState(getAnimationsPreference);
+  const [light, setLight] = useState(() => getThemePreference() === 'light');
   const [logoutError, setLogoutError] = useState<string | null>(null);
 
   // La session serveur reste ouverte si la déconnexion échoue : on le signale au lieu d'ignorer l'échec.
@@ -125,6 +133,23 @@ function AccountMenu({ user, onNavigate }: { user: PublicUser; onNavigate?: () =
     setAnimationsPreference(on);
     applyAnimationsPreference(on);
   }
+
+  function toggleLight(on: boolean) {
+    setLight(on);
+    setThemePreference(on ? 'light' : 'dark');
+    applyThemePreference(on ? 'light' : 'dark');
+  }
+
+  const toggle = (checked: boolean) => (
+    <Switch.Root
+      checked={checked}
+      tabIndex={-1}
+      aria-hidden="true"
+      className="pointer-events-none relative h-5 w-9 rounded-full border border-line-strong bg-night-2 data-[state=checked]:border-orange data-[state=checked]:bg-orange"
+    >
+      <Switch.Thumb className="block h-4 w-4 translate-x-0.5 rounded-full bg-[#fff] shadow transition-transform data-[state=checked]:translate-x-[18px]" />
+    </Switch.Root>
+  );
 
   const item =
     'flex cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-sm text-ink no-underline outline-none data-[highlighted]:bg-blue/15 data-[highlighted]:text-white';
@@ -168,14 +193,16 @@ function AccountMenu({ user, onNavigate }: { user: PublicUser; onNavigate?: () =
             className={`${item} justify-between`}
           >
             Animations
-            <Switch.Root
-              checked={animations}
-              tabIndex={-1}
-              aria-hidden="true"
-              className="pointer-events-none relative h-5 w-9 rounded-full border border-line-strong bg-night-2 data-[state=checked]:border-orange data-[state=checked]:bg-orange"
-            >
-              <Switch.Thumb className="block h-4 w-4 translate-x-0.5 rounded-full bg-white transition-transform data-[state=checked]:translate-x-[18px]" />
-            </Switch.Root>
+            {toggle(animations)}
+          </DropdownMenu.CheckboxItem>
+          <DropdownMenu.CheckboxItem
+            checked={light}
+            onCheckedChange={toggleLight}
+            onSelect={(e) => e.preventDefault()}
+            className={`${item} justify-between`}
+          >
+            Mode clair
+            {toggle(light)}
           </DropdownMenu.CheckboxItem>
           <DropdownMenu.Separator className="my-1 h-px bg-line" />
           <DropdownMenu.Item className={item} onSelect={() => void handleLogout()}>

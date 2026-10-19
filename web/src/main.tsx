@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
-import { applyAnimationsPreference, getAnimationsPreference } from './app/preferences';
+import { applyAnimationsPreference, applyThemePreference, getAnimationsPreference, getThemePreference } from './app/preferences';
 import { RootRoutes } from './app/RootRoutes';
 import './theme/theme.css';
 
@@ -11,6 +11,7 @@ const queryClient = new QueryClient({
 });
 
 applyAnimationsPreference(getAnimationsPreference());
+applyThemePreference(getThemePreference());
 
 const root = document.getElementById('root');
 if (!root) throw new Error('élément #root introuvable');

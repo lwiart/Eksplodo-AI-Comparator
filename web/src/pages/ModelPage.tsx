@@ -105,7 +105,7 @@ function StatsSections({ model }: { model: Model }) {
             <thead>
               <tr className="text-left text-xs text-mute">
                 <th className="py-1.5 pr-3 font-medium">Série</th>
-                <th className="py-1.5 pr-3 font-medium">Terminée le</th>
+                <th className="py-1.5 pr-3 pl-4 font-medium whitespace-nowrap">Terminée le</th>
                 <th className="py-1.5 pr-3 text-right font-medium">Rang</th>
                 <th className="py-1.5 pr-3 text-right font-medium">Qualité</th>
                 <th className="py-1.5 text-right font-medium">Score global</th>
@@ -119,7 +119,7 @@ function StatsSections({ model }: { model: Model }) {
                       {h.runName}
                     </Link>
                   </td>
-                  <td className="py-2 pr-3 text-mute">{new Date(h.completedAt).toLocaleDateString('fr-FR')}</td>
+                  <td className="py-2 pr-3 pl-4 whitespace-nowrap text-mute">{new Date(h.completedAt).toLocaleDateString('fr-FR')}</td>
                   <td className="py-2 pr-3 text-right font-mono font-semibold text-peach">{h.rank === null ? '—' : `${h.rank} / ${h.of}`}</td>
                   <td className="py-2 pr-3 text-right font-mono text-white">{score(h.quality)}</td>
                   <td className="py-2 text-right font-mono text-white">{score(h.global)}</td>

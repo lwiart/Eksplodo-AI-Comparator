@@ -84,6 +84,61 @@ html[data-animations="off"] *::after {
   transition-duration: 0.01ms !important;
 }
 
+/*
+ * Thème clair (menu du compte) : mêmes jetons, valeurs claires. `--color-white` sert de « texte fort » dans tout le
+ * thème : il devient sombre. Les accents sont assombris pour rester lisibles sur fond clair.
+ */
+html[data-theme="light"] {
+  color-scheme: light;
+  --color-night-0: #E6EEF3;
+  --color-night-1: #F6F9FB;
+  --color-night-2: #DCE7EE;
+  --color-night-glow: #CFE2EE;
+  --color-ink: #17303F;
+  --color-mute: #4F6B7B;
+  --color-white: #06202E;
+  --color-orange: #E0561A;
+  --color-orange-soft: #C94A12;
+  --color-peach: #B8440F;
+  --color-sky: #0B66A3;
+  --color-blue: #1F7FC0;
+  --color-blue-deep: #0C659D;
+  --color-good: #0F7F59;
+  --color-bad: #C93636;
+  --color-line: rgba(16, 64, 96, 0.14);
+  --color-line-strong: rgba(16, 64, 96, 0.28);
+}
+html[data-theme="light"] body {
+  background: radial-gradient(120% 80% at 70% -10%, #d3e6f2 0%, var(--color-night-1) 45%, var(--color-night-0) 100%) fixed;
+}
+html[data-theme="light"] body::before {
+  background-image: radial-gradient(rgba(16, 64, 96, 0.1) 1px, transparent 1px);
+}
+html[data-theme="light"] .card-surface {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(246, 249, 251, 0.92));
+  box-shadow: 0 1px 2px rgba(16, 64, 96, 0.06), 0 8px 24px -12px rgba(16, 64, 96, 0.18);
+}
+html[data-theme="light"] .logo-glow {
+  filter: invert(1) drop-shadow(0 0 6px rgba(240, 99, 31, 0.35));
+}
+html[data-theme="light"] .text-\[\#b9d4e1\] {
+  color: var(--color-ink);
+}
+html[data-theme="light"] .markdown code {
+  background: rgba(16, 64, 96, 0.07);
+}
+html[data-theme="light"] .markdown pre {
+  background: #eef3f6;
+}
+/* Graphes : textes des axes et légendes en ligne (style) ramenés aux couleurs du thème clair. */
+html[data-theme="light"] .recharts-wrapper text {
+  fill: var(--color-mute) !important;
+}
+html[data-theme="light"] .recharts-cartesian-grid line,
+html[data-theme="light"] .recharts-polar-grid :is(line, polygon, circle) {
+  stroke: rgba(16, 64, 96, 0.16) !important;
+}
+
 .logo-glow {
   filter: drop-shadow(0 0 10px rgba(240, 99, 31, 0.55)) drop-shadow(0 0 2px rgba(255, 180, 138, 0.6));
 }
