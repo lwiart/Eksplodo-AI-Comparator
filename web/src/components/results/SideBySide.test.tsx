@@ -426,7 +426,7 @@ test('nom du test cliquable : détail avec consigne système, prompt et résulta
     answers: [answer({ modelId: 'm1' })],
   };
   renderBlock(false);
-  await user.click(await screen.findByRole('button', { name: '« Résumer un CCTP »' }));
+  await user.click(await screen.findByRole('button', { name: 'Résumer un CCTP' }));
   const dialog = within(await screen.findByRole('dialog', { name: 'Résumer un CCTP' }));
   expect(dialog.getByText('Tu es juriste.')).toBeInTheDocument();
   expect(dialog.getByText('Résume.')).toBeInTheDocument();
@@ -492,4 +492,12 @@ test('filtre « Statut » : tronquées seulement, tous les tests concernés l’
   expect(screen.getByRole('status')).toHaveTextContent('· réponses tronquées (2 tests)');
   await user.click(screen.getByRole('button', { name: 'Retirer le filtre' }));
   expect(status).toHaveValue('all');
+});
+
+test('un seul test choisi : nom cliquable, catégorie et question affichés au-dessus des réponses', async () => {
+  renderBlock(false);
+  const block = await screen.findByRole('region', { name: 'Résumer un CCTP' });
+  expect(within(block).getByRole('button', { name: 'Résumer un CCTP' })).toBeInTheDocument();
+  expect(block).toHaveTextContent('Rédaction');
+  expect(within(block).getByText('Résume.')).toBeInTheDocument();
 });

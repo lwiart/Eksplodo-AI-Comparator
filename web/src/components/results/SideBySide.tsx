@@ -528,15 +528,7 @@ export function SideBySide({
             </small>
           ) : answers.data ? (
             <small className="ml-2 font-mono text-[11px] font-medium text-mute">
-              test {testIndex + 1} / {shown.length} ·{' '}
-              <button
-                type="button"
-                title="Voir le détail du test : prompts et résultat attendu"
-                onClick={() => setDetailOpen(true)}
-                className="cursor-pointer border-0 bg-transparent p-0 font-mono text-[11px] font-medium text-peach underline decoration-dotted underline-offset-2 hover:text-white"
-              >
-                « {answers.data.test.name} »
-              </button>
+              test {testIndex + 1} / {shown.length}
             </small>
           ) : null}
         </h2>
@@ -651,6 +643,22 @@ export function SideBySide({
           </div>
         ) : tab === 'side' ? (
           <>
+            {answers.data ? (
+              <section aria-label={answers.data.test.name} className="flex flex-col gap-2">
+                <div className="flex flex-wrap items-baseline gap-x-3">
+                  <button
+                    type="button"
+                    title="Voir le détail du test : prompts et résultat attendu"
+                    onClick={() => setDetailOpen(true)}
+                    className="cursor-pointer border-0 bg-transparent p-0 text-left font-display text-sm font-bold text-peach underline decoration-dotted underline-offset-2 hover:text-white"
+                  >
+                    {answers.data.test.name}
+                  </button>
+                  <span className="font-mono text-[11px] text-mute">{answers.data.test.category}</span>
+                </div>
+                <p className="m-0 rounded-xl border border-line bg-night-0/45 px-3.5 py-2.5 text-sm whitespace-pre-line text-ink">{answers.data.test.userPrompt}</p>
+              </section>
+            ) : null}
             {canRescore ? <RescorePanel key={runTestId} runId={runId} runTestId={runTestId} onQueued={refresh} /> : null}
             <div className="flex justify-end empty:hidden">
               <PickAllButton answers={visible} />
