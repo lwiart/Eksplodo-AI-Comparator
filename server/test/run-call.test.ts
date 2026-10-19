@@ -273,11 +273,12 @@ test('buildRequest : prompts, paramètres et pièces jointes en base64', async (
   expect(withSystem.system).toBe('Sois bref');
 });
 
-test('marge de réflexion : limite du test + 4000, plafonnée à 16 000 sauf demande supérieure du test', () => {
+test('marge de réflexion : limite du test + 4000, plafonnée à 32 000 sauf demande supérieure du test', () => {
   expect(withReasoningMargin(300)).toBe(4300);
   expect(withReasoningMargin(1500)).toBe(5500);
-  expect(withReasoningMargin(14_000)).toBe(16_000);
-  expect(withReasoningMargin(16_000)).toBe(16_000);
+  expect(withReasoningMargin(16_000)).toBe(20_000);
+  expect(withReasoningMargin(30_000)).toBe(32_000);
+  expect(withReasoningMargin(32_000)).toBe(32_000);
 });
 
 test('isTruncatedEmpty : réussie, sans texte, arrêtée par la limite', () => {

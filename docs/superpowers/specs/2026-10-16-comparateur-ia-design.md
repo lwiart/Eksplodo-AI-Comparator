@@ -273,7 +273,7 @@ Les erreurs sont levées sous forme de `ProviderError` normalisée (§12.1).
 
 ## 7. Tests et suites
 
-- Éditeur (maquette « Éditeur de test ») : nom, catégorie, tags, prompts, pièces jointes par glisser-déposer, température (défaut 0,2), max tokens (défaut 1 000, maximum 16 000), méthode et configuration de notation.
+- Éditeur (maquette « Éditeur de test ») : nom, catégorie, tags, prompts, pièces jointes par glisser-déposer, température (défaut 0,2), max tokens (défaut 1 000, maximum 32 000), méthode et configuration de notation.
 - Les pièces jointes sont stockées dans `DATA_DIR`, ne sont jamais servies directement (téléchargement par l'API pour l'Admin) et sont envoyées aux modèles en base64.
 - **Essai rapide** : l'Admin choisit un modèle disponible. Le serveur crée une tâche `quick_try` dans la file ; l'interface suit son avancement par interrogation (toutes les 2 s) et affiche la réponse, les métriques et, si la méthode le permet, la note automatique (réponse attendue ou juge). Timeout de l'appel : 120 s, comme dans une série. (Le proxy Hostinger coupe toute requête HTTP au-delà de 60 s, d'où le passage par la file.) Le coût est enregistré dans `ai_usage` avec l'origine `quick_try` ; la réponse est conservée avec la tâche le temps de l'affichage, sans créer de résultat de série.
 - Un test utilisé dans une série est **archivé** au lieu d'être supprimé. Les séries gardent leur instantané (§5.4).

@@ -66,7 +66,7 @@ async function fillRequired(user: ReturnType<typeof userEvent.setup>) {
   await user.type(screen.getByLabelText('Prompt utilisateur'), 'Bonjour');
 }
 
-test('éditeur : valeurs par défaut 0,2 et 1 000 ; max tokens 16 001 refusé avant envoi', async () => {
+test('éditeur : valeurs par défaut 0,2 et 1 000 ; max tokens 32 001 refusé avant envoi', async () => {
   const user = userEvent.setup();
   renderAt('/admin/tests/nouveau');
   expect(await screen.findByLabelText('Température')).toHaveValue('0,2');
@@ -75,9 +75,9 @@ test('éditeur : valeurs par défaut 0,2 et 1 000 ; max tokens 16 001 refusé av
 
   await fillRequired(user);
   await user.clear(max);
-  await user.type(max, '16001');
+  await user.type(max, '32001');
   await user.click(screen.getByRole('button', { name: 'Enregistrer' }));
-  expect(await screen.findByText(/entre 1 et 16 000/)).toBeInTheDocument();
+  expect(await screen.findByText(/entre 1 et 32 000/)).toBeInTheDocument();
   expect(writes()).toHaveLength(0);
 });
 
