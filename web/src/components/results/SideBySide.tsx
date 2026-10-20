@@ -156,7 +156,8 @@ function Metric({ label, value, title }: { label: string; value: string; title?:
 }
 
 /** Nombre de tokens à la française, « ≈ » devant quand le fournisseur ne l'a pas donné (estimation). */
-const tokenCount = (n: number | null, estimated: boolean) => (n === null ? DASH : `${estimated ? '≈ ' : ''}${n.toLocaleString('fr-FR')}`);
+// Valeur absente (ancienne réponse, champ non transmis) : tiret, comme une valeur inconnue.
+const tokenCount = (n: number | null | undefined, estimated: boolean) => (n == null ? DASH : `${estimated ? '≈ ' : ''}${n.toLocaleString('fr-FR')}`);
 
 const REASONING_TITLE =
   'Tokens de réflexion, comptés à part quand le fournisseur les détaille. Chez Anthropic, la réflexion est comprise dans la sortie.';
