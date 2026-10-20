@@ -506,12 +506,12 @@ test('un seul test choisi : nom cliquable, catégorie et question affichés au-d
   expect(within(block).getByText('Résume.')).toBeInTheDocument();
 });
 
-test('pied des cartes : tokens d’entrée, de sortie et de réflexion après le premier token et le débit', async () => {
+test('pied des cartes : « Tokens entrée/réflexion/sortie » après le premier token et le débit', async () => {
   answersBody = { test: TEST_INFO, answers: [answer({}), answer({ resultId: 'a2', modelName: 'GPT Test', reasoningTokens: null, tokensEstimated: true })] };
   renderBlock(false);
   const card = await screen.findByRole('article', { name: 'Claude Opus, répétition 1' });
   const footer = card.querySelector('footer')!;
-  expect(footer.textContent).toMatch(/1er token.*Débit.*Entrée\s1\s200.*Sortie\s3\s400.*Réflexion\s800.*Coût/);
+  expect(footer.textContent).toMatch(/1er token.*Débit.*Tokens entrée\/réflexion\/sortie :\s1\s200 \/ 800 \/ 3\s400.*Coût/);
   const other = (await screen.findByRole('article', { name: 'GPT Test, répétition 1' })).querySelector('footer')!;
-  expect(other.textContent).toMatch(/Entrée\s≈\s1\s200.*Réflexion\s—/);
+  expect(other.textContent).toMatch(/Tokens entrée\/réflexion\/sortie :\s≈ 1\s200 \/ — \/ 3\s400/);
 });

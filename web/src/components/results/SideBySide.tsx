@@ -155,12 +155,15 @@ function Metric({ label, value, title }: { label: string; value: string; title?:
   );
 }
 
-/** Nombre de tokens à la française, « ≈ » devant quand le fournisseur ne l'a pas donné (estimation). */
-// Valeur absente (ancienne réponse, champ non transmis) : tiret, comme une valeur inconnue.
-const tokenCount = (n: number | null | undefined, estimated: boolean) => (n == null ? DASH : `${estimated ? '≈ ' : ''}${n.toLocaleString('fr-FR')}`);
+// Nombre de tokens à la française ; valeur absente (inconnue ou non transmise) : tiret.
+const tokenCount = (n: number | null | undefined) => (n == null ? DASH : n.toLocaleString('fr-FR'));
 
-const REASONING_TITLE =
-  'Tokens de réflexion, comptés à part quand le fournisseur les détaille. Chez Anthropic, la réflexion est comprise dans la sortie.';
+/** « entrée / réflexion / sortie », « ≈ » devant quand le fournisseur n'a pas donné les comptes (estimation). */
+const tokensLine = (a: Answer) =>
+  `${a.tokensEstimated ? '≈ ' : ''}${tokenCount(a.inputTokens)} / ${tokenCount(a.reasoningTokens)} / ${tokenCount(a.outputTokens)}`;
+
+const TOKENS_TITLE =
+  'Tokens d’entrée, de réflexion et de sortie. La réflexion est comptée à part quand le fournisseur la détaille ; chez Anthropic, elle est comprise dans la sortie.';
 
 function ScoreDetail({ a }: { a: Answer }) {
   const parts: string[] = [];
@@ -298,11 +301,7 @@ function AnswerCard({
         <Metric label="1er token" value={answer.ttftMs === null ? DASH : `${answer.ttftMs.toLocaleString('fr-FR')} ms`} />
         <Metric label="Débit" value={tokensPerSecond(answer.tokensPerS)} />
         {answer.status === 'pending' || answer.status === 'running' ? null : (
-          <>
-            <Metric label="Entrée" value={tokenCount(answer.inputTokens, answer.tokensEstimated)} />
-            <Metric label="Sortie" value={tokenCount(answer.outputTokens, answer.tokensEstimated)} />
-            <Metric label="Réflexion" value={tokenCount(answer.reasoningTokens, answer.tokensEstimated)} title={REASONING_TITLE} />
-          </>
+          <Metric label="Tokens entrée/réflexion/sortie :" value={tokensLine(answer)} title={TOKENS_TITLE} />
         )}
         <Metric label="Coût" value={answer.status === 'pending' || answer.status === 'running' ? DASH : costPerAnswer(answer.costUsd)} />
       </footer>
