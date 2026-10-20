@@ -78,7 +78,7 @@ export function RunsPage() {
                   </td>
                   <td className="px-4 py-3 text-right font-mono text-xs whitespace-nowrap text-ink">{usd(r.modelsCostUsd + r.judgeCostUsd)}</td>
                   <td className="px-4 py-3 font-mono text-xs text-ink">{formatDate(r.createdAt)}</td>
-                  <td className="px-4 py-3 font-mono text-xs text-mute">{r.completedAt ? formatDate(r.completedAt) : '—'}</td>
+                  <td className="px-4 py-3 font-mono text-xs text-mute">{r.completedAt ? formatDate(r.completedAt) : '-'}</td>
                 </tr>
               ))}
             </tbody>

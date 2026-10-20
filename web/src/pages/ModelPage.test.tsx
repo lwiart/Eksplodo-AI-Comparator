@@ -123,7 +123,7 @@ test('fiche : chiffres clés avec rangs à la française, radar et historique', 
   const row = link.closest('tr')!;
   expect(within(row).getByText('1 / 6')).toBeInTheDocument();
   expect(within(row).getByText('83')).toBeInTheDocument();
-  expect(within(screen.getByRole('link', { name: 'Réponses clients' }).closest('tr')!).getByText('—', { selector: 'td:nth-child(3)' })).toBeInTheDocument();
+  expect(within(screen.getByRole('link', { name: 'Réponses clients' }).closest('tr')!).getByText('-', { selector: 'td:nth-child(3)' })).toBeInTheDocument();
 });
 
 test('fiche : moins de trois catégories, le radar laisse place à une liste', async () => {

@@ -12,7 +12,7 @@ export function formatPricePair(input: number | null, output: number | null): st
 
 /** Fenêtre de contexte abrégée pour les tableaux : 200000 → « 200 k », 1000000 → « 1 M ». */
 export function formatContextShort(tokens: number | null): string {
-  if (tokens === null) return '—';
+  if (tokens === null) return '-';
   if (tokens >= 1_000_000) return `${formatNumber(Math.round((tokens / 1_000_000) * 10) / 10)} M`;
   return `${formatNumber(Math.round(tokens / 1000))} k`;
 }

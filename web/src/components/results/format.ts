@@ -1,7 +1,7 @@
 // Mises en forme des notes et mesures de la vue résultats.
 import { formatNumber } from '../catalog/format';
 
-export const DASH = '—';
+export const DASH = '-';
 
 /** Note sur 100 arrondie à l'entier (les calculs gardent leurs décimales) ; « — » quand elle est nulle. */
 export const score = (n: number | null): string => (n === null ? DASH : Math.round(n).toLocaleString('fr-FR'));

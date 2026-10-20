@@ -50,11 +50,11 @@ function Outcome({ outcome }: { outcome: QuickTryOutcome }) {
         </p>
       ) : null}
       <dl className="m-0 grid grid-cols-2 gap-x-6 gap-y-3 min-[700px]:grid-cols-4">
-        <Metric label="Premier token">{outcome.ttftMs === null ? '—' : formatDuration(outcome.ttftMs)}</Metric>
+        <Metric label="Premier token">{outcome.ttftMs === null ? '-' : formatDuration(outcome.ttftMs)}</Metric>
         <Metric label="Durée totale">{formatDuration(outcome.totalMs)}</Metric>
-        <Metric label="Débit">{outcome.tokensPerS === null ? '—' : `${formatNumber(Math.round(outcome.tokensPerS * 10) / 10)} tokens/s`}</Metric>
+        <Metric label="Débit">{outcome.tokensPerS === null ? '-' : `${formatNumber(Math.round(outcome.tokensPerS * 10) / 10)} tokens/s`}</Metric>
         <Metric label="Coût" title={outcome.costSource === 'provider' ? 'Coût annoncé par le fournisseur' : outcome.costSource === 'computed' ? 'Coût calculé d’après les prix du catalogue' : undefined}>
-          {outcome.costUsd === null ? '—' : formatCost(outcome.costUsd)}
+          {outcome.costUsd === null ? '-' : formatCost(outcome.costUsd)}
         </Metric>
         <div className="col-span-full">
           <Metric label="Tokens">{tokens}</Metric>

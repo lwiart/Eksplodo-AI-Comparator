@@ -463,9 +463,9 @@ export function LaunchRunPage() {
           <h2 className="m-0 font-display text-base font-bold text-white">Votre série</h2>
           <dl className="m-0 grid grid-cols-[1fr_auto] gap-x-4 gap-y-2 text-sm">
             <dt className="text-mute">Tests</dt>
-            <dd className="m-0 text-right font-mono text-white">{picked.length > 0 ? plural(picked.length, 'test sélectionné', 'tests sélectionnés') : '—'}</dd>
+            <dd className="m-0 text-right font-mono text-white">{picked.length > 0 ? plural(picked.length, 'test sélectionné', 'tests sélectionnés') : '-'}</dd>
             <dt className="text-mute">Modèles</dt>
-            <dd className="m-0 text-right font-mono text-white">{modelIds.length || '—'}</dd>
+            <dd className="m-0 text-right font-mono text-white">{modelIds.length || '-'}</dd>
             <dt className="text-mute">Répétitions</dt>
             <dd className="m-0 text-right font-mono text-white">{repetitions}</dd>
           </dl>

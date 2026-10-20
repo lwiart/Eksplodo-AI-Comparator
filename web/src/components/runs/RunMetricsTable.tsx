@@ -52,7 +52,7 @@ export function modelMetrics(rows: ResultRow[]): ModelMetrics[] {
   });
 }
 
-const dash = '—';
+const dash = '-';
 
 /** Tarif du catalogue d'un modèle, en dollars par million de tokens. */
 export type ModelPrice = { inputPricePerM: number; outputPricePerM: number };

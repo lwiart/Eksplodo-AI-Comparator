@@ -44,10 +44,10 @@ test('le classement se réordonne instantanément sans appel serveur', async () 
   expect(apiFetch).not.toHaveBeenCalled();
 });
 
-test('tableau : « — » pour les valeurs nulles, modèle non noté en fin sans rang', () => {
+test('tableau : « - » pour les valeurs nulles, modèle non noté en fin sans rang', () => {
   renderView(false);
   const cells = (name: RegExp) => table().getByRole('rowheader', { name }).closest('tr')!.querySelectorAll('td');
-  expect([...cells(/Delta/)].map((c) => c.textContent)).toEqual(['—', '—', '—', '—', '—', '—', '100 %']);
+  expect([...cells(/Delta/)].map((c) => c.textContent)).toEqual(['-', '-', '-', '-', '-', '-', '100 %']);
   expect([...cells(/Alpha/)].map((c) => c.textContent)).toEqual(['1', '71', '90', '500 ms', '60 tokens/s', '0,003 $', '100 %']);
 });
 

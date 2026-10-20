@@ -81,7 +81,7 @@ function StatsSections({ model }: { model: Model }) {
       <Card>
         <h2 className="m-0 mb-3 font-display text-lg font-bold text-white">Chiffres clés</h2>
         <dl className="m-0 grid grid-cols-2 gap-x-4 gap-y-5">
-          <Figure label="Qualité moyenne" value={s.quality === null ? '—' : `${score(s.quality)} / 100`} />
+          <Figure label="Qualité moyenne" value={s.quality === null ? '-' : `${score(s.quality)} / 100`} />
           <Figure label="Fiabilité" value={reliabilityPercent(s.reliability)} />
           <Figure label="Premier token médian" value={ttft(s.medianTtftMs)} rank={s.ttftRank} />
           <Figure label="Débit médian" value={tokensPerSecond(s.medianTokensPerS)} rank={s.tpsRank} />
@@ -121,7 +121,7 @@ function StatsSections({ model }: { model: Model }) {
                     </Link>
                   </td>
                   <td className="py-2 pr-3 pl-4 whitespace-nowrap text-mute">{new Date(h.completedAt).toLocaleDateString('fr-FR')}</td>
-                  <td className="py-2 pr-3 text-right font-mono font-semibold text-peach">{h.rank === null ? '—' : `${h.rank} / ${h.of}`}</td>
+                  <td className="py-2 pr-3 text-right font-mono font-semibold text-peach">{h.rank === null ? '-' : `${h.rank} / ${h.of}`}</td>
                   <td className="py-2 pr-3 text-right font-mono text-white">{score(h.quality)}</td>
                   <td className="py-2 text-right font-mono text-white">{score(h.global)}</td>
                 </tr>

@@ -513,5 +513,5 @@ test('pied des cartes : « Tokens entrée/réflexion/sortie » après le premier
   const footer = card.querySelector('footer')!;
   expect(footer.textContent).toMatch(/1er token.*Débit.*Tokens entrée\/réflexion\/sortie :\s1\s200 \/ 800 \/ 3\s400.*Coût/);
   const other = (await screen.findByRole('article', { name: 'GPT Test, répétition 1' })).querySelector('footer')!;
-  expect(other.textContent).toMatch(/Tokens entrée\/réflexion\/sortie :\s≈ 1\s200 \/ — \/ 3\s400/);
+  expect(other.textContent).toMatch(/Tokens entrée\/réflexion\/sortie :\s≈ 1\s200 \/ - \/ 3\s400/);
 });
