@@ -232,8 +232,8 @@ const SECTIONS: Section[] = [
     body: (
       <>
         <p className={P}>
-          Chaque test fixe une limite de sortie (« Max tokens », 40 000 au plus). Le modèle reçoit cette limite plus une marge de 4 000
-          tokens pour sa réflexion, sans dépasser 40 000. Un modèle qui réfléchit longtemps peut épuiser la limite avant d’écrire : sa
+          Chaque test fixe une limite de sortie (« Max tokens », 50 000 au plus). Le modèle reçoit cette limite plus une marge de 4 000
+          tokens pour sa réflexion, sans dépasser 50 000. Un modèle qui réfléchit longtemps peut épuiser la limite avant d’écrire : sa
           réponse est alors <b>tronquée</b>, facturée mais pas notée.
         </p>
         <p className={P}>

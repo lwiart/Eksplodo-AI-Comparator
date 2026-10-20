@@ -35,7 +35,7 @@ const detailKey = (id: string | undefined) => [...TESTS_KEY, 'detail', id] as co
 
 const DEFAULT_TEMPERATURE = 0.2;
 const DEFAULT_MAX_TOKENS = 1000;
-const MAX_TOKENS_LIMIT = 40_000;
+const MAX_TOKENS_LIMIT = 50_000;
 /** Titre de section du bloc unique de l'éditeur. */
 const SECTION_TITLE = 'm-0 font-display text-base font-bold text-white';
 

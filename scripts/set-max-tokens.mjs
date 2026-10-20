@@ -16,13 +16,13 @@ const mapFile = option('--map', null);
 const value = Number(option('--value', '16000'));
 const baseUrl = option('--url', 'https://ia.eksplodo.fr').replace(/\/+$/, '');
 const dryRun = flag('--dry-run');
-const valid = (n) => Number.isInteger(n) && n >= 1 && n <= 40_000;
+const valid = (n) => Number.isInteger(n) && n >= 1 && n <= 50_000;
 
 const map = mapFile ? JSON.parse(readFileSync(mapFile, 'utf8')) : null;
 if (map) {
-  for (const [name, n] of Object.entries(map)) if (!valid(n)) throw new Error(`${mapFile} : limite invalide pour « ${name} » (entier de 1 à 40000)`);
+  for (const [name, n] of Object.entries(map)) if (!valid(n)) throw new Error(`${mapFile} : limite invalide pour « ${name} » (entier de 1 à 50000)`);
 } else if (!valid(value)) {
-  throw new Error('--value : entier de 1 à 40000');
+  throw new Error('--value : entier de 1 à 50000');
 }
 const targetOf = (t) => (map ? map[t.name] : value);
 
