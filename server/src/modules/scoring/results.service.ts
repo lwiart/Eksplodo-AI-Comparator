@@ -40,6 +40,14 @@ export type Answer = {
   judgeRationale: string | null;
   ttftMs: number | null;
   tokensPerS: number | null;
+  /**
+   * Tokens consommés : entrée, sortie visible et réflexion (comptée à part quand le fournisseur la détaille ; chez Anthropic
+   * elle reste dans la sortie). `tokensEstimated` : comptes estimés faute de chiffres du fournisseur.
+   */
+  inputTokens: number | null;
+  outputTokens: number | null;
+  reasoningTokens: number | null;
+  tokensEstimated: boolean;
   costUsd: number | null;
   errorMessage: string | null;
 };
@@ -329,6 +337,10 @@ export function createResultsService(deps: { db: Db; config: { dataDir: string }
             judgeRationale: scores.judgeRationale,
             ttftMs: row.ttftMs,
             tokensPerS: row.tokensPerS,
+            inputTokens: row.inputTokens,
+            outputTokens: row.outputTokens,
+            reasoningTokens: row.reasoningTokens,
+            tokensEstimated: row.tokensEstimated,
             costUsd: row.costUsd,
             errorMessage: row.errorMessage,
           };

@@ -28,6 +28,10 @@ const answer = (over: Record<string, unknown>) => ({
   judgeRationale: 'Complet et structuré.',
   ttftMs: 900,
   tokensPerS: 74,
+  inputTokens: 1200,
+  outputTokens: 3400,
+  reasoningTokens: 800,
+  tokensEstimated: false,
   costUsd: 0.021,
   errorMessage: null,
   ...over,
@@ -500,4 +504,14 @@ test('un seul test choisi : nom cliquable, catégorie et question affichés au-d
   expect(within(block).getByRole('button', { name: 'Résumer un CCTP' })).toBeInTheDocument();
   expect(block).toHaveTextContent('Rédaction');
   expect(within(block).getByText('Résume.')).toBeInTheDocument();
+});
+
+test('pied des cartes : tokens d’entrée, de sortie et de réflexion après le premier token et le débit', async () => {
+  answersBody = { test: TEST_INFO, answers: [answer({}), answer({ resultId: 'a2', modelName: 'GPT Test', reasoningTokens: null, tokensEstimated: true })] };
+  renderBlock(false);
+  const card = await screen.findByRole('article', { name: 'Claude Opus, répétition 1' });
+  const footer = card.querySelector('footer')!;
+  expect(footer.textContent).toMatch(/1er token.*Débit.*Entrée\s1\s200.*Sortie\s3\s400.*Réflexion\s800.*Coût/);
+  const other = (await screen.findByRole('article', { name: 'GPT Test, répétition 1' })).querySelector('footer')!;
+  expect(other.textContent).toMatch(/Entrée\s≈\s1\s200.*Réflexion\s—/);
 });

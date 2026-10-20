@@ -51,6 +51,11 @@ export type Answer = {
   judgeRationale: string | null;
   ttftMs: number | null;
   tokensPerS: number | null;
+  /** Entrée, sortie visible et réflexion (à part si le fournisseur la détaille, sinon comprise dans la sortie). */
+  inputTokens: number | null;
+  outputTokens: number | null;
+  reasoningTokens: number | null;
+  tokensEstimated: boolean;
   costUsd: number | null;
   errorMessage: string | null;
 };

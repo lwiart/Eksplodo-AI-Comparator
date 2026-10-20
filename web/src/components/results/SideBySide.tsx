@@ -147,13 +147,19 @@ export function parseOverride(raw: string): number | undefined {
   return n <= 100 ? n : undefined;
 }
 
-function Metric({ label, value }: { label: string; value: string }) {
+function Metric({ label, value, title }: { label: string; value: string; title?: string }) {
   return (
-    <span>
+    <span title={title}>
       {label} <span className="text-ink">{value}</span>
     </span>
   );
 }
+
+/** Nombre de tokens à la française, « ≈ » devant quand le fournisseur ne l'a pas donné (estimation). */
+const tokenCount = (n: number | null, estimated: boolean) => (n === null ? DASH : `${estimated ? '≈ ' : ''}${n.toLocaleString('fr-FR')}`);
+
+const REASONING_TITLE =
+  'Tokens de réflexion, comptés à part quand le fournisseur les détaille. Chez Anthropic, la réflexion est comprise dans la sortie.';
 
 function ScoreDetail({ a }: { a: Answer }) {
   const parts: string[] = [];
@@ -290,6 +296,13 @@ function AnswerCard({
       <footer className="flex flex-wrap gap-x-3 gap-y-1 border-t border-line pt-2 font-mono text-[10.5px] text-mute">
         <Metric label="1er token" value={answer.ttftMs === null ? DASH : `${answer.ttftMs.toLocaleString('fr-FR')} ms`} />
         <Metric label="Débit" value={tokensPerSecond(answer.tokensPerS)} />
+        {answer.status === 'pending' || answer.status === 'running' ? null : (
+          <>
+            <Metric label="Entrée" value={tokenCount(answer.inputTokens, answer.tokensEstimated)} />
+            <Metric label="Sortie" value={tokenCount(answer.outputTokens, answer.tokensEstimated)} />
+            <Metric label="Réflexion" value={tokenCount(answer.reasoningTokens, answer.tokensEstimated)} title={REASONING_TITLE} />
+          </>
+        )}
         <Metric label="Coût" value={answer.status === 'pending' || answer.status === 'running' ? DASH : costPerAnswer(answer.costUsd)} />
       </footer>
       {isAdmin && !failed ? <OverrideEditor answer={answer} onSaved={onOverride} /> : null}
