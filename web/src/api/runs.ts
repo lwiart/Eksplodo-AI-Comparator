@@ -171,6 +171,11 @@ export async function retryRunErrors(id: string): Promise<RunSummary> {
   return (await apiFetch<{ run: RunSummary }>(`/api/runs/${enc(id)}/retry-errors`, { method: 'POST' })).run;
 }
 
+/** Retire un modèle de la série : ses résultats et notes sont supprimés définitivement (série en pause ou terminée). */
+export async function removeRunModel(id: string, modelId: string): Promise<{ run: RunSummary; removedResults: number }> {
+  return apiFetch<{ run: RunSummary; removedResults: number }>(`/api/runs/${enc(id)}/models/${enc(modelId)}`, { method: 'DELETE' });
+}
+
 /** Annule les appels pas encore lancés (en erreur « annulé », rejouables avec « Relancer les erreurs »). */
 export async function cancelPendingRun(id: string): Promise<{ run: RunSummary; cancelled: number }> {
   return apiFetch<{ run: RunSummary; cancelled: number }>(`/api/runs/${enc(id)}/cancel-pending`, { method: 'POST' });

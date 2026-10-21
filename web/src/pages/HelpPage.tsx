@@ -130,6 +130,10 @@ const SECTIONS: Section[] = [
             <b>Ajouter un modèle</b> : le nouveau modèle passe les mêmes tests.
           </li>
           <li>
+            <b>Retirer un modèle</b> : série en pause ou terminée ; ses réponses et ses notes sont supprimées définitivement, la
+            dépense déjà engagée reste comptée.
+          </li>
+          <li>
             <b>Relever le plafond et reprendre</b> : après une pause due au plafond de dépense.
           </li>
         </ul>

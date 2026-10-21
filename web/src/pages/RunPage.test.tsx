@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeAll, beforeEach, expect, test, vi } from 'vitest';
@@ -367,6 +367,23 @@ test('Admin : annuler les tests en attente (appels pas encore lancés)', async (
   renderPage();
   await user.click(await screen.findByRole('button', { name: 'Annuler les tests en attente (2)' }));
   expect(apiFetch).toHaveBeenCalledWith('/api/runs/r1/cancel-pending', { method: 'POST' });
+});
+
+test('Admin : retirer un modèle (série arrêtée seulement), avec confirmation', async () => {
+  const user = userEvent.setup();
+  renderPage();
+  await screen.findByRole('button', { name: 'Mettre en pause' });
+  expect(screen.queryByRole('button', { name: /Retirer un modèle/ })).toBeNull();
+  cleanup();
+  summary = { ...SUMMARY, status: 'completed', completedAt: '2026-10-17T12:40:00.000Z' };
+  renderPage('admin', { ...PROGRESS, status: 'completed', etaSeconds: 0, running: [] });
+  await user.click(await screen.findByRole('button', { name: /Retirer un modèle/ }));
+  const dialog = within(await screen.findByRole('dialog', { name: 'Retirer un modèle' }));
+  const confirm = dialog.getByRole('button', { name: /définitivement/ });
+  expect(confirm).toBeDisabled();
+  await user.selectOptions(dialog.getByLabelText('Modèle à retirer'), 'm2');
+  await user.click(dialog.getByRole('button', { name: 'Retirer GPT Test définitivement' }));
+  expect(apiFetch).toHaveBeenCalledWith('/api/runs/r1/models/m2', { method: 'DELETE' });
 });
 
 test('Utilisateur : aucun bouton de contrôle', async () => {

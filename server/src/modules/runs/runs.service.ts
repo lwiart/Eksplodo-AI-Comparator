@@ -442,6 +442,18 @@ export function createRunsService(deps: RunsServiceDeps) {
     await enqueueRunJob(tx, run.id, now);
   }
 
+  /** Série en pause ou interrompue sans plus rien à faire (ni appel ni note du juge en attente) : terminée. */
+  async function completeIfIdle(tx: DbOrTx, run: RunRow, now: Date): Promise<void> {
+    if (run.status !== 'paused' && run.status !== 'interrupted') return;
+    const [left] = await tx
+      .select({ n: sql<number>`COUNT(*)` })
+      .from(results)
+      .where(and(eq(results.runId, run.id), inArray(results.status, ['pending', 'running'])));
+    if (Number(left?.n ?? 0) === 0 && (await countPendingJudgements(tx, run.id)) === 0) {
+      await tx.update(runs).set({ status: 'completed', pauseReason: null, completedAt: now, activeJobId: null }).where(eq(runs.id, run.id));
+    }
+  }
+
   const auditRun = (tx: DbOrTx, actor: Actor, action: string, runId: string, details?: unknown) =>
     audit(tx, { actorUserId: actor.userId, action, targetType: 'run', targetId: runId, ...(details === undefined ? {} : { details }) });
 
@@ -582,15 +594,7 @@ export function createRunsService(deps: RunsServiceDeps) {
             .where(and(eq(results.runId, id), eq(results.status, 'pending'))),
         );
         if (count === 0) return 0;
-        if (run.status === 'paused' || run.status === 'interrupted') {
-          const [left] = await tx
-            .select({ n: sql<number>`COUNT(*)` })
-            .from(results)
-            .where(and(eq(results.runId, id), inArray(results.status, ['pending', 'running'])));
-          if (Number(left?.n ?? 0) === 0 && (await countPendingJudgements(tx, id)) === 0) {
-            await tx.update(runs).set({ status: 'completed', pauseReason: null, completedAt: now, activeJobId: null }).where(eq(runs.id, id));
-          }
-        }
+        await completeIfIdle(tx, run, now);
         await auditRun(tx, actor, 'run_pending_cancelled', id, { count });
         return count;
       });
@@ -687,6 +691,37 @@ export function createRunsService(deps: RunsServiceDeps) {
         await auditRun(tx, actor, 'run_models_added', id, { modelIds: newIds });
       });
       return summaryOf(id);
+    },
+
+    /**
+     * Retire un modèle de la série : ses résultats (réponses, notes du juge, notes manuelles, note imposée) sont supprimés
+     * définitivement ; la dépense déjà engagée reste comptée. Série en pause, interrompue ou terminée seulement, sans appel de
+     * ce modèle en vol, et au moins un autre modèle restant. Série arrêtée sans plus rien à faire : terminée.
+     */
+    async removeModel(actor: Actor, id: string, modelId: string): Promise<RunSummary & { removedResults: number }> {
+      const now = deps.clock();
+      const removedResults = await withLockedRun(id, async (tx, run) => {
+        if (run.status === 'queued' || run.status === 'running') {
+          throw new ConflictError('run_active', 'Mettez la série en pause avant de retirer un modèle');
+        }
+        const present = await tx.select({ modelId: runModels.modelId }).from(runModels).where(eq(runModels.runId, id));
+        if (!present.some((m) => m.modelId === modelId)) throw new NotFoundError('Modèle absent de cette série');
+        if (present.length === 1) throw new ConflictError('last_model', 'Une série garde au moins un modèle');
+        const [inFlight] = await tx
+          .select({ n: sql<number>`COUNT(*)` })
+          .from(results)
+          .where(and(eq(results.runId, id), eq(results.modelId, modelId), eq(results.status, 'running')));
+        if (Number(inFlight?.n ?? 0) > 0) {
+          throw new ConflictError('calls_in_flight', 'Des appels de ce modèle se terminent encore : réessayez dans un instant');
+        }
+        // Les notes manuelles suivent leurs résultats (suppression en cascade).
+        const count = affectedRows(await tx.delete(results).where(and(eq(results.runId, id), eq(results.modelId, modelId))));
+        await tx.delete(runModels).where(and(eq(runModels.runId, id), eq(runModels.modelId, modelId)));
+        await completeIfIdle(tx, run, now);
+        await auditRun(tx, actor, 'run_model_removed', id, { modelId, results: count });
+        return count;
+      });
+      return { ...(await summaryOf(id)), removedResults };
     },
 
     /**

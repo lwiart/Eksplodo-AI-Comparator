@@ -2,11 +2,12 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { MODELS_KEY, listModels } from '../../api/catalog';
 import { messageForError } from '../../api/messages';
-import { RUNS_KEY, addRunModels, cancelPendingRun, pauseRun, resumeRun, retryRunErrors, updateRun, type RunProgress } from '../../api/runs';
+import { RUNS_KEY, addRunModels, cancelPendingRun, pauseRun, removeRunModel, resumeRun, retryRunErrors, updateRun, type RunProgress } from '../../api/runs';
 import { budgetUsd, parseBudget, usd } from '../../lib/format';
 import { Button } from '../ui/Button';
 import { Dialog } from '../ui/Dialog';
 import { Field } from '../ui/Field';
+import { SelectField } from '../ui/SelectField';
 
 const spentOf = (p: Pick<RunProgress, 'modelsCostUsd' | 'judgeCostUsd'>) => p.modelsCostUsd + p.judgeCostUsd;
 
@@ -49,6 +50,46 @@ export function PauseNotice({ progress, isAdmin }: { progress: RunProgress; isAd
     <p role="status" className="m-0 rounded-xl border border-orange/40 bg-orange/10 px-4 py-3 text-sm text-peach">
       {text}
     </p>
+  );
+}
+
+/** Retrait d'un modèle : choix du modèle, puis confirmation de la suppression définitive de ses résultats. */
+function RemoveModelDialog({ onOpenChange, models, onRemove, pending, error }: {
+  onOpenChange(open: boolean): void;
+  models: RunProgress['models'];
+  onRemove(modelId: string): void;
+  pending: boolean;
+  error: string | null;
+}) {
+  const [modelId, setModelId] = useState('');
+  const chosen = models.find((m) => m.id === modelId);
+  return (
+    <Dialog
+      open
+      onOpenChange={onOpenChange}
+      title="Retirer un modèle"
+      description="Ses réponses, ses notes (juge, notes manuelles, note imposée) et sa place au classement sont supprimées définitivement. La dépense déjà engagée reste comptée."
+    >
+      <SelectField
+        label="Modèle à retirer"
+        value={modelId}
+        options={[{ value: '', label: 'Choisir un modèle' }, ...models.map((m) => ({ value: m.id, label: m.name }))]}
+        onChange={(e) => setModelId(e.target.value)}
+      />
+      {error ? (
+        <p role="alert" className="mt-3 mb-0 text-sm text-bad">
+          {error}
+        </p>
+      ) : null}
+      <div className="mt-5 flex justify-end gap-2">
+        <Button variant="ghost" disabled={pending} onClick={() => onOpenChange(false)}>
+          Annuler
+        </Button>
+        <Button variant="danger" disabled={pending || !chosen} onClick={() => chosen && onRemove(chosen.id)}>
+          {chosen ? `Retirer ${chosen.name} définitivement` : 'Retirer définitivement'}
+        </Button>
+      </div>
+    </Dialog>
   );
 }
 
@@ -118,12 +159,14 @@ export function RunControls({ runId, progress }: { runId: string; progress: RunP
   const client = useQueryClient();
   const [budget, setBudget] = useState('');
   const [adding, setAdding] = useState(false);
+  const [removing, setRemoving] = useState(false);
 
   const action = useMutation({
     mutationFn: (run: () => Promise<unknown>) => run(),
     onSuccess: () => {
       setBudget('');
       setAdding(false);
+      setRemoving(false);
       void client.invalidateQueries({ queryKey: RUNS_KEY });
     },
   });
@@ -223,9 +266,23 @@ export function RunControls({ runId, progress }: { runId: string; progress: RunP
           <span aria-hidden="true">+</span>
           Ajouter un modèle
         </Button>
+        {/* Retrait : série arrêtée (en pause, interrompue ou terminée) et au moins deux modèles. */}
+        {status !== 'queued' && status !== 'running' && progress.models.length > 1 ? (
+          <Button
+            variant="danger"
+            disabled={busy}
+            onClick={() => {
+              action.reset();
+              setRemoving(true);
+            }}
+          >
+            <span aria-hidden="true">−</span>
+            Retirer un modèle
+          </Button>
+        ) : null}
       </div>
 
-      {action.isError && !adding ? (
+      {action.isError && !adding && !removing ? (
         <p role="alert" className="m-0 text-sm text-bad">
           {controlError(action.error)}
         </p>
@@ -240,6 +297,15 @@ export function RunControls({ runId, progress }: { runId: string; progress: RunP
           pending={busy}
           error={action.isError ? controlError(action.error) : null}
           onAdd={(ids) => action.mutate(() => addRunModels(runId, ids))}
+        />
+      ) : null}
+      {removing ? (
+        <RemoveModelDialog
+          onOpenChange={setRemoving}
+          models={progress.models}
+          pending={busy}
+          error={action.isError ? controlError(action.error) : null}
+          onRemove={(modelId) => action.mutate(() => removeRunModel(runId, modelId))}
         />
       ) : null}
     </div>

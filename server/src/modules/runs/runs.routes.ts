@@ -117,6 +117,12 @@ export function registerRunsRoutes(app: FastifyInstance, service: RunsService): 
     return { run: await service.addModels(req.actor!, id, addModelsBody.parse(req.body).modelIds) };
   });
 
+  app.delete('/api/runs/:id/models/:modelId', admin, async (req) => {
+    const { id, modelId } = z.object({ id: z.string().uuid(), modelId: z.string().uuid() }).parse(req.params);
+    const { removedResults, ...run } = await service.removeModel(req.actor!, id, modelId);
+    return { run, removedResults };
+  });
+
   app.post('/api/runs/:id/rescore', admin, async (req) => {
     const { id } = idParams.parse(req.params);
     return service.rescore(req.actor!, id, rescoreBody.parse(req.body));

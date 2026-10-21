@@ -83,6 +83,7 @@ async function setup(opts: { models?: number; schedules?: ScheduleEntry[] } = {}
     get: (url: string, s = admin) => call('GET', url, s),
     post: (url: string, payload: unknown = {}, s = admin) => call('POST', url, s, payload),
     patch: (url: string, payload: unknown, s = admin) => call('PATCH', url, s, payload),
+    del: (url: string, s = admin) => call('DELETE', url, s),
   };
   const provider = await seedProvider(t.db, { maxConcurrency: 8 });
   const modelIds: string[] = [];
@@ -957,4 +958,38 @@ test('relance choisie avec refreshMaxTokens: false : la limite figée de la sér
   expect((await t.post(`/api/runs/${runId}/rerun`, { resultIds: [row!.id], refreshMaxTokens: false })).statusCode).toBe(200);
   const [after] = await t.db.select().from(runTests).where(eq(runTests.runId, runId));
   expect(after!.snapshot.maxTokens).toBe(frozen);
+});
+
+test('retirer un modèle : résultats supprimés, autres modèles intacts ; refusé si la série tourne, inconnu ou dernier modèle', async () => {
+  const t = await setup({ models: 3 });
+  const [m0, m1, m2] = t.modelIds as [string, string, string];
+  const runId = await t.createRun(['Un', 'Deux'], { modelIds: [m0, m1, m2] });
+  // Série en file : refusé tant qu'elle n'est pas en pause.
+  const active = await t.del(`/api/runs/${runId}/models/${m1}`);
+  expect(active.statusCode).toBe(409);
+  expect(active.json().error.code).toBe('run_active');
+  await t.drain();
+  expect((await t.del(`/api/runs/${runId}/models/${m1}`, t.user)).statusCode).toBe(403);
+  const res = await t.del(`/api/runs/${runId}/models/${m1}`);
+  expect(res.statusCode).toBe(200);
+  expect(res.json()).toMatchObject({ removedResults: 2, run: { modelCount: 2, status: 'completed' } });
+  const rows = await t.resultRows(runId);
+  expect(rows.map((r) => r.modelId).sort()).toEqual([m0, m0, m2, m2].sort());
+  expect(await t.auditActions()).toContain('run_model_removed');
+  expect((await t.del(`/api/runs/${runId}/models/${m1}`)).statusCode).toBe(404);
+  expect((await t.del(`/api/runs/${runId}/models/${m2}`)).statusCode).toBe(200);
+  const last = await t.del(`/api/runs/${runId}/models/${m0}`);
+  expect(last.statusCode).toBe(409);
+  expect(last.json().error.code).toBe('last_model');
+});
+
+test('retirer le seul modèle encore en attente d’une série en pause : la série se termine', async () => {
+  const t = await setup({ models: 2 });
+  const [m0, m1] = t.modelIds as [string, string];
+  const runId = await t.createRun(['Un'], { modelIds: [m0, m1] });
+  await t.db.update(results).set({ status: 'done', attempts: 1, scoreStatus: 'awaiting_manual' }).where(and(eq(results.runId, runId), eq(results.modelId, m0)));
+  expect((await t.post(`/api/runs/${runId}/pause`)).statusCode).toBe(200);
+  const res = await t.del(`/api/runs/${runId}/models/${m1}`);
+  expect(res.statusCode).toBe(200);
+  expect(await t.runRow(runId)).toMatchObject({ status: 'completed', activeJobId: null });
 });
