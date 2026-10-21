@@ -225,6 +225,9 @@ test('bandeau : une information par ligne, et la gerbe dans une bande à droite'
   expect(items[1]).toMatch(/^notés par un juge IA/);
   expect(items[2]).toMatch(/^coût total de la série/);
   expect(screen.getByTestId('share-gerbe')).toHaveClass('absolute', 'left-[calc(50%_+_60px)]');
+  // Le conteneur du texte, posé au-dessus de la gerbe, laisse passer la souris (survol et glisser-déposer des modèles).
+  expect(screen.getByTestId('share-hero-content')).toHaveClass('pointer-events-none');
+  expect(screen.getByTestId('share-intro')).toHaveClass('pointer-events-auto');
   expect(screen.getByText('Date du test : 15 octobre 2026')).toBeInTheDocument();
   expect(screen.queryByText(/Résultats de/)).toBeNull();
 });

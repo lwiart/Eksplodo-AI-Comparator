@@ -117,10 +117,12 @@ function ShareContent({ share }: { share: PublicShare }) {
         <div data-testid="share-gerbe" className="no-print absolute inset-y-0 left-[calc(50%_+_60px)] hidden w-[min(40%,760px)] lg:block">
           <ThreeStage factory={shareScene} fallback={<FanoutFallback className="h-full w-full" />} />
         </div>
-        <div className="relative z-10 mx-auto w-full max-w-[1100px] px-4 py-14 sm:px-8 sm:py-20">
+        {/* Le conteneur du texte passe au-dessus de la gerbe sur toute sa largeur : transparent à la souris, pour que le
+            survol et le glisser-déposer des modèles atteignent l'animation ; seul le bloc de texte reste interactif. */}
+        <div data-testid="share-hero-content" className="pointer-events-none relative z-10 mx-auto w-full max-w-[1100px] px-4 py-14 sm:px-8 sm:py-20">
           {/* Sur grand écran, le texte s'arrête avant la bande de la gerbe (milieu + 60 px, moins le retrait du conteneur
               centré et une marge) : un titre long passe à la ligne au lieu de passer sous l'animation. */}
-          <div data-testid="share-intro" className="max-w-[40rem] lg:max-w-[min(40rem,calc(50vw_+_60px_-_max(0px,(100vw_-_1100px)/2)_-_56px))]">
+          <div data-testid="share-intro" className="pointer-events-auto max-w-[40rem] lg:max-w-[min(40rem,calc(50vw_+_60px_-_max(0px,(100vw_-_1100px)/2)_-_56px))]">
             {run.completedAt === null ? (
               <span className="mr-2 inline-block rounded-full border border-line-strong bg-night-2/70 px-3 py-1 font-mono text-[11px] font-semibold text-sky">Résultats provisoires</span>
             ) : null}
