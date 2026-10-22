@@ -13,10 +13,11 @@ function Harness() {
   );
 }
 
-test('la croix en haut à droite ferme la fenêtre', async () => {
+test('pas de croix : Échap ferme la fenêtre', async () => {
   const user = userEvent.setup();
   render(<Harness />);
   expect(screen.getByRole('dialog', { name: 'Partager la série' })).toBeInTheDocument();
-  await user.click(screen.getByRole('button', { name: 'Fermer la fenêtre' }));
+  expect(screen.queryByRole('button')).toBeNull();
+  await user.keyboard('{Escape}');
   expect(screen.queryByRole('dialog')).toBeNull();
 });

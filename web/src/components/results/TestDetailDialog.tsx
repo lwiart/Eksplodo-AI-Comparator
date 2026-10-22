@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import type { AnswersTest } from '../../api/results';
 import type { ExpectedConfig, JudgeConfig } from '../../api/tests';
 import { METHOD_LABEL } from '../../lib/format';
+import { Button } from '../ui/Button';
 import { Dialog } from '../ui/Dialog';
 
 function Block({ title, children }: { title: string; children: ReactNode }) {
@@ -114,6 +115,11 @@ export function TestDetailDialog({ test, open, onOpenChange }: { test: AnswersTe
         <Block title="Résultat attendu">
           <Expected test={test} />
         </Block>
+      </div>
+      <div className="mt-4 flex justify-end">
+        <Button variant="ghost" onClick={() => onOpenChange(false)}>
+          Fermer
+        </Button>
       </div>
     </Dialog>
   );
