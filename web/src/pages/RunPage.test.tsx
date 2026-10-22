@@ -120,6 +120,7 @@ beforeAll(() => {
 });
 
 let ranking: unknown;
+let missingTests: { id: string; name: string; category: string }[];
 let progressQueue: unknown[];
 let summary: Record<string, unknown>;
 /** Si défini, la prochaine réponse de l'avancement attend cette promesse (requête encore en vol). */
@@ -129,6 +130,7 @@ beforeEach(() => {
   summary = SUMMARY;
   ranking = UNSCORED_RANKING;
   holdProgress = null;
+  missingTests = [];
   apiFetch.mockReset();
   apiFetch.mockImplementation((path: string, init?: { method?: string }) => {
     if (path === '/api/runs/r1' && !init) return Promise.resolve({ run: summary });
@@ -139,6 +141,7 @@ beforeEach(() => {
       return hold ? hold.then(() => ({ progress })) : Promise.resolve({ progress });
     }
     if (path === '/api/runs/r1/ranking') return Promise.resolve(ranking);
+    if (path === '/api/runs/r1/missing-suite-tests') return Promise.resolve({ tests: missingTests });
     if (path === '/api/runs/r1/results') return Promise.resolve({ results: RESULTS });
     if (path.startsWith('/api/runs/r1/answers/'))
       return Promise.resolve({
@@ -384,6 +387,24 @@ test('Admin : retirer un modèle (série arrêtée seulement), avec confirmation
   await user.selectOptions(dialog.getByLabelText('Modèle à retirer'), 'm2');
   await user.click(dialog.getByRole('button', { name: 'Retirer GPT Test définitivement' }));
   expect(apiFetch).toHaveBeenCalledWith('/api/runs/r1/models/m2', { method: 'DELETE' });
+});
+
+test('Admin : tests ajoutés à la suite après le lancement, tous cochés au départ, puis ajoutés à la série', async () => {
+  const user = userEvent.setup();
+  renderPage();
+  await screen.findByRole('button', { name: 'Mettre en pause' });
+  expect(screen.queryByRole('button', { name: /nouveaux tests de la suite/ })).toBeNull();
+  cleanup();
+  missingTests = [
+    { id: 't7', name: 'Traduire', category: 'Rédaction' },
+    { id: 't8', name: 'Calculer', category: 'Logique' },
+  ];
+  renderPage();
+  await user.click(await screen.findByRole('button', { name: 'Ajouter les nouveaux tests de la suite (2)' }));
+  const dialog = within(await screen.findByRole('dialog', { name: 'Ajouter les nouveaux tests de la suite' }));
+  await user.click(dialog.getByRole('checkbox', { name: /Calculer/ }));
+  await user.click(dialog.getByRole('button', { name: 'Ajouter et lancer ce test' }));
+  expect(apiFetch).toHaveBeenCalledWith('/api/runs/r1/tests', { method: 'POST', body: { testIds: ['t7'] } });
 });
 
 test('Utilisateur : aucun bouton de contrôle', async () => {

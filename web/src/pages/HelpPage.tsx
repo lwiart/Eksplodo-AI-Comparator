@@ -130,6 +130,10 @@ const SECTIONS: Section[] = [
             <b>Ajouter un modèle</b> : le nouveau modèle passe les mêmes tests.
           </li>
           <li>
+            <b>Ajouter les nouveaux tests de la suite</b> : apparaît quand des tests ont été ajoutés à la suite après le
+            lancement ; les tests choisis sont passés par tous les modèles de la série, qui reprend aussitôt.
+          </li>
+          <li>
             <b>Retirer un modèle</b> : série en pause ou terminée ; ses réponses et ses notes sont supprimées définitivement, la
             dépense déjà engagée reste comptée.
           </li>

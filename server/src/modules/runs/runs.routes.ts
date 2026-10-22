@@ -41,6 +41,9 @@ const runBody = z
   .strict();
 
 const addModelsBody = z.object({ modelIds }).strict();
+const addTestsBody = z
+  .object({ testIds: z.array(z.string().uuid()).min(1).max(500).refine(unique, 'Un test ne peut figurer qu’une fois dans la série') })
+  .strict();
 const rescoreBody = z
   .object({
     scope: z.enum(['run', 'test', 'result']),
@@ -115,6 +118,17 @@ export function registerRunsRoutes(app: FastifyInstance, service: RunsService): 
   app.post('/api/runs/:id/models', admin, async (req) => {
     const { id } = idParams.parse(req.params);
     return { run: await service.addModels(req.actor!, id, addModelsBody.parse(req.body).modelIds) };
+  });
+
+  app.get('/api/runs/:id/missing-suite-tests', admin, async (req) => {
+    const { id } = idParams.parse(req.params);
+    return { tests: await service.missingSuiteTests(id) };
+  });
+
+  app.post('/api/runs/:id/tests', admin, async (req) => {
+    const { id } = idParams.parse(req.params);
+    const { addedTests, ...run } = await service.addTests(req.actor!, id, addTestsBody.parse(req.body).testIds);
+    return { run, addedTests };
   });
 
   app.delete('/api/runs/:id/models/:modelId', admin, async (req) => {

@@ -993,3 +993,59 @@ test('retirer le seul modèle encore en attente d’une série en pause : la sé
   expect(res.statusCode).toBe(200);
   expect(await t.runRow(runId)).toMatchObject({ status: 'completed', activeJobId: null });
 });
+
+test('tests ajoutés à la suite après le lancement : listés, ajoutés à la série (ordre de la suite) puis exécutés', async () => {
+  const t = await setup({ models: 2 });
+  const newTest = async (name: string, extra: Record<string, unknown> = {}) => {
+    const res = await t.post('/api/tests', { name, category: 'Culture', userPrompt: name, scoringMethod: 'manual', scoringConfig: {}, ...extra });
+    expect(res.statusCode).toBe(201);
+    return res.json().test.id as string;
+  };
+  const a = await newTest('A');
+  const suite = await t.post('/api/suites', { name: 'Suite', testIds: [a] });
+  expect(suite.statusCode).toBe(201);
+  const suiteId = suite.json().suite.id as string;
+  const created = await t.post('/api/runs', { name: 'Série', suiteId, testIds: [a], modelIds: t.modelIds, concurrency: 4 });
+  expect(created.statusCode).toBe(201);
+  const runId = created.json().run.id as string;
+  await t.drain();
+  expect((await t.get(`/api/runs/${runId}/missing-suite-tests`)).json().tests).toEqual([]);
+
+  // Deux tests ajoutés à la suite (C avant B), un troisième archivé : seuls B et C sont proposés, dans l'ordre de la suite.
+  const b = await newTest('B');
+  const c = await newTest('C');
+  const archived = await newTest('Archivé');
+  const put = await t.app.inject({
+    method: 'PUT',
+    url: `/api/suites/${suiteId}`,
+    headers: { cookie: t.admin.cookie, 'x-csrf-token': t.admin.csrf },
+    payload: { name: 'Suite', testIds: [a, c, b, archived] },
+  });
+  expect(put.statusCode).toBe(200);
+  await t.db.update(tests).set({ archivedAt: t.clock.now() }).where(eq(tests.id, archived));
+  const missing = await t.get(`/api/runs/${runId}/missing-suite-tests`);
+  expect(missing.statusCode).toBe(200);
+  expect(missing.json().tests.map((x: { name: string }) => x.name)).toEqual(['C', 'B']);
+  expect((await t.get(`/api/runs/${runId}/missing-suite-tests`, t.user)).statusCode).toBe(403);
+  expect((await t.post(`/api/runs/${runId}/tests`, { testIds: [b] }, t.user)).statusCode).toBe(403);
+
+  // Test noté par le juge sans juge dans la série : refusé, rien n'est ajouté.
+  const judged = await newTest('Juge', { scoringMethod: 'judge', scoringConfig: { criteria: 'Exact' } });
+  const refused = await t.post(`/api/runs/${runId}/tests`, { testIds: [judged] });
+  expect(refused.statusCode).toBe(400);
+  expect(refused.json().error.code).toBe('judge_required');
+
+  const added = await t.post(`/api/runs/${runId}/tests`, { testIds: [b, c, a] }); // a déjà présent : ignoré
+  expect(added.statusCode).toBe(200);
+  expect(added.json()).toMatchObject({ addedTests: 2, run: { status: 'queued', testCount: 3, completedAt: null } });
+  const order = await t.db.select().from(runTests).where(eq(runTests.runId, runId)).orderBy(runTests.position);
+  expect(order.map((r) => r.snapshot.name)).toEqual(['A', 'C', 'B']);
+  expect((await t.get(`/api/runs/${runId}/missing-suite-tests`)).json().tests).toEqual([]);
+
+  await t.drain();
+  const rows = await t.resultRows(runId);
+  expect(rows).toHaveLength(6);
+  expect(rows.every((r) => r.status === 'done')).toBe(true);
+  expect(await t.runRow(runId)).toMatchObject({ status: 'completed', activeJobId: null });
+  expect(await t.auditActions()).toContain('run_tests_added');
+});

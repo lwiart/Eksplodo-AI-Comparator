@@ -186,6 +186,21 @@ export async function rerunResults(id: string, resultIds: string[]): Promise<{ r
   return apiFetch<{ run: RunSummary; rerun: number }>(`/api/runs/${enc(id)}/rerun`, { method: 'POST', body: { resultIds } });
 }
 
+/** Test de la suite ajouté après le lancement de la série, pas encore dans la série. */
+export type MissingSuiteTest = { id: string; name: string; category: string };
+
+export const missingSuiteTestsKey = (id: string) => [...RUNS_KEY, id, 'missing-suite-tests'] as const;
+
+/** Tests actifs de la suite de la série qui n'en font pas encore partie (liste vide sans suite). */
+export async function getMissingSuiteTests(id: string): Promise<MissingSuiteTest[]> {
+  return (await apiFetch<{ tests: MissingSuiteTest[] }>(`/api/runs/${enc(id)}/missing-suite-tests`)).tests;
+}
+
+/** Ajoute des tests à la série pour tous ses modèles ; la série reprend aussitôt. */
+export async function addRunTests(id: string, testIds: string[]): Promise<{ run: RunSummary; addedTests: number }> {
+  return apiFetch<{ run: RunSummary; addedTests: number }>(`/api/runs/${enc(id)}/tests`, { method: 'POST', body: { testIds } });
+}
+
 export async function addRunModels(id: string, modelIds: string[]): Promise<RunSummary> {
   return (await apiFetch<{ run: RunSummary }>(`/api/runs/${enc(id)}/models`, { method: 'POST', body: { modelIds } })).run;
 }

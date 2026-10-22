@@ -352,7 +352,7 @@ export function createRunsService(deps: RunsServiceDeps) {
   const repo = createRunsRepo(db);
 
   /** Avec une suite : ordre des positions de la suite (tests hors suite à la suite, dans l'ordre donné). */
-  async function orderedTestIds(conn: DbOrTx, input: RunInput): Promise<string[]> {
+  async function orderedTestIds(conn: DbOrTx, input: Pick<RunInput, 'suiteId' | 'testIds'>): Promise<string[]> {
     if (input.suiteId === undefined) return input.testIds;
     const [suite] = await conn.select({ id: suites.id }).from(suites).where(eq(suites.id, input.suiteId));
     if (!suite) throw suiteNotFound();
@@ -691,6 +691,55 @@ export function createRunsService(deps: RunsServiceDeps) {
         await auditRun(tx, actor, 'run_models_added', id, { modelIds: newIds });
       });
       return summaryOf(id);
+    },
+
+    /** Tests actifs de la suite de la série qui n'en font pas encore partie (ajoutés à la suite après le lancement). */
+    async missingSuiteTests(id: string): Promise<{ id: string; name: string; category: string }[]> {
+      const run = await requireRun(id);
+      if (run.suiteId === null) return [];
+      const present = await db.select({ testId: runTests.testId }).from(runTests).where(eq(runTests.runId, id));
+      const known = new Set(present.map((r) => r.testId));
+      const members = await db
+        .select({ id: tests.id, name: tests.name, category: tests.category })
+        .from(suiteTests)
+        .innerJoin(tests, eq(tests.id, suiteTests.testId))
+        .where(and(eq(suiteTests.suiteId, run.suiteId), isNull(tests.archivedAt)))
+        .orderBy(asc(suiteTests.position));
+      return members.filter((t) => !known.has(t.id));
+    },
+
+    /**
+     * Ajoute des tests à la série (typiquement ajoutés à sa suite après le lancement) : instantané pris maintenant, placés
+     * après les tests existants (ordre de la suite), résultats pour tous les modèles de la série (non supportés en
+     * `unsupported`), puis reprise. Les tests déjà présents sont ignorés ; un test noté par le juge exige un juge.
+     */
+    async addTests(actor: Actor, id: string, testIds: string[]): Promise<RunSummary & { addedTests: number }> {
+      const now = deps.clock();
+      const addedTests = await withLockedRun(id, async (tx, run) => {
+        const present = await tx
+          .select({ testId: runTests.testId, position: runTests.position })
+          .from(runTests)
+          .where(eq(runTests.runId, id));
+        const known = new Set(present.map((r) => r.testId));
+        const newIds = testIds.filter((t) => !known.has(t));
+        if (newIds.length === 0) return 0;
+        const modelRows = await tx.select({ modelId: runModels.modelId }).from(runModels).where(eq(runModels.runId, id));
+        if ((present.length + newIds.length) * modelRows.length * run.repetitions > MAX_RUN_CALLS) throw runTooLarge();
+        const byTest = new Map((await snapshotTests(tx, newIds, true)).map((snap) => [snap.testId, snap]));
+        const ordered = run.suiteId === null ? newIds : await orderedTestIds(tx, { suiteId: run.suiteId, testIds: newIds });
+        const snapshots = ordered.map((t) => byTest.get(t)!);
+        if (run.judgeModelId === null && snapshots.some((s) => s.scoringMethod === 'judge')) throw judgeRequired();
+        const found = await candidateModels(tx, modelRows.map((m) => m.modelId));
+        const chosen = modelRows.map((m) => found.get(m.modelId)).filter((m): m is CandidateModel => m !== undefined);
+        const start = present.reduce((max, r) => Math.max(max, r.position + 1), 0);
+        const runTestRows = snapshots.map((snapshot, i) => ({ id: randomUUID(), runId: id, testId: snapshot.testId, position: start + i, snapshot }));
+        await repo.insertRunTests(tx, runTestRows);
+        await repo.insertResults(tx, resultRowsFor(id, run.repetitions, runTestRows, chosen));
+        await requeue(tx, run, now);
+        await auditRun(tx, actor, 'run_tests_added', id, { testIds: ordered });
+        return runTestRows.length;
+      });
+      return { ...(await summaryOf(id)), addedTests };
     },
 
     /**

@@ -2,7 +2,21 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { MODELS_KEY, listModels } from '../../api/catalog';
 import { messageForError } from '../../api/messages';
-import { RUNS_KEY, addRunModels, cancelPendingRun, pauseRun, removeRunModel, resumeRun, retryRunErrors, updateRun, type RunProgress } from '../../api/runs';
+import {
+  RUNS_KEY,
+  addRunModels,
+  addRunTests,
+  cancelPendingRun,
+  getMissingSuiteTests,
+  missingSuiteTestsKey,
+  pauseRun,
+  removeRunModel,
+  resumeRun,
+  retryRunErrors,
+  updateRun,
+  type MissingSuiteTest,
+  type RunProgress,
+} from '../../api/runs';
 import { budgetUsd, parseBudget, usd } from '../../lib/format';
 import { Button } from '../ui/Button';
 import { Dialog } from '../ui/Dialog';
@@ -93,6 +107,55 @@ function RemoveModelDialog({ onOpenChange, models, onRemove, pending, error }: {
   );
 }
 
+/** Tests ajoutés à la suite après le lancement : tous cochés au départ, passés par tous les modèles de la série. */
+function AddTestsDialog({ onOpenChange, tests, modelCount, onAdd, pending, error }: {
+  onOpenChange(open: boolean): void;
+  tests: MissingSuiteTest[];
+  modelCount: number;
+  onAdd(ids: string[]): void;
+  pending: boolean;
+  error: string | null;
+}) {
+  const [picked, setPicked] = useState<string[]>(() => tests.map((t) => t.id));
+  const toggle = (id: string) => setPicked(picked.includes(id) ? picked.filter((x) => x !== id) : [...picked, id]);
+  return (
+    <Dialog
+      open
+      onOpenChange={onOpenChange}
+      title="Ajouter les nouveaux tests de la suite"
+      description={`Ces tests ont été ajoutés à la suite après le lancement. Les tests cochés sont passés par ${modelCount > 1 ? `les ${modelCount} modèles` : 'le modèle'} de la série (appels facturés) ; la série reprend aussitôt.`}
+    >
+      <div className="flex max-h-80 flex-col gap-2 overflow-y-auto">
+        {tests.map((t) => (
+          <label
+            key={t.id}
+            className="flex cursor-pointer items-center gap-3 rounded-xl border border-line-strong bg-night-0/60 px-3 py-2.5 has-[:checked]:border-orange/60 has-[:checked]:bg-orange/10"
+          >
+            <input type="checkbox" className="accent-orange" checked={picked.includes(t.id)} onChange={() => toggle(t.id)} />
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-sm font-semibold text-white">{t.name}</span>
+              <span className="block text-xs text-mute">{t.category}</span>
+            </span>
+          </label>
+        ))}
+      </div>
+      {error ? (
+        <p role="alert" className="mt-3 mb-0 text-sm text-bad">
+          {error}
+        </p>
+      ) : null}
+      <div className="mt-4 flex justify-end gap-2">
+        <Button variant="ghost" disabled={pending} onClick={() => onOpenChange(false)}>
+          Annuler
+        </Button>
+        <Button variant="primary" disabled={picked.length === 0 || pending} onClick={() => onAdd(picked)}>
+          {picked.length > 1 ? `Ajouter et lancer ces ${picked.length} tests` : 'Ajouter et lancer ce test'}
+        </Button>
+      </div>
+    </Dialog>
+  );
+}
+
 function AddModelsDialog({ open, onOpenChange, runModelIds, onAdd, pending, error }: {
   open: boolean;
   onOpenChange(open: boolean): void;
@@ -154,12 +217,16 @@ function AddModelsDialog({ open, onOpenChange, runModelIds, onAdd, pending, erro
   );
 }
 
-/** Commandes de l'Admin : pause, reprise (relève du plafond après une pause budget), erreurs à relancer, modèles à ajouter. */
+/** Commandes de l'Admin : pause, reprise (relève du plafond après une pause budget), erreurs à relancer, tests et modèles à ajouter. */
 export function RunControls({ runId, progress }: { runId: string; progress: RunProgress }) {
   const client = useQueryClient();
   const [budget, setBudget] = useState('');
   const [adding, setAdding] = useState(false);
   const [removing, setRemoving] = useState(false);
+  const [addingTests, setAddingTests] = useState(false);
+  // Tests ajoutés à la suite depuis le lancement (rafraîchis avec la série).
+  const missingTests = useQuery({ queryKey: missingSuiteTestsKey(runId), queryFn: () => getMissingSuiteTests(runId) });
+  const newTests = missingTests.data ?? [];
 
   const action = useMutation({
     mutationFn: (run: () => Promise<unknown>) => run(),
@@ -167,6 +234,7 @@ export function RunControls({ runId, progress }: { runId: string; progress: RunP
       setBudget('');
       setAdding(false);
       setRemoving(false);
+      setAddingTests(false);
       void client.invalidateQueries({ queryKey: RUNS_KEY });
     },
   });
@@ -256,6 +324,19 @@ export function RunControls({ runId, progress }: { runId: string; progress: RunP
             Relancer les erreurs
           </Button>
         ) : null}
+        {newTests.length > 0 ? (
+          <Button
+            variant="primary"
+            disabled={busy}
+            onClick={() => {
+              action.reset();
+              setAddingTests(true);
+            }}
+          >
+            <span aria-hidden="true">+</span>
+            Ajouter les nouveaux tests de la suite ({newTests.length})
+          </Button>
+        ) : null}
         <Button
           disabled={busy}
           onClick={() => {
@@ -282,7 +363,7 @@ export function RunControls({ runId, progress }: { runId: string; progress: RunP
         ) : null}
       </div>
 
-      {action.isError && !adding && !removing ? (
+      {action.isError && !adding && !removing && !addingTests ? (
         <p role="alert" className="m-0 text-sm text-bad">
           {controlError(action.error)}
         </p>
@@ -297,6 +378,16 @@ export function RunControls({ runId, progress }: { runId: string; progress: RunP
           pending={busy}
           error={action.isError ? controlError(action.error) : null}
           onAdd={(ids) => action.mutate(() => addRunModels(runId, ids))}
+        />
+      ) : null}
+      {addingTests && newTests.length > 0 ? (
+        <AddTestsDialog
+          onOpenChange={setAddingTests}
+          tests={newTests}
+          modelCount={progress.models.length}
+          pending={busy}
+          error={action.isError ? controlError(action.error) : null}
+          onAdd={(ids) => action.mutate(() => addRunTests(runId, ids))}
         />
       ) : null}
       {removing ? (
