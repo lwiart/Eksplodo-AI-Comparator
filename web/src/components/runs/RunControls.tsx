@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { MODELS_KEY, listModels } from '../../api/catalog';
 import { messageForError } from '../../api/messages';
 import {
@@ -7,6 +8,7 @@ import {
   addRunModels,
   addRunTests,
   cancelPendingRun,
+  deleteRun,
   getMissingSuiteTests,
   missingSuiteTestsKey,
   pauseRun,
@@ -101,6 +103,41 @@ function RemoveModelDialog({ onOpenChange, models, onRemove, pending, error }: {
         </Button>
         <Button variant="danger" disabled={pending || !chosen} onClick={() => chosen && onRemove(chosen.id)}>
           {chosen ? `Retirer ${chosen.name} définitivement` : 'Retirer définitivement'}
+        </Button>
+      </div>
+    </Dialog>
+  );
+}
+
+/** Suppression de la série : confirmation, puis retour à la liste des séries. */
+function DeleteRunDialog({ onOpenChange, runName, onDelete, pending, error }: {
+  onOpenChange(open: boolean): void;
+  runName: string;
+  onDelete(): void;
+  pending: boolean;
+  error: string | null;
+}) {
+  return (
+    <Dialog
+      open
+      onOpenChange={onOpenChange}
+      title="Supprimer la série"
+      description="Les tests figés, les réponses, les notes, les liens de partage et la place de la série dans les classements sont supprimés définitivement. La dépense déjà engagée reste comptée dans le tableau de bord."
+    >
+      <p className="m-0 text-sm text-ink">
+        Série : <b className="text-white">{runName}</b>
+      </p>
+      {error ? (
+        <p role="alert" className="mt-3 mb-0 text-sm text-bad">
+          {error}
+        </p>
+      ) : null}
+      <div className="mt-5 flex justify-end gap-2">
+        <Button variant="ghost" disabled={pending} onClick={() => onOpenChange(false)}>
+          Annuler
+        </Button>
+        <Button variant="danger" disabled={pending} onClick={onDelete}>
+          Supprimer définitivement
         </Button>
       </div>
     </Dialog>
@@ -217,17 +254,23 @@ function AddModelsDialog({ open, onOpenChange, runModelIds, onAdd, pending, erro
   );
 }
 
-/** Commandes de l'Admin : pause, reprise (relève du plafond après une pause budget), erreurs à relancer, tests et modèles à ajouter. */
-export function RunControls({ runId, progress }: { runId: string; progress: RunProgress }) {
+/**
+ * Commandes de l'Admin : pause, reprise (relève du plafond après une pause budget), erreurs à relancer, tests et modèles à
+ * ajouter, suppression de la série.
+ */
+export function RunControls({ runId, runName, progress }: { runId: string; runName: string; progress: RunProgress }) {
   const client = useQueryClient();
+  const navigate = useNavigate();
   const [budget, setBudget] = useState('');
   const [adding, setAdding] = useState(false);
   const [removing, setRemoving] = useState(false);
   const [addingTests, setAddingTests] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   // Tests ajoutés à la suite depuis le lancement (rafraîchis avec la série).
   const missingTests = useQuery({ queryKey: missingSuiteTestsKey(runId), queryFn: () => getMissingSuiteTests(runId) });
   const newTests = missingTests.data ?? [];
 
+  const { status, pauseReason, counts } = progress;
   const action = useMutation({
     mutationFn: (run: () => Promise<unknown>) => run(),
     onSuccess: () => {
@@ -238,9 +281,18 @@ export function RunControls({ runId, progress }: { runId: string; progress: RunP
       void client.invalidateQueries({ queryKey: RUNS_KEY });
     },
   });
-  const busy = action.isPending;
+  // La série n'existe plus : ses requêtes sont oubliées (pas de rechargement en 404), le reste (liste, classements) est rechargé.
+  const removal = useMutation({
+    mutationFn: () => deleteRun(runId),
+    onSuccess: () => {
+      client.removeQueries({ queryKey: [...RUNS_KEY, runId] });
+      void client.invalidateQueries();
+      navigate('/series');
+    },
+  });
+  const busy = action.isPending || removal.isPending;
+  const stopped = status !== 'queued' && status !== 'running';
 
-  const { status, pauseReason, counts } = progress;
   const spent = spentOf(progress);
   const budgetPause = status === 'paused' && pauseReason === 'budget';
   // Après une pause budget, la reprise passe par la relève du plafond (sinon le moteur s'arrêterait aussitôt).
@@ -348,7 +400,7 @@ export function RunControls({ runId, progress }: { runId: string; progress: RunP
           Ajouter un modèle
         </Button>
         {/* Retrait : série arrêtée (en pause, interrompue ou terminée) et au moins deux modèles. */}
-        {status !== 'queued' && status !== 'running' && progress.models.length > 1 ? (
+        {stopped && progress.models.length > 1 ? (
           <Button
             variant="danger"
             disabled={busy}
@@ -359,6 +411,18 @@ export function RunControls({ runId, progress }: { runId: string; progress: RunP
           >
             <span aria-hidden="true">−</span>
             Retirer un modèle
+          </Button>
+        ) : null}
+        {stopped ? (
+          <Button
+            variant="danger"
+            disabled={busy}
+            onClick={() => {
+              removal.reset();
+              setDeleting(true);
+            }}
+          >
+            Supprimer la série
           </Button>
         ) : null}
       </div>
@@ -397,6 +461,15 @@ export function RunControls({ runId, progress }: { runId: string; progress: RunP
           pending={busy}
           error={action.isError ? controlError(action.error) : null}
           onRemove={(modelId) => action.mutate(() => removeRunModel(runId, modelId))}
+        />
+      ) : null}
+      {deleting ? (
+        <DeleteRunDialog
+          onOpenChange={setDeleting}
+          runName={runName}
+          pending={removal.isPending}
+          error={removal.isError ? messageForError(removal.error) : null}
+          onDelete={() => removal.mutate()}
         />
       ) : null}
     </div>

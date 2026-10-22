@@ -137,6 +137,11 @@ export function registerRunsRoutes(app: FastifyInstance, service: RunsService): 
     return { run, removedResults };
   });
 
+  app.delete('/api/runs/:id', admin, async (req) => {
+    const { id } = idParams.parse(req.params);
+    return service.remove(req.actor!, id);
+  });
+
   app.post('/api/runs/:id/rescore', admin, async (req) => {
     const { id } = idParams.parse(req.params);
     return service.rescore(req.actor!, id, rescoreBody.parse(req.body));

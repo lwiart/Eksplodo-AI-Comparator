@@ -774,6 +774,30 @@ export function createRunsService(deps: RunsServiceDeps) {
     },
 
     /**
+     * Supprime définitivement la série : tests figés, modèles, résultats, notes et liens de partage (suppression en cascade).
+     * La dépense déjà engagée reste comptée (les lignes `ai_usage` perdent seulement leur série). Série en pause, interrompue
+     * ou terminée seulement, sans appel en vol ; une tâche restée en file s'arrête d'elle-même faute de série.
+     */
+    async remove(actor: Actor, id: string): Promise<{ removedResults: number }> {
+      return withLockedRun(id, async (tx, run) => {
+        if (run.status === 'queued' || run.status === 'running') {
+          throw new ConflictError('run_active', 'Mettez la série en pause avant de la supprimer');
+        }
+        const [counts] = await tx
+          .select({ total: sql<number>`COUNT(*)`, inFlight: sql<number>`COALESCE(SUM(${results.status} = 'running'), 0)` })
+          .from(results)
+          .where(eq(results.runId, id));
+        if (Number(counts?.inFlight ?? 0) > 0) {
+          throw new ConflictError('calls_in_flight', 'Des appels se terminent encore : réessayez dans un instant');
+        }
+        await tx.delete(runs).where(eq(runs.id, id));
+        const removedResults = Number(counts?.total ?? 0);
+        await auditRun(tx, actor, 'run_deleted', id, { name: run.name, results: removedResults });
+        return { removedResults };
+      });
+    },
+
+    /**
      * Nom, plafond et pondération par défaut ; relever le plafond ne reprend pas une série en pause. Un renommage garde
      * l'ancien nom dans le journal d'audit.
      */

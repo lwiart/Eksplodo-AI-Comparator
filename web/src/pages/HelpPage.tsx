@@ -138,6 +138,10 @@ const SECTIONS: Section[] = [
             dépense déjà engagée reste comptée.
           </li>
           <li>
+            <b>Supprimer la série</b> : série en pause ou terminée, après confirmation ; ses réponses, ses notes et ses liens
+            de partage sont supprimés définitivement, la dépense déjà engagée reste comptée dans le tableau de bord.
+          </li>
+          <li>
             <b>Relever le plafond et reprendre</b> : après une pause due au plafond de dépense.
           </li>
         </ul>

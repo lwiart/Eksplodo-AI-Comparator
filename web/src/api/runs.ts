@@ -176,6 +176,11 @@ export async function removeRunModel(id: string, modelId: string): Promise<{ run
   return apiFetch<{ run: RunSummary; removedResults: number }>(`/api/runs/${enc(id)}/models/${enc(modelId)}`, { method: 'DELETE' });
 }
 
+/** Supprime définitivement la série (série en pause, interrompue ou terminée) ; la dépense engagée reste comptée. */
+export async function deleteRun(id: string): Promise<{ removedResults: number }> {
+  return apiFetch<{ removedResults: number }>(`/api/runs/${enc(id)}`, { method: 'DELETE' });
+}
+
 /** Annule les appels pas encore lancés (en erreur « annulé », rejouables avec « Relancer les erreurs »). */
 export async function cancelPendingRun(id: string): Promise<{ run: RunSummary; cancelled: number }> {
   return apiFetch<{ run: RunSummary; cancelled: number }>(`/api/runs/${enc(id)}/cancel-pending`, { method: 'POST' });

@@ -454,7 +454,7 @@ export function RunPage() {
           {progress.data ? (
             <div className="flex flex-col gap-4">
               <PauseNotice progress={progress.data} isAdmin={isAdmin} />
-              {isAdmin ? <RunControls runId={id} progress={progress.data} /> : null}
+              {isAdmin ? <RunControls runId={id} runName={run.data.name} progress={progress.data} /> : null}
               {progress.data.status === 'completed' ? null : <LiveView progress={progress.data} />}
               <ResultsSection
                 runId={id}

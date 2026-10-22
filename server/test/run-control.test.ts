@@ -6,7 +6,8 @@ import type { Db } from '../src/db/client.js';
 import { auditLog } from '../src/db/schema/core.js';
 import { errorEvents } from '../src/db/schema/errors.js';
 import { jobs } from '../src/db/schema/jobs.js';
-import { results, runTests, runs } from '../src/db/schema/runs.js';
+import { aiUsage, results, runTests, runs } from '../src/db/schema/runs.js';
+import { shareLinks } from '../src/db/schema/sharing.js';
 import { tests } from '../src/db/schema/tests.js';
 import { enqueue, type JobHandlers } from '../src/modules/jobs/queue.js';
 import { startSchedulerLoop } from '../src/modules/jobs/scheduler-loop.js';
@@ -992,6 +993,35 @@ test('retirer le seul modèle encore en attente d’une série en pause : la sé
   const res = await t.del(`/api/runs/${runId}/models/${m1}`);
   expect(res.statusCode).toBe(200);
   expect(await t.runRow(runId)).toMatchObject({ status: 'completed', activeJobId: null });
+});
+
+test('supprimer une série : refusé si elle tourne ou pour un Utilisateur ; tout disparaît sauf la dépense, les autres séries restent', async () => {
+  const t = await setup({ models: 2 });
+  const runId = await t.createRun(['Un', 'Deux']);
+  const other = await t.createRun(['Trois']);
+  const active = await t.del(`/api/runs/${runId}`);
+  expect(active.statusCode).toBe(409);
+  expect(active.json().error.code).toBe('run_active');
+  await t.drain();
+  const share = await t.post('/api/share-links', { runId, title: 'Partage', intro: null, verdicts: [], showCosts: false, showResponses: false });
+  expect(share.statusCode).toBe(201);
+  const usageBefore = await t.db.select().from(aiUsage);
+  expect(usageBefore.some((u) => u.runId === runId)).toBe(true);
+  expect((await t.del(`/api/runs/${runId}`, t.user)).statusCode).toBe(403);
+  const res = await t.del(`/api/runs/${runId}`);
+  expect(res.statusCode).toBe(200);
+  expect(res.json()).toEqual({ removedResults: 4 });
+  expect((await t.get(`/api/runs/${runId}`)).statusCode).toBe(404);
+  expect(await t.resultRows(runId)).toEqual([]);
+  expect(await t.db.select().from(runTests).where(eq(runTests.runId, runId))).toEqual([]);
+  expect(await t.db.select().from(shareLinks).where(eq(shareLinks.runId, runId))).toEqual([]);
+  // La dépense reste comptée, sans série.
+  const usageAfter = await t.db.select().from(aiUsage);
+  expect(usageAfter).toHaveLength(usageBefore.length);
+  expect(usageAfter.some((u) => u.runId === runId)).toBe(false);
+  expect(await t.resultRows(other)).toHaveLength(2);
+  expect(await t.auditActions()).toContain('run_deleted');
+  expect((await t.del(`/api/runs/${runId}`)).statusCode).toBe(404);
 });
 
 test('tests ajoutés à la suite après le lancement : listés, ajoutés à la série (ordre de la suite) puis exécutés', async () => {

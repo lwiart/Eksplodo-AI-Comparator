@@ -167,6 +167,7 @@ function renderPage(role: Role = 'admin', ...progress: unknown[]) {
         <MemoryRouter initialEntries={['/series/r1']}>
           <Routes>
             <Route path="/series/:id" element={<RunPage />} />
+            <Route path="/series" element={<p>Liste des séries</p>} />
           </Routes>
         </MemoryRouter>
       </AuthContext.Provider>
@@ -387,6 +388,25 @@ test('Admin : retirer un modèle (série arrêtée seulement), avec confirmation
   await user.selectOptions(dialog.getByLabelText('Modèle à retirer'), 'm2');
   await user.click(dialog.getByRole('button', { name: 'Retirer GPT Test définitivement' }));
   expect(apiFetch).toHaveBeenCalledWith('/api/runs/r1/models/m2', { method: 'DELETE' });
+});
+
+test('Admin : supprimer la série (arrêtée seulement), avec confirmation, puis retour à la liste', async () => {
+  const user = userEvent.setup();
+  renderPage();
+  await screen.findByRole('button', { name: 'Mettre en pause' });
+  expect(screen.queryByRole('button', { name: 'Supprimer la série' })).toBeNull();
+  cleanup();
+  summary = { ...SUMMARY, status: 'completed', completedAt: '2026-10-17T12:40:00.000Z' };
+  renderPage('admin', { ...PROGRESS, status: 'completed', etaSeconds: 0, running: [] });
+  await user.click(await screen.findByRole('button', { name: 'Supprimer la série' }));
+  const dialog = within(await screen.findByRole('dialog', { name: 'Supprimer la série' }));
+  expect(dialog.getByText('Polyvalence octobre')).toBeInTheDocument();
+  await user.click(dialog.getByRole('button', { name: 'Annuler' }));
+  expect(apiFetch).not.toHaveBeenCalledWith('/api/runs/r1', { method: 'DELETE' });
+  await user.click(screen.getByRole('button', { name: 'Supprimer la série' }));
+  await user.click(within(await screen.findByRole('dialog', { name: 'Supprimer la série' })).getByRole('button', { name: 'Supprimer définitivement' }));
+  expect(apiFetch).toHaveBeenCalledWith('/api/runs/r1', { method: 'DELETE' });
+  expect(await screen.findByText('Liste des séries')).toBeInTheDocument();
 });
 
 test('Admin : tests ajoutés à la suite après le lancement, tous cochés au départ, puis ajoutés à la série', async () => {
