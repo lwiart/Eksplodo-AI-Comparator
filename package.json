@@ -16,6 +16,7 @@
     "import:tests": "node scripts/import-tests.mjs",
     "export:tests": "node scripts/export-tests.mjs",
     "set:max-tokens": "node scripts/set-max-tokens.mjs",
+    "set:criteria": "node scripts/set-criteria.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.server.json && tsc -p tsconfig.web.json && tsc -p tsconfig.node.json"
   },
   "dependencies": {

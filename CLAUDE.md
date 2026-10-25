@@ -19,7 +19,7 @@ npm run build                    # dist/web (Vite) + dist/server (tsc)
 
 Local dev reads `.env` (copy `.env.example`). `APP_ENCRYPTION_KEY` is mandatory; `AIC_FAKE_LLM=1` swaps every provider for a fake one (no paid call; prompt directives like `[[fake:500]]`, `[[fake:length]]` trigger errors or truncation, see `docs/developpement.md`). Provider API keys are never in `.env`: they are entered in the Fournisseurs screen and stored encrypted (AES-256-GCM) in the database.
 
-Admin scripts (`npm run import:tests`, `export:tests`, `set:max-tokens`) call a running app's API with an Admin account; e-mail and password are typed at the prompt (`scripts/lib/admin-session.mjs`).
+Admin scripts (`npm run import:tests`, `export:tests`, `set:max-tokens`, `set:criteria`) call a running app's API with an Admin account; e-mail and password are typed at the prompt (`scripts/lib/admin-session.mjs`).
 
 ## Architecture
 
