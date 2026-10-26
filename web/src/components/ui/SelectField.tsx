@@ -1,6 +1,6 @@
 import { useId, type SelectHTMLAttributes } from 'react';
 
-type Option = { value: string; label: string };
+type Option = { value: string; label: string; disabled?: boolean };
 
 /**
  * Liste déroulante avec libellé associé, au style des champs « Nuit ». Elle ne dépasse jamais son conteneur : une option
@@ -24,7 +24,7 @@ export function SelectField({
         {...rest}
       >
         {options.map((o) => (
-          <option key={o.value} value={o.value}>
+          <option key={o.value} value={o.value} disabled={o.disabled}>
             {o.label}
           </option>
         ))}

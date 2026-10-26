@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { MODELS_KEY, PROVIDERS_KEY, createModel, listRemoteModels, type RemoteModelView } from '../../api/catalog';
 import { ApiError } from '../../api/client';
 import { messageForError } from '../../api/messages';
@@ -8,7 +8,18 @@ import { Chip } from '../ui/Chip';
 import { Dialog } from '../ui/Dialog';
 import { ModelForm, draftFromRemote, draftToInput, emptyDraft, hasValidPrices, parsePrice, type ModelDraft } from './ModelForm';
 
-type Props = { providerId: string; providerBaseUrl?: string; open: boolean; onOpenChange(open: boolean): void; initialSearch?: string };
+type Props = {
+  /** Vide : aucun fournisseur choisi, rien n'est interrogé (le choix se fait dans `providerPicker`). */
+  providerId: string;
+  providerBaseUrl?: string;
+  open: boolean;
+  onOpenChange(open: boolean): void;
+  initialSearch?: string;
+  /** Choix du fournisseur affiché en tête de la fenêtre ; changer de fournisseur repart d'une liste vierge. */
+  providerPicker?: ReactNode;
+};
+
+type PanelProps = Pick<Props, 'providerId' | 'providerBaseUrl' | 'initialSearch'> & { close(): void };
 
 type Entry = {
   key: string;
@@ -41,12 +52,40 @@ function describe(err: unknown): string {
 }
 
 /** Assistant d'ajout : interroge `/models` du fournisseur, filtre, puis crée les modèles cochés un par un. */
-export function RemoteModelsDialog({ providerId, providerBaseUrl, open, onOpenChange, initialSearch = '' }: Props) {
+export function RemoteModelsDialog({ providerId, providerBaseUrl, open, onOpenChange, initialSearch, providerPicker }: Props) {
+  const close = () => onOpenChange(false);
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={onOpenChange}
+      size="wide"
+      title="Ajouter des modèles"
+      description={
+        providerPicker
+          ? 'Choisissez le fournisseur à interroger, cochez les modèles à ajouter au catalogue, puis vérifiez leur nom, leurs prix et leurs capacités.'
+          : 'Cochez les modèles à ajouter au catalogue, puis vérifiez leur nom, leurs prix et leurs capacités.'
+      }
+    >
+      {providerPicker ? <div className="mb-4">{providerPicker}</div> : null}
+      {providerId ? (
+        <RemoteModelsPanel key={providerId} providerId={providerId} providerBaseUrl={providerBaseUrl} initialSearch={initialSearch} close={close} />
+      ) : (
+        <div className="flex justify-end">
+          <Button variant="ghost" onClick={close}>
+            Fermer
+          </Button>
+        </div>
+      )}
+    </Dialog>
+  );
+}
+
+/** Liste des modèles d'un fournisseur et formulaires des modèles cochés. */
+function RemoteModelsPanel({ providerId, providerBaseUrl, initialSearch = '', close }: PanelProps) {
   const client = useQueryClient();
   const remote = useQuery({
     queryKey: ['providers', providerId, 'remote-models'],
     queryFn: () => listRemoteModels(providerId),
-    enabled: open,
     retry: false,
     staleTime: 0,
     gcTime: 0,
@@ -103,21 +142,15 @@ export function RemoteModelsDialog({ providerId, providerBaseUrl, open, onOpenCh
       void client.invalidateQueries({ queryKey: PROVIDERS_KEY });
       void remote.refetch(); // les modèles tout juste ajoutés passent en « déjà ajouté »
     }
-    if (done.size > 0 && Object.keys(next).length === 0) onOpenChange(false);
+    if (done.size > 0 && Object.keys(next).length === 0) close();
   }
 
   const count = entries.length;
   const manualEntries = entries.filter((e) => e.manual);
 
   return (
-    <Dialog
-      open={open}
-      onOpenChange={onOpenChange}
-      size="wide"
-      title="Ajouter des modèles"
-      description="Cochez les modèles à ajouter au catalogue, puis vérifiez leur nom, leurs prix et leurs capacités."
-    >
-      <div className="-mx-2 flex max-h-[70vh] flex-col gap-4 overflow-y-auto px-2">
+    <>
+      <div className="-mx-2 flex max-h-[60vh] flex-col gap-4 overflow-y-auto px-2">
         {remote.isError ? (
           <div className="flex flex-col gap-3">
             <p role="alert" className="m-0 rounded-xl border border-bad/40 bg-bad/10 px-3 py-2 text-sm text-bad">
@@ -199,7 +232,7 @@ export function RemoteModelsDialog({ providerId, providerBaseUrl, open, onOpenCh
           <span />
         )}
         <span className="flex gap-2">
-          <Button variant="ghost" onClick={() => onOpenChange(false)}>
+          <Button variant="ghost" onClick={close}>
             Fermer
           </Button>
           <Button variant="primary" disabled={busy || count === 0 || !entries.every((e) => hasValidPrices(e.draft))} onClick={() => void submit()}>
@@ -207,6 +240,6 @@ export function RemoteModelsDialog({ providerId, providerBaseUrl, open, onOpenCh
           </Button>
         </span>
       </div>
-    </Dialog>
+    </>
   );
 }

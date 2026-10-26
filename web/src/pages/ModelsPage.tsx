@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { MODELS_KEY, PROVIDERS_KEY, listModels, listProviders, type PublicModel } from '../api/catalog';
+import { MODELS_KEY, PROVIDERS_KEY, listModels, listProviders, type PublicModel, type PublicProvider } from '../api/catalog';
 import { messageForError } from '../api/messages';
 import { useAuth } from '../auth/AuthProvider';
 import { formatContextShort, formatPricePair } from '../components/catalog/format';
@@ -35,41 +35,61 @@ function Flag({ label, on }: { label: string; on: boolean }) {
   );
 }
 
-/** Choix du fournisseur puis assistant d'ajout (Admin). */
+/** Pourquoi un fournisseur ne peut pas être interrogé, ou `null` s'il le peut. */
+function unusableReason(p: PublicProvider): string | null {
+  if (!p.enabled) return 'désactivé';
+  if (!p.usable) return p.keyState === 'unreadable' ? 'clé illisible' : 'clé manquante';
+  return null;
+}
+
+/** Assistant d'ajout (Admin) : le fournisseur à interroger se choisit dans la fenêtre même. */
 function AddModels() {
   const providers = useQuery({ queryKey: PROVIDERS_KEY, queryFn: listProviders });
-  const [picking, setPicking] = useState(false);
-  const [providerId, setProviderId] = useState('');
   const [open, setOpen] = useState(false);
+  const [providerId, setProviderId] = useState('');
 
-  const usable = (providers.data ?? []).filter((p) => p.enabled && p.usable);
-  const chosen = usable.find((p) => p.id === providerId);
+  const list = providers.data ?? [];
+  const chosen = list.find((p) => p.id === providerId && unusableReason(p) === null);
+  const anyUsable = list.some((p) => unusableReason(p) === null);
 
-  if (!picking) {
-    return (
-      <Button variant="primary" onClick={() => setPicking(true)}>
-        Ajouter des modèles
-      </Button>
-    );
+  function change(next: boolean) {
+    setOpen(next);
+    if (!next) setProviderId('');
   }
-  return (
-    <div className="flex flex-wrap items-end gap-2">
+
+  const picker = (
+    <div className="flex flex-col gap-2">
       <SelectField
         label="Fournisseur à interroger"
         value={providerId}
         onChange={(e) => setProviderId(e.target.value)}
-        options={[{ value: '', label: usable.length ? 'Choisir…' : 'Aucun fournisseur utilisable' }, ...usable.map((p) => ({ value: p.id, label: p.name }))]}
+        options={[
+          { value: '', label: anyUsable ? 'Choisir…' : 'Aucun fournisseur utilisable' },
+          ...list.map((p) => {
+            const reason = unusableReason(p);
+            return { value: p.id, label: reason ? `${p.name} (${reason})` : p.name, disabled: reason !== null };
+          }),
+        ]}
       />
-      <Button variant="primary" disabled={!chosen} onClick={() => setOpen(true)}>
-        Ouvrir l&apos;assistant
-      </Button>
-      <Button variant="ghost" onClick={() => setPicking(false)}>
-        Annuler
-      </Button>
-      {open && chosen ? (
-        <RemoteModelsDialog providerId={chosen.id} providerBaseUrl={chosen.baseUrl} open onOpenChange={(o) => !o && setOpen(false)} />
-      ) : null}
+      <p className="m-0 text-xs text-mute">
+        Un fournisseur manque (Ollama, serveur local, autre service compatible OpenAI) ? Ajoutez-le d&apos;abord dans{' '}
+        <Link to="/admin/fournisseurs" className="text-peach underline">
+          Fournisseurs
+        </Link>
+        .
+      </p>
     </div>
+  );
+
+  return (
+    <>
+      <Button variant="primary" onClick={() => change(true)}>
+        Ajouter des modèles
+      </Button>
+      {open ? (
+        <RemoteModelsDialog providerId={chosen?.id ?? ''} providerBaseUrl={chosen?.baseUrl} open onOpenChange={change} providerPicker={picker} />
+      ) : null}
+    </>
   );
 }
 

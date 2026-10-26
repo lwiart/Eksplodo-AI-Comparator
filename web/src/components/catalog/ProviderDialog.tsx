@@ -70,7 +70,7 @@ export function ProviderDialog({ provider, open, onOpenChange }: Props) {
       open={open}
       onOpenChange={(o) => (o ? onOpenChange(true) : close())}
       title={provider ? `Modifier ${provider.name}` : 'Ajouter un fournisseur'}
-      description="Une passerelle ou un service compatible avec l'API d'OpenAI se déclare avec le type « Compatible OpenAI »."
+      description="Une passerelle ou un service compatible avec l'API d'OpenAI (OpenRouter, Ollama derrière un tunnel https, serveur local…) se déclare avec le type « Compatible OpenAI »."
     >
       <form onSubmit={submit} className="flex flex-col gap-4">
         <Field label="Nom" autoComplete="off" required value={name} onChange={(e) => setName(e.target.value)} />

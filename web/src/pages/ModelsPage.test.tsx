@@ -72,9 +72,25 @@ test('filtres : fournisseur, « disponibles seulement »', async () => {
   expect(screen.getByRole('link', { name: 'Claude Opus 5.5' })).toBeInTheDocument();
 });
 
-test('Admin : bouton « Ajouter des modèles »', async () => {
+test('Admin : « Ajouter des modèles » ouvre la fenêtre, où se choisit le fournisseur (inutilisable grisé, lien vers Fournisseurs)', async () => {
+  const user = userEvent.setup();
+  const remote = { id: 'claude-fable-5-1', name: 'Claude Fable 5.1', inputPricePerM: null, outputPricePerM: null, contextWindow: null, alreadyAdded: false };
+  const fallback = apiFetch.getMockImplementation()!;
+  apiFetch.mockImplementation((path: string) => (path === '/api/providers/p1/remote-models' ? Promise.resolve({ models: [remote] }) : fallback(path)));
   renderPage('admin');
-  expect(await screen.findByRole('button', { name: 'Ajouter des modèles' })).toBeInTheDocument();
+  await user.click(await screen.findByRole('button', { name: 'Ajouter des modèles' }));
+
+  const dialog = within(await screen.findByRole('dialog', { name: 'Ajouter des modèles' }));
+  const select = dialog.getByLabelText('Fournisseur à interroger');
+  expect(dialog.getByRole('option', { name: 'Mistral (clé manquante)' })).toBeDisabled();
+  expect(dialog.getByRole('link', { name: 'Fournisseurs' })).toHaveAttribute('href', '/admin/fournisseurs');
+  expect(apiFetch).not.toHaveBeenCalledWith('/api/providers/p1/remote-models');
+
+  await user.selectOptions(select, 'p1');
+  expect(await dialog.findByText('Claude Fable 5.1')).toBeInTheDocument();
+
+  await user.click(dialog.getByRole('button', { name: 'Fermer' }));
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
 });
 
 test('Utilisateur : pas de bouton d’ajout ni d’appel à /api/providers', async () => {
