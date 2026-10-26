@@ -48,9 +48,9 @@ function AddModels() {
   const [open, setOpen] = useState(false);
   const [providerId, setProviderId] = useState('');
 
-  const list = providers.data ?? [];
-  const chosen = list.find((p) => p.id === providerId && unusableReason(p) === null);
-  const anyUsable = list.some((p) => unusableReason(p) === null);
+  const list = (providers.data ?? []).map((p) => ({ ...p, reason: unusableReason(p) }));
+  const usable = list.filter((p) => p.reason === null);
+  const chosen = usable.find((p) => p.id === providerId);
 
   function change(next: boolean) {
     setOpen(next);
@@ -64,16 +64,13 @@ function AddModels() {
         value={providerId}
         onChange={(e) => setProviderId(e.target.value)}
         options={[
-          { value: '', label: anyUsable ? 'Choisir…' : 'Aucun fournisseur utilisable' },
-          ...list.map((p) => {
-            const reason = unusableReason(p);
-            return { value: p.id, label: reason ? `${p.name} (${reason})` : p.name, disabled: reason !== null };
-          }),
+          { value: '', label: usable.length ? 'Choisir…' : 'Aucun fournisseur utilisable' },
+          ...list.map((p) => ({ value: p.id, label: p.reason ? `${p.name} (${p.reason})` : p.name, disabled: p.reason !== null })),
         ]}
       />
       <p className="m-0 text-xs text-mute">
         Un fournisseur manque (Ollama, serveur local, autre service compatible OpenAI) ? Ajoutez-le d&apos;abord dans{' '}
-        <Link to="/admin/fournisseurs" className="text-peach underline">
+        <Link to="/admin/fournisseurs" className="text-peach underline-offset-2 hover:underline">
           Fournisseurs
         </Link>
         .

@@ -60,11 +60,7 @@ export function RemoteModelsDialog({ providerId, providerBaseUrl, open, onOpenCh
       onOpenChange={onOpenChange}
       size="wide"
       title="Ajouter des modèles"
-      description={
-        providerPicker
-          ? 'Choisissez le fournisseur à interroger, cochez les modèles à ajouter au catalogue, puis vérifiez leur nom, leurs prix et leurs capacités.'
-          : 'Cochez les modèles à ajouter au catalogue, puis vérifiez leur nom, leurs prix et leurs capacités.'
-      }
+      description="Cochez les modèles à ajouter au catalogue, puis vérifiez leur nom, leurs prix et leurs capacités."
     >
       {providerPicker ? <div className="mb-4">{providerPicker}</div> : null}
       {providerId ? (
