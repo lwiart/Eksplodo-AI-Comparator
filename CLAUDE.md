@@ -10,7 +10,7 @@ Eksplodo · Comparateur IA: the same tests (prompts, images, PDF) are sent to se
 docker compose up -d db          # MariaDB 11.8 on 127.0.0.1:3307 (root / test), required by server tests and dev
 npm run dev                      # API (tsx watch, :3000) + Vite (:5173, proxies /api, /internal, /health)
 npm run typecheck                # server, web and node tsconfigs
-npm test                         # all Vitest projects (server + web)
+npm test                         # all Vitest projects (server + web) + coverage summary (report: coverage/index.html)
 npx vitest run server/test/run-control.test.ts            # one file
 npx vitest run web/src/pages/RunPage.test.tsx -t "série terminée"   # one test by name
 npx vitest run --project server  # or --project web

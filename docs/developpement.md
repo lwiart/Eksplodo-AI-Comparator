@@ -127,7 +127,7 @@ Pour un Utilisateur, toute qualité affichée (vainqueur, évolution) respecte l
 | Commande | Rôle |
 |---|---|
 | `npm run dev` | API + Vite en mode développement |
-| `npm test` | Tests (Vitest) ; nécessite la base de test sur le port 3307 |
+| `npm test` | Tests (Vitest) avec synthèse de la couverture du code en fin de lancement (rapport détaillé : `coverage/index.html`) ; nécessite la base de test sur le port 3307 |
 | `npm run typecheck` | Vérification TypeScript (serveur, web, outils) |
 | `npm run build` | Construit `dist/web` et `dist/server` |
 | `npm start` | Lance `dist/server/index.js` |
