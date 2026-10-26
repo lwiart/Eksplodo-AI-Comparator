@@ -1,12 +1,13 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { messageForError } from '../api/messages';
-import { RUNS_KEY, listRuns } from '../api/runs';
+import { RUNS_KEY, listRuns, type RunSummary } from '../api/runs';
 import { useAuth } from '../auth/AuthProvider';
 import { formatDate } from '../components/catalog/format';
 import { Card } from '../components/ui/Card';
 import { RunStatusChip } from '../components/runs/RunStatusChip';
 import { Chip } from '../components/ui/Chip';
+import { HoverTip } from '../components/ui/InfoTip';
 import { PRIMARY_LINK, finishedCalls, plural, usd } from '../lib/format';
 
 /** Liste des séries, la plus récente en tête ; l'Admin peut en lancer une nouvelle. */
@@ -69,9 +70,13 @@ export function RunsPage() {
                   <td className="px-4 py-3 whitespace-nowrap">
                     <RunStatusChip status={r.status} />
                   </td>
-                  <td className={`px-4 py-3 ${r.suiteName ? 'text-ink' : 'text-mute'}`}>{r.suiteName ?? 'Tests à la carte'}</td>
+                  <td className={`px-4 py-3 ${r.suiteName ? 'text-ink' : 'text-mute'}`}>
+                    <HoverTip tip={`${plural(r.testCount, 'test', 'tests')} dans cette série`}>{r.suiteName ?? 'Tests à la carte'}</HoverTip>
+                  </td>
                   <td className="px-4 py-3 whitespace-nowrap text-ink">
-                    {plural(r.modelCount, 'modèle', 'modèles')} × {r.repetitions}
+                    <HoverTip tip={<ModelList models={r.models} />}>
+                      {plural(r.modelCount, 'modèle', 'modèles')} × {r.repetitions}
+                    </HoverTip>
                   </td>
                   <td className="px-4 py-3 font-mono text-xs whitespace-nowrap text-ink">
                     {finishedCalls(r.counts)} / {r.counts.total}
@@ -86,5 +91,20 @@ export function RunsPage() {
         </Card>
       )}
     </div>
+  );
+}
+
+/** Contenu de l'infobulle « Modèles × répétitions » : un modèle par ligne, avec sa couleur. */
+function ModelList({ models }: { models: RunSummary['models'] }) {
+  if (models.length === 0) return <>Aucun modèle</>;
+  return (
+    <span className="flex flex-col gap-1">
+      {models.map((m) => (
+        <span key={m.id} className="flex items-center gap-2">
+          <span aria-hidden="true" className="h-2 w-2 shrink-0 rounded-full" style={{ background: m.color }} />
+          {m.name}
+        </span>
+      ))}
+    </span>
   );
 }

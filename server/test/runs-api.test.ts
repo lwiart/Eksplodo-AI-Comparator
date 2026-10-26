@@ -506,6 +506,9 @@ test('Utilisateur : lit séries, progression et résultats ; 403 sur estimate et
   expect(list.statusCode).toBe(200);
   expect(list.json().runs).toHaveLength(1);
   expect(list.json().runs[0]).toMatchObject({ id: run.id, modelCount: 2, testCount: 1, counts: { total: 2 } });
+  // Modèles de la série, pour l'infobulle de la liste : nom et couleur, dans l'ordre d'ajout.
+  expect(list.json().runs[0].models.map((m: { name: string }) => m.name)).toEqual(['Alpha', 'Bêta']);
+  expect(list.json().runs[0].models[1]).toEqual({ id: t.modelB.id, name: 'Bêta', color: '#222222' });
   const one = await t.get(`/api/runs/${run.id}`, t.user);
   expect(one.statusCode).toBe(200);
   expect(one.json().run.id).toBe(run.id);

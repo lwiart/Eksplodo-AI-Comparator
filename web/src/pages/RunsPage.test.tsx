@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, expect, test, vi } from 'vitest';
 import { AuthContext, type PublicUser, type Role } from '../auth/AuthProvider';
@@ -19,6 +19,10 @@ const summary = (over: Record<string, unknown>) => ({
   pauseReason: null,
   suiteName: null,
   modelCount: 2,
+  models: [
+    { id: 'm1', name: 'Claude Opus', color: '#F0631F' },
+    { id: 'm2', name: 'Mistral Large', color: '#7cc4ef' },
+  ],
   testCount: 3,
   repetitions: 1,
   judgeModelName: null,
@@ -86,6 +90,25 @@ test('liste : statut, suite, modèles, coût, dates ; bouton « Lancer une séri
   expect(other.getByText('0,05 $')).toBeInTheDocument();
 
   expect(screen.getByRole('link', { name: 'Lancer une série' })).toHaveAttribute('href', '/series/nouvelle');
+});
+
+test('infobulles : nombre de tests au survol de la suite, noms des modèles au survol de « Modèles × répétitions »', async () => {
+  renderPage('user');
+  const row = within((await screen.findByRole('link', { name: 'Essai à la carte' })).closest('tr')!);
+  const tipOf = (el: HTMLElement) => document.getElementById(el.getAttribute('aria-describedby')!)!;
+  const suite = row.getByText('Tests à la carte');
+  fireEvent.mouseEnter(suite);
+  expect(tipOf(suite)).toHaveTextContent('3 tests dans cette série');
+  expect(tipOf(suite)).toHaveClass('visible');
+  fireEvent.mouseLeave(suite);
+  expect(tipOf(suite)).toHaveClass('invisible');
+
+  const models = row.getByText('2 modèles × 1');
+  fireEvent.mouseEnter(models);
+  const tip = tipOf(models);
+  expect(tip).toHaveTextContent('Claude Opus');
+  expect(tip).toHaveTextContent('Mistral Large');
+  expect(tip).toHaveClass('visible');
 });
 
 test('Utilisateur : la liste sans bouton de lancement', async () => {

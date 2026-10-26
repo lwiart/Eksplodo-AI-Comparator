@@ -26,7 +26,7 @@ import type { TestRow } from '../tests/tests.repo.js';
 import { estimateRun, isSupported, maxCallCostUsd, type ModelForEstimate, type RunEstimate } from './estimate.js';
 import { ACTIVITY_LIMIT, buildProgress, countsOf, type RunProgress, type StatusCounts } from './progress.js';
 import { enqueueRunJob, withTxRetry } from './run-job.js';
-import { createRunsRepo, type ResultStatus, type RunRow } from './runs.repo.js';
+import { createRunsRepo, type ResultStatus, type RunModelRef, type RunRow } from './runs.repo.js';
 import { snapshotOf, type TestSnapshot } from './snapshot.js';
 
 export type Weights = RunWeights;
@@ -57,6 +57,8 @@ export type RunSummary = {
   pauseReason: RunRow['pauseReason'];
   suiteName: string | null;
   modelCount: number;
+  /** Modèles de la série, dans leur ordre d'ajout. */
+  models: RunModelRef[];
   testCount: number;
   repetitions: number;
   judgeModelName: string | null;
@@ -394,7 +396,8 @@ export function createRunsService(deps: RunsServiceDeps) {
       status: run.status,
       pauseReason: run.pauseReason,
       suiteName,
-      modelCount: sizes.get(run.id)?.modelCount ?? 0,
+      modelCount: sizes.get(run.id)?.models.length ?? 0,
+      models: sizes.get(run.id)?.models ?? [],
       testCount: sizes.get(run.id)?.testCount ?? 0,
       repetitions: run.repetitions,
       judgeModelName,

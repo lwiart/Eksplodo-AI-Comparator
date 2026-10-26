@@ -7,6 +7,8 @@ import type { DbOrTx } from '../jobs/queue.js';
 
 export type RunRow = typeof runs.$inferSelect;
 export type ResultStatus = (typeof results.$inferSelect)['status'];
+/** Modèle d'une série, tel qu'affiché (nom et couleur). */
+export type RunModelRef = { id: string; name: string; color: string };
 
 /** Nom et catégorie lus dans l'instantané, sans charger les prompts. */
 const snapshotName = sql<string>`JSON_UNQUOTE(JSON_EXTRACT(${runTests.snapshot}, '$.name'))`;
@@ -70,24 +72,25 @@ export function createRunsRepo(db: Db) {
         .orderBy(desc(runs.createdAt), desc(runs.id));
     },
 
-    /** Nombre de modèles et de tests de chaque série. */
-    async sizes(runIds: string[]): Promise<Map<string, { modelCount: number; testCount: number }>> {
-      const out = new Map<string, { modelCount: number; testCount: number }>();
+    /** Modèles (dans leur ordre d'ajout) et nombre de tests de chaque série. */
+    async sizes(runIds: string[]): Promise<Map<string, { models: RunModelRef[]; testCount: number }>> {
+      const out = new Map<string, { models: RunModelRef[]; testCount: number }>();
       if (runIds.length === 0) return out;
       const [m, t] = await Promise.all([
         db
-          .select({ runId: runModels.runId, n: sql<number>`COUNT(*)` })
+          .select({ runId: runModels.runId, id: models.id, name: models.displayName, color: models.color })
           .from(runModels)
+          .innerJoin(models, eq(models.id, runModels.modelId))
           .where(inArray(runModels.runId, runIds))
-          .groupBy(runModels.runId),
+          .orderBy(asc(runModels.addedAt), asc(models.displayName), asc(models.id)),
         db
           .select({ runId: runTests.runId, n: sql<number>`COUNT(*)` })
           .from(runTests)
           .where(inArray(runTests.runId, runIds))
           .groupBy(runTests.runId),
       ]);
-      for (const id of runIds) out.set(id, { modelCount: 0, testCount: 0 });
-      for (const r of m) out.get(r.runId)!.modelCount = Number(r.n);
+      for (const id of runIds) out.set(id, { models: [], testCount: 0 });
+      for (const { runId, ...model } of m) out.get(runId)!.models.push(model);
       for (const r of t) out.get(r.runId)!.testCount = Number(r.n);
       return out;
     },

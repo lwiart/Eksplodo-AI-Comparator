@@ -54,6 +54,8 @@ export type RunSummary = {
   pauseReason: PauseReason;
   suiteName: string | null;
   modelCount: number;
+  /** Modèles de la série, dans leur ordre d'ajout. */
+  models: { id: string; name: string; color: string }[];
   testCount: number;
   repetitions: number;
   judgeModelName: string | null;
