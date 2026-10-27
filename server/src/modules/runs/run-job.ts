@@ -6,21 +6,13 @@ import { NotFoundError } from '../../errors.js';
 import { describeError } from '../errors/capture.js';
 import { reportError } from '../errors/report.js';
 import { enqueue, type DbOrTx } from '../jobs/queue.js';
+import { ER_CHECKREAD, ER_LOCK_DEADLOCK, errnoOf } from '../../lib/db-errors.js';
 
 export const RUN_EXECUTE = 'run_execute';
 
 // Conflit d'instantané (innodb_snapshot_isolation) et interblocage : la transaction courte est rejouée.
-const RETRIABLE_ERRNOS = new Set([1020, 1213]);
+const RETRIABLE_ERRNOS = new Set([ER_CHECKREAD, ER_LOCK_DEADLOCK]);
 const TX_ATTEMPTS = 3;
-
-function errnoOf(err: unknown): number | undefined {
-  for (let e: unknown = err, depth = 0; e && typeof e === 'object' && depth < 4; depth++) {
-    const { errno, cause } = e as { errno?: unknown; cause?: unknown };
-    if (typeof errno === 'number') return errno;
-    e = cause;
-  }
-  return undefined;
-}
 
 /** Rejoue une transaction courte sur conflit d'instantané (1020) ou interblocage (1213), trois essais au plus. */
 export async function withTxRetry<T>(fn: () => Promise<T>): Promise<T> {

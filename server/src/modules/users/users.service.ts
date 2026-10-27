@@ -18,6 +18,7 @@ import { destroyUserSessions } from '../auth/sessions.js';
 import type { Mailer } from '../mail/mailer.js';
 import { invitationEmail, resetEmail } from '../mail/templates.js';
 import { createUsersRepo, type UserRow } from './users.repo.js';
+import { ER_DUP_ENTRY, ER_LOCK_DEADLOCK, errnoOf } from '../../lib/db-errors.js';
 
 export type ErrorLogger = { error(obj: object, msg: string): void };
 export type UsersServiceDeps = {
@@ -34,15 +35,8 @@ export type PublicUserWithStatus = PublicUser & {
 };
 export type IssuedLink = { link: string; expiresAt: string; mail: 'sent' | 'failed' | 'not_configured' };
 
-const ER_DUP_ENTRY = 1062;
-const ER_LOCK_DEADLOCK = 1213;
 const MAX_DEADLOCK_RETRIES = 3;
 const TTL_MS: Record<InvitationPurpose, number> = { invite: INVITE_TTL_MS, reset: RESET_TTL_MS };
-
-function errnoOf(err: unknown): number | undefined {
-  const e = err as { errno?: number; cause?: { errno?: number } };
-  return e.errno ?? e.cause?.errno;
-}
 
 function toPublicUser(u: UserRow): PublicUserWithStatus {
   return {

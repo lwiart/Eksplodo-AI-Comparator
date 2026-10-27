@@ -6,6 +6,7 @@ import { ConflictError, NotFoundError, ValidationError } from '../../errors.js';
 import { audit } from '../audit/audit.js';
 import type { Actor } from '../auth/actor.js';
 import type { ScoringMethod } from './scoring-config.js';
+import { ER_DUP_ENTRY, errnoOf } from '../../lib/db-errors.js';
 
 export type SuiteInput = { name: string; description?: string | null; testIds: string[] };
 
@@ -31,18 +32,11 @@ export type SuitesServiceDeps = { db: Db };
 
 type SuiteRow = typeof suites.$inferSelect;
 
-const ER_DUP_ENTRY = 1062;
 const NAME_MAX = 200;
-
-function errnoOf(err: unknown): number | undefined {
-  const e = err as { errno?: number; cause?: { errno?: number } };
-  return e.errno ?? e.cause?.errno;
-}
 
 const suiteNotFound = () => new NotFoundError('Suite introuvable');
 const nameTaken = () => new ConflictError('suite_name_taken', 'Une suite porte déjà ce nom');
 const testMissing = () => new ValidationError('test_not_found', 'Un des tests demandés est introuvable');
-
 
 export function createSuitesService(deps: SuitesServiceDeps) {
   const { db } = deps;

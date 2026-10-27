@@ -212,10 +212,6 @@ export async function listSuites(): Promise<PublicSuite[]> {
   return (await apiFetch<{ suites: PublicSuite[] }>('/api/suites')).suites;
 }
 
-export async function getSuite(id: string): Promise<PublicSuite> {
-  return (await apiFetch<{ suite: PublicSuite }>(`/api/suites/${enc(id)}`)).suite;
-}
-
 export async function createSuite(body: SuiteInput): Promise<PublicSuite> {
   return (await apiFetch<{ suite: PublicSuite }>('/api/suites', { method: 'POST', body })).suite;
 }

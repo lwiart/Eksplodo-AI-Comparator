@@ -114,9 +114,6 @@ export function getAnswers(runId: string, runTestId: string): Promise<Answers> {
   return apiFetch<Answers>(`/api/runs/${enc(runId)}/answers/${enc(runTestId)}`);
 }
 
-/** Adresse du CSV (téléchargement par lien : la session passe par le cookie). */
-export const exportCsvUrl = (runId: string): string => `/api/runs/${enc(runId)}/export.csv`;
-
 /** Classeur Excel de la série : classement, résultats détaillés et définitions des critères. */
 export const exportXlsxUrl = (runId: string): string => `/api/runs/${enc(runId)}/export.xlsx`;
 

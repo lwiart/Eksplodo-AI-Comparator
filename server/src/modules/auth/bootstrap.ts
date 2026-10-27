@@ -6,15 +6,10 @@ import type { Clock } from '../../lib/clock.js';
 import { hashPassword } from '../../lib/crypto.js';
 import { audit } from '../audit/audit.js';
 import { createUsersRepo } from '../users/users.repo.js';
+import { isDuplicateEntry } from '../../lib/db-errors.js';
 
 export type BootstrapLogger = { info(msg: string): void; warn(msg: string): void; error(msg: string): void };
 export type BootstrapResult = 'created' | 'skipped';
-
-const ER_DUP_ENTRY = 1062;
-function isDupEntry(err: unknown): boolean {
-  const e = err as { errno?: number; cause?: { errno?: number } };
-  return (e.errno ?? e.cause?.errno) === ER_DUP_ENTRY;
-}
 
 /**
  * Crée le premier Admin (actif) depuis BOOTSTRAP_ADMIN_EMAIL / BOOTSTRAP_ADMIN_PASSWORD s'il n'existe aucun
@@ -53,7 +48,7 @@ export async function ensureBootstrapAdmin(deps: {
       });
     });
   } catch (err) {
-    if (isDupEntry(err)) {
+    if (isDuplicateEntry(err)) {
       logger?.warn("Premier Admin non créé : l'e-mail de BOOTSTRAP_ADMIN_EMAIL existe déjà (autre démarrage ou autre compte)");
       return 'skipped';
     }

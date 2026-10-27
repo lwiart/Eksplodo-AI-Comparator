@@ -3,6 +3,7 @@ import { and, asc, eq, inArray, lt, lte, sql } from 'drizzle-orm';
 import type { Db } from '../../db/client.js';
 import { jobs } from '../../db/schema/jobs.js';
 import type { Clock } from '../../lib/clock.js';
+import { isDuplicateEntry } from '../../lib/db-errors.js';
 
 export type Job = typeof jobs.$inferSelect;
 /** Base ou transaction en cours (création d'une tâche dans la même transaction que la donnée qui la motive). */
@@ -49,15 +50,6 @@ export const BACKOFF_MS = [60_000, 600_000, 3_600_000];
 export const STALE_AFTER_MS = 15 * 60_000;
 const MAX_ERROR_LENGTH = 2000;
 const CANDIDATES = 5;
-
-function isDuplicateEntry(err: unknown): boolean {
-  for (let e: unknown = err, depth = 0; e && typeof e === 'object' && depth < 5; depth++) {
-    const { code, errno, cause } = e as { code?: unknown; errno?: unknown; cause?: unknown };
-    if (code === 'ER_DUP_ENTRY' || errno === 1062) return true;
-    e = cause;
-  }
-  return false;
-}
 
 export function affectedRows(result: unknown): number {
   const header = Array.isArray(result) ? result[0] : result;

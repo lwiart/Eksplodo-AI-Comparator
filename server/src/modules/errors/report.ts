@@ -4,6 +4,7 @@ import type { Db } from '../../db/client.js';
 import { errorEvents } from '../../db/schema/errors.js';
 import type { JobHandler } from '../jobs/queue.js';
 import { fingerprintOf, newReference } from './reference.js';
+import { isDuplicateEntry } from '../../lib/db-errors.js';
 
 export type ErrorInput = {
   source: 'request' | 'job' | 'external' | 'mail';
@@ -56,15 +57,6 @@ export function reportedReference(err: unknown): string | null {
   if (err === null || (typeof err !== 'object' && typeof err !== 'function')) return null;
   const v = (err as Record<symbol, unknown>)[REPORTED];
   return typeof v === 'string' ? v : null;
-}
-
-function isDuplicateEntry(err: unknown): boolean {
-  let e: unknown = err;
-  for (let i = 0; e && i < 4; i++) {
-    if ((e as { code?: unknown }).code === 'ER_DUP_ENTRY' || (e as { errno?: unknown }).errno === 1062) return true;
-    e = (e as { cause?: unknown }).cause;
-  }
-  return false;
 }
 
 /** Une écriture à la fois par empreinte dans ce processus : 200 appels simultanés donnent un seul événement. */

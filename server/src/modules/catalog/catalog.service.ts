@@ -17,6 +17,7 @@ import { KNOWN_PRICES } from './known-prices.js';
 import { computeModelStats, type ModelStats } from './model-stats.js';
 import { createModelsRepo, type ModelPatch, type ModelRow } from './models.repo.js';
 import { createProvidersRepo, type ProviderPatch, type ProviderRow } from './providers.repo.js';
+import { ER_DUP_ENTRY, errnoOf } from '../../lib/db-errors.js';
 
 export type ProviderType = ProviderRow['type'];
 
@@ -113,7 +114,6 @@ export type CatalogServiceDeps = {
   config: Pick<AppConfig, 'encryptionKey'>;
 };
 
-const ER_DUP_ENTRY = 1062;
 const LIST_MODELS_TIMEOUT_MS = 15_000;
 /** Une nouveauté du catalogue OpenRouter reste signalée 30 jours après sa première apparition. */
 const NEW_MODEL_WINDOW_MS = 30 * 24 * 3_600_000;
@@ -152,11 +152,6 @@ export function uniqueRemoteModels(list: RemoteModel[]): RemoteModel[] {
     }
   }
   return [...byId.values()];
-}
-
-function errnoOf(err: unknown): number | undefined {
-  const e = err as { errno?: number; cause?: { errno?: number } };
-  return e.errno ?? e.cause?.errno;
 }
 
 const nameTaken = () => new ConflictError('provider_name_taken', 'Un fournisseur porte déjà ce nom');

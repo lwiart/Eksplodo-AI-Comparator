@@ -5,6 +5,7 @@ import type { Db } from '../../db/client.js';
 import { invitations, users } from '../../db/schema/core.js';
 import { ValidationError } from '../../errors.js';
 import { generateToken, hashToken } from '../../lib/crypto.js';
+import { ER_CHECKREAD, errnoOf } from '../../lib/db-errors.js';
 
 type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
 export type DbOrTx = Db | Tx;
@@ -15,11 +16,6 @@ export const INVITE_TTL_MS = 72 * 3600_000;
 export const RESET_TTL_MS = 24 * 3600_000;
 const TTL_MS: Record<InvitationPurpose, number> = { invite: INVITE_TTL_MS, reset: RESET_TTL_MS };
 
-const ER_CHECKREAD = 1020;
-function errnoOf(err: unknown): number | undefined {
-  const e = err as { errno?: number; cause?: { errno?: number } };
-  return e.errno ?? e.cause?.errno;
-}
 const invalidToken = () => new ValidationError('invitation_invalid', 'Lien invalide ou expiré.');
 
 /** Lien à envoyer par e-mail : `/invitation/<jeton>` (invitation) ou `/reinitialiser/<jeton>` (réinitialisation). */
