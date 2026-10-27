@@ -14,6 +14,9 @@ Thumbs.db
 docs/reference-ao/
 .playwright-mcp/
 
+# Graphe de connaissances du projet (graphify), régénérable
+graphify-out/
+
 # Archive de déploiement
 app.zip
 
